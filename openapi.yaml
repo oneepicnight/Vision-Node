@@ -1,0 +1,262 @@
+openapi: 3.0.3
+info:
+  title: Vision Node API
+  version: 0.1.0
+  description: Minimal OpenAPI spec for the Vision node. This file targets a subset of HTTP endpoints (submit, gossip, mining, receipts, admin) to enable SDK/frontends to wire quickly.
+servers:
+  - url: http://localhost:7070
+    description: Local dev server
+components:
+  securitySchemes:
+    AdminToken:
+      type: apiKey
+      in: header
+      name: X-Vision-Admin-Token
+    DevToken:
+      type: apiKey
+      in: header
+      name: X-Vision-Dev-Token
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: rejected
+        code:
+          type: integer
+          description: HTTP-like code for client logic (429 for rate limit, 400 for bad request)
+        error:
+          type: string
+      required: [status]
+    Tx:
+      type: object
+      properties:
+        nonce:
+          type: integer
+        sender_pubkey:
+          type: string
+        access_list:
+          type: array
+          items:
+            type: string
+        module:
+          type: string
+        method:
+          type: string
+        args:
+          type: string
+          format: byte
+          description: Base64 or hex-encoded args per application convention
+        tip:
+          type: integer
+        fee_limit:
+          type: integer
+        sig:
+          type: string
+      required: [nonce, sender_pubkey, module, method, args, tip, fee_limit, sig]
+    Receipt:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        error:
+          type: string
+          nullable: true
+        height:
+          type: integer
+        block_hash:
+          type: string
+      required: [ok, height, block_hash]
+    SubmitResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        tx_hash:
+          type: string
+      required: [status]
+    AcceptedBlock:
+      type: object
+      properties:
+        height:
+          type: integer
+        hash:
+          type: string
+        state_root:
+          type: string
+        txs:
+          type: integer
+  parameters:
+    CursorParam:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+      description: opaque cursor token for paginated scans (returned by prior response)
+paths:
+  /submit_tx:
+    post:
+      summary: Submit a signed transaction (rate-limited)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Tx'
+      responses:
+        '200':
+          description: accepted or rejected
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/SubmitResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /gossip/tx:
+    post:
+      summary: Gossip-received tx from peer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tx:
+                  $ref: '#/components/schemas/Tx'
+      responses:
+        '200':
+          description: accept/ignore
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  tx_hash:
+                    type: string
+                required: [status]
+  /mine_block:
+    post:
+      summary: Trigger local mining (may be gated by sync checks)
+      parameters:
+        - in: query
+          name: max_txs
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                miner_addr:
+                  type: string
+      responses:
+        '200':
+          description: mining result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedBlock'
+  /receipts:
+    get:
+      summary: List receipts (cursor pagination)
+      parameters:
+        - $ref: '#/components/parameters/CursorParam'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 100
+      responses:
+        '200':
+          description: batch of receipts and next_cursor
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  receipts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Receipt'
+                  next_cursor:
+                    type: string
+  /receipts/batch:
+    post:
+      summary: Batch lookup for receipts by tx_hash
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hashes:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: map of hash -> receipt or error
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  oneOf:
+                    - $ref: '#/components/schemas/Receipt'
+                    - $ref: '#/components/schemas/ErrorResponse'
+  /snapshot/save:
+    post:
+      summary: Save snapshot (admin)
+      security:
+        - AdminToken: []
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  saved_height:
+                    type: integer
+  /peer/add:
+    post:
+      summary: Add a peer (admin)
+      security:
+        - AdminToken: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+      responses:
+        '200':
+          description: peers list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  peers:
+                    type: array
+                    items:
+                      type: string
+security: []

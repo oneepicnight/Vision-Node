@@ -1,0 +1,60 @@
+[package]
+name = "vision-node"
+version = "0.1.0"
+edition = "2021"
+default-run = "vision-node"
+resolver = "2"
+
+[dependencies]
+# async + web
+tokio = { version = "1", features = ["full"] }
+axum  = "0.7"
+# HTTP client (TLS via rustls for Windows)
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "blocking"] }
+
+# state / storage
+sled        = "0.34"
+once_cell   = "1.19"
+parking_lot = "0.12"
+
+# crypto
+blake3          = "1.5"
+ed25519-dalek   = { version = "1", features = ["serde", "std"] }
+hex             = "0.4"
+
+# serialization
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# errors
+thiserror = "1"
+clap = { version = "4", features = ["derive"] }
+rand = "0.7"
+tower-http = { version = "0.6.6", features = ["cors", "limit"] }
+tower = "0.5"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+dashmap = "5"
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"
+
+[[bin]]
+name = "vision-node"
+path = "src/main.rs"
+
+[dev-dependencies]
+tempfile = "3"
+http = "0.2"
+hyper = "0.14"
+
+
+# If/when you add a CLI, uncomment this and create src/bin/vision-cli.rs
+# [[bin]]
+# name = "vision-cli"
+# path = "src/bin/vision-cli.rs"
