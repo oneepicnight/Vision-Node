@@ -29,3 +29,15 @@ Environment variables:
 Testing:
 - The integration tests spawn the built `vision-node` binary and call the endpoints.
   Example: `cargo test --test admin_smoke -- --nocapture`.
+
+Release builds and VISION_RELEASE
+---------------------------------
+
+When producing a release build we recommend setting the environment variable `VISION_RELEASE=1` for two behaviors:
+
+- `start-node.ps1` will prefer the release binary (`target\release\vision-node.exe`) when `VISION_RELEASE=1`.
+- The server's static-file fallback uses an exe-adjacent `public/` location in release mode; setting `VISION_RELEASE=1` signals that behavior.
+
+The repository includes `scripts/make-release.ps1` which sets `VISION_RELEASE=1` for the duration of the packaging run, builds the Rust release, builds the `vision-panel` and copies `vision-panel/dist` into `public/`, then produces a zip artifact under `artifacts/`.
+
+If you run the packaged binary directly on a host, set `VISION_RELEASE=1` in the host environment (or start the node via `start-node.ps1` after setting the env var) to use the exe-relative `public/` fallback.

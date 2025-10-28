@@ -1,10 +1,12 @@
-// --- imports & globals (restored) ---
-use std::{env, time::{SystemTime, UNIX_EPOCH, Duration}, net::SocketAddr, sync::atomic::Ordering};
+#![allow(unused_mut)]
+// --- imports & globals (merged from restored variant) ---
+use std::{env, time::{SystemTime, UNIX_EPOCH, Duration}, net::SocketAddr};
+use std::error::Error;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use parking_lot::Mutex;
 use once_cell::sync::Lazy;
 use sled::{Db, IVec};
-use std::sync::atomic::AtomicU64;
+// we replaced many legacy AtomicU64 metrics with Prometheus-native metrics
 
 use axum::{
     Router,
@@ -16,8 +18,9 @@ use axum::{
 use axum::http::{StatusCode, HeaderMap, HeaderValue};
 // We'll use a small custom CORS middleware to enforce VISION_CORS_ORIGINS precisely.
 use tower_http::cors::{CorsLayer, Any};
-// tower imports were experimented with earlier but are unused; remove to silence warnings
-// ...existing code...
+// additional imports for serving static files & version router
+use tower_http::services::{ServeDir, ServeFile};
+use std::path::PathBuf;
 
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
@@ -25,14 +28,23 @@ use thiserror::Error;
 use reqwest::Client;
 
 // shared HTTP client used around the node
-static HTTP: Lazy<Client> = Lazy::new(|| Client::new());
+static HTTP: Lazy<Client> = Lazy::new(|| {
+    // Global client with a sensible default timeout to avoid long-hanging requests.
+    Client::builder()
+        .timeout(Duration::from_secs(8))
+        .build()
+        .expect("build http client")
+});
 
 use blake3::Hasher;
 use ed25519_dalek::{PublicKey, Signature, Verifier};
 use tracing::{info, debug};
 use tracing_subscriber::EnvFilter;
 use dashmap::DashMap;
+use prometheus::{Registry, Histogram, HistogramOpts, Encoder, TextEncoder, IntCounter, IntGauge, IntCounterVec, Gauge};
+use dashmap::DashMap as DashMapLocal;
 mod mempool;
+mod version;
 
 // Replace earlier DashMap usage with a simple Mutex-wrapped BTreeMap to avoid adding deps
 static PEERS: Lazy<Mutex<BTreeMap<String, __PeerMeta>>> = Lazy::new(|| Mutex::new(BTreeMap::new()));
@@ -42,61 +54,82 @@ static TX_BCAST_SENDER: once_cell::sync::OnceCell<tokio::sync::mpsc::Sender<Tx>>
 static BLOCK_BCAST_SENDER: once_cell::sync::OnceCell<tokio::sync::mpsc::Sender<Block>> = once_cell::sync::OnceCell::new();
 
 // Node metrics / counters used across the binary
-static VISION_UNDOS_PRUNED: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
-static VISION_PRUNE_RUNS: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
-static VISION_BLOCK_WEIGHT_LAST: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
-static VISION_BLOCKS_MINED: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
-static VISION_TXS_APPLIED: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
-static VISION_SIDE_BLOCKS: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
-static VISION_REORGS: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
-static VISION_REORG_REJECTED: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
-static VISION_REORG_LENGTH_TOTAL: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
-static VISION_REORG_DURATION_MS: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
-static VISION_SNAPSHOTS: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
-static VISION_GOSSIP_IN: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
-static VISION_GOSSIP_OUT: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
-static ADMIN_PING_TOTAL: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
+// keep a small recent history of sweep timestamps (unix secs)
+// history entries: (unix_secs, removed_count, duration_ms, mempool_size)
+static VISION_MEMPOOL_SWEEP_HISTORY: Lazy<Mutex<std::collections::VecDeque<(u64, u64, u64, u64)>>> = Lazy::new(|| Mutex::new(std::collections::VecDeque::new()));
 
-#[derive(serde::Serialize)]
-struct PanelStatus {
-    peers: Vec<String>,
-    port: u16,
-    height: u64,
-}
-
-async fn panel_status() -> impl IntoResponse {
+// Prometheus registry + histogram for sweep durations
+static PROM_REGISTRY: Lazy<Registry> = Lazy::new(|| Registry::new());
+static VISION_MEMPOOL_SWEEP_DURATION_HISTOGRAM: Lazy<Histogram> = Lazy::new(|| {
+    let opts = HistogramOpts::new("vision_mempool_sweep_duration_seconds", "Mempool sweep duration seconds");
+    let h = Histogram::with_opts(opts).expect("create histogram");
+    // register, ignore error if already registered
     let g = CHAIN.lock();
-    let peers = g.peers.iter().cloned().collect::<Vec<_>>();
-    let port: u16 = std::env::var("VISION_PORT").ok().and_then(|s| s.parse().ok()).unwrap_or(7070);
-    let height = g.blocks.last().map(|b| b.header.number).unwrap_or(0);
-    Json(PanelStatus { peers, port, height })
-}
-#[inline]
-#[allow(dead_code)]
-fn now_secs() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
-}
 
-async fn livez() -> &'static str { "ok" }
+    // Compute values once and set PROM_* collectors so registry contains everything
+    let height: u64 = g.blocks.last().map(|b| b.header.number).unwrap_or(0);
+    PROM_VISION_HEIGHT.set(height as i64);
 
-async fn readyz() -> (StatusCode, Json<serde_json::Value>) {
-    let g = CHAIN.lock();
-    let height = g.blocks.last().map(|b| b.header.number).unwrap_or(0);
-    let hash = g.blocks.last().map(|b| b.header.pow_hash.clone()).unwrap_or_default();
-    let gm = g.gamemaster.clone();
-    (StatusCode::OK, Json(serde_json::json!({ "gamemaster": gm, "height": height, "hash": hash })))
-}
+    let peers: u64 = g.peers.len() as u64;
+    PROM_VISION_PEERS.set(peers as i64);
 
-async fn peers_list() -> Json<Vec<PeerMeta>> {
-    let m = PEERS.lock();
-    let out: Vec<PeerMeta> = m.values().cloned().collect();
-    Json(out)
-}
+    let mempool_len: u64 = (g.mempool_critical.len() + g.mempool_bulk.len()) as u64;
+    PROM_VISION_MEMPOOL_LEN.set(mempool_len as i64);
+    PROM_VISION_MEMPOOL_CRIT_LEN.set(g.mempool_critical.len() as i64);
+    PROM_VISION_MEMPOOL_BULK_LEN.set(g.mempool_bulk.len() as i64);
 
-async fn peers_summary() -> Json<serde_json::Value> {
-    let m = PEERS.lock();
-    let peers_len = m.len();
-    let recent_ok = m.values().filter(|p| p.last_ok.is_some()).count();
+    let block_weight_limit = g.limits.block_weight_limit;
+    PROM_VISION_BLOCK_WEIGHT_LIMIT.set(block_weight_limit as i64);
+    let last_weight: u64 = PROM_VISION_BLOCK_WEIGHT_LAST.get() as u64;
+    let weight_util = if block_weight_limit > 0 { (last_weight as f64) / (block_weight_limit as f64) } else { 0.0 };
+    PROM_VISION_BLOCK_WEIGHT_UTIL.set(weight_util);
+
+    PROM_VISION_DIFFICULTY_BITS.set(g.blocks.last().map(|b| b.header.difficulty).unwrap_or(1) as i64);
+    PROM_VISION_TARGET_BLOCK_TIME.set(g.limits.target_block_time as i64);
+    PROM_VISION_RETARGET_WINDOW.set(g.limits.retarget_window as i64);
+
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    let last_ts = g.blocks.last().map(|b| b.header.timestamp).unwrap_or(now);
+    PROM_VISION_LAST_BLOCK_TIME_SECS.set(now.saturating_sub(last_ts) as i64);
+
+    // tip percentiles
+    let mut tips: Vec<u64> = Vec::new();
+    for t in g.mempool_critical.iter() { tips.push(t.tip); }
+    for t in g.mempool_bulk.iter() { tips.push(t.tip); }
+    tips.sort_unstable();
+    let tip_p50: f64 = if tips.is_empty() { 0.0 } else { tips[tips.len()/2] as f64 };
+    let tip_p95: f64 = if tips.is_empty() { 0.0 } else { tips[(tips.len() * 95 / 100).min(tips.len()-1)] as f64 };
+    PROM_VISION_FEE_TIP_P50.set(tip_p50);
+    PROM_VISION_FEE_TIP_P95.set(tip_p95);
+
+    // fee-per-byte percentiles
+    let mut fee_per_byte: Vec<f64> = Vec::new();
+    for t in g.mempool_critical.iter().chain(g.mempool_bulk.iter()) {
+        let w = est_tx_weight(t) as f64;
+        if w > 0.0 { fee_per_byte.push((t.tip as f64) / w); }
+    }
+    fee_per_byte.sort_by(|a,b| a.partial_cmp(b).unwrap());
+    let fpb_p50 = if fee_per_byte.is_empty() { 0.0 } else { fee_per_byte[fee_per_byte.len()/2] };
+    let fpb_p95 = if fee_per_byte.is_empty() { 0.0 } else { fee_per_byte[(fee_per_byte.len()*95/100).min(fee_per_byte.len()-1)] };
+    PROM_VISION_FEE_PER_BYTE_P50.set(fpb_p50);
+    PROM_VISION_FEE_PER_BYTE_P95.set(fpb_p95);
+
+    PROM_VISION_SNAPSHOT_EVERY_BLOCKS.set(g.limits.snapshot_every_blocks as i64);
+
+    // mempool sweep metrics already updated elsewhere; just ensure values available
+    PROM_VISION_MEMPOOL_SWEEPS.set(PROM_VISION_MEMPOOL_SWEEPS.get() as i64);
+    PROM_VISION_MEMPOOL_REMOVED_TOTAL.set(PROM_VISION_MEMPOOL_REMOVED_TOTAL.get() as i64);
+    PROM_VISION_MEMPOOL_REMOVED_LAST.set(PROM_VISION_MEMPOOL_REMOVED_LAST.get());
+    PROM_VISION_MEMPOOL_SWEEP_LAST_MS.set(PROM_VISION_MEMPOOL_SWEEP_LAST_MS.get());
+
+    // assemble registry output only
+    let encoder = TextEncoder::new();
+    let metric_families = PROM_REGISTRY.gather();
+    let mut buffer = Vec::new();
+    encoder.encode(&metric_families, &mut buffer).ok();
+    let prom_text = String::from_utf8_lossy(&buffer).into_owned();
+    let headers = [(axum::http::header::CONTENT_TYPE, axum::http::HeaderValue::from_static("text/plain; version=0.0.4"))];
+    (headers, prom_text)
     let recent_fail = m.values().filter(|p| p.fail_count > 0).count();
     Json(serde_json::json!({ "peers_len": peers_len, "recent_ok": recent_ok, "recent_fail": recent_fail }))
 }
@@ -140,7 +173,8 @@ async fn admin_ping_handler(
     // keep admin auth logging minimal in prod; avoid printing tokens
         if !check_admin(headers.clone(), &q) {
             return api_error_struct(StatusCode::UNAUTHORIZED, "unauthorized", "invalid or missing admin token"); }
-    ADMIN_PING_TOTAL.fetch_add(1, Ordering::Relaxed);
+    // prom
+    PROM_ADMIN_PING_TOTAL.inc();
     (StatusCode::OK, Json(serde_json::json!({"ok": true})))
 }
 
@@ -148,6 +182,36 @@ async fn admin_info() -> (StatusCode, Json<serde_json::Value>) {
     // admin_info should be protected by check_admin at call sites; provide basic info
     let version = env::var("VISION_VERSION").unwrap_or_else(|_| "dev".into());
     (StatusCode::OK, Json(serde_json::json!({"version": version})))
+}
+
+async fn admin_mempool_sweeper(
+    headers: HeaderMap,
+    Query(q): Query<std::collections::HashMap<String, String>>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if !check_admin(headers, &q) {
+        return api_error_struct(StatusCode::UNAUTHORIZED, "unauthorized", "invalid or missing admin token");
+    }
+    let ttl = mempool_ttl_secs();
+    let sweep_secs = std::env::var("VISION_MEMPOOL_SWEEP_SECS").ok().and_then(|s| s.parse::<u64>().ok()).unwrap_or(60);
+    let sweeps = PROM_VISION_MEMPOOL_SWEEPS.get() as u64;
+    let removed_total = PROM_VISION_MEMPOOL_REMOVED_TOTAL.get() as u64;
+    let removed_last = PROM_VISION_MEMPOOL_REMOVED_LAST.get() as i64 as u64;
+    let last_ms = PROM_VISION_MEMPOOL_SWEEP_LAST_MS.get() as i64 as u64;
+    let mut recent: Vec<serde_json::Value> = Vec::new();
+    {
+        let h = VISION_MEMPOOL_SWEEP_HISTORY.lock();
+        for (ts, removed, dur, msize) in h.iter() { recent.push(serde_json::json!({ "ts": *ts, "removed": *removed, "duration_ms": *dur, "mempool_size": *msize })); }
+    }
+    (StatusCode::OK, Json(serde_json::json!({
+        "ok": true,
+        "mempool_ttl_secs": ttl,
+        "mempool_sweep_secs": sweep_secs,
+        "sweeps_total": sweeps,
+        "removed_total": removed_total,
+        "removed_last": removed_last,
+        "last_sweep_ms": last_ms,
+        "recent_sweeps_unix_secs": recent
+    })))
 }
 
 
@@ -205,6 +269,29 @@ mod proof_tests {
         }
         let reconstructed = hex::encode(&cur);
         assert_eq!(reconstructed, proof.root);
+    }
+}
+
+#[cfg(test)]
+mod classify_tests {
+    use super::*;
+
+    #[test]
+    fn classify_std_io_errors() {
+        // Connection refused should classify accordingly
+        let cre = std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "refused");
+        let label = classify_error_any(&cre);
+        assert_eq!(label, "connection_refused");
+
+        // Timed out should classify as timeout
+        let toe = std::io::Error::new(std::io::ErrorKind::TimedOut, "timed out");
+        let label2 = classify_error_any(&toe);
+        assert_eq!(label2, "timeout");
+
+        // Generic io error falls back to request_error
+        let other = std::io::Error::new(std::io::ErrorKind::Other, "other");
+        let label3 = classify_error_any(&other);
+        assert_eq!(label3, "request_error");
     }
 }
 
@@ -273,7 +360,8 @@ fn mempool_max() -> usize {
     env::var("VISION_MEMPOOL_MAX").ok().and_then(|s| s.parse().ok()).unwrap_or(10_000)
 }
 fn mempool_ttl_secs() -> u64 {
-    std::env::var("VISION_MEMPOOL_TTL_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(0) // 0 = disabled
+    // Default to 15 minutes TTL for mempool entries unless explicitly disabled (0)
+    std::env::var("VISION_MEMPOOL_TTL_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(900) // seconds; 0 = disabled
 }
 
 // sled keys/prefixes
@@ -368,7 +456,14 @@ pub struct Chain {
 
 impl Chain {
     pub fn init(path: &str) -> Self {
-        let db = sled::open(path).expect("open sled");
+        let db = match sled::open(path) {
+            Ok(d) => d,
+            Err(e) => {
+                tracing::error!(path = %path, err = ?e, "failed to open sled database");
+                // Cannot continue without storage; exit with non-zero code so supervisors can restart or surface the issue.
+                std::process::exit(1);
+            }
+        };
         // Load dynamic fee base if persisted
         if let Ok(Some(v)) = db.get(META_FEE_BASE.as_bytes()) {
             if v.len() == 16 {
@@ -548,7 +643,7 @@ fn prune_old_undos_count(db: &Db, keep_heights: &[u64]) -> u64 {
             }
         }
     }
-    VISION_UNDOS_PRUNED.fetch_add(removed, Ordering::Relaxed);
+    PROM_VISION_UNDOS_PRUNED.inc_by(removed);
     removed
 }
 fn hash_bytes(b: &[u8]) -> [u8; 32] {
@@ -624,9 +719,29 @@ fn signable_tx_bytes(tx: &Tx) -> Vec<u8> {
 }
 fn tx_hash(tx: &Tx) -> [u8; 32] { hash_bytes(&signable_tx_bytes(tx)) }
 fn tx_root_placeholder(txs: &[Tx]) -> String {
-    let mut h = Hasher::new();
-    for t in txs { h.update(&tx_hash(t)); }
-    hex32(*h.finalize().as_bytes())
+    // Build a binary Merkle tree over tx hashes using blake3 as the node hash.
+    // Leaves are `tx_hash(tx)` (32 bytes). For odd number of leaves we duplicate
+    // the last leaf to form a pair (common simple approach).
+    if txs.is_empty() {
+        return "0".repeat(64);
+    }
+    let mut level: Vec<[u8;32]> = txs.iter().map(|t| tx_hash(t)).collect();
+    while level.len() > 1 {
+        let mut next: Vec<[u8;32]> = Vec::with_capacity((level.len()+1)/2);
+        for i in (0..level.len()).step_by(2) {
+            let left = level[i];
+            let right = if i + 1 < level.len() { level[i+1] } else { level[i] };
+            let mut h = Hasher::new();
+            h.update(&left);
+            h.update(&right);
+            let out = h.finalize();
+            let mut arr = [0u8;32];
+            arr.copy_from_slice(out.as_bytes());
+            next.push(arr);
+        }
+        level = next;
+    }
+    hex32(level[0])
 }
 fn header_pow_bytes(h: &BlockHeader) -> Vec<u8> { serde_json::to_vec(h).unwrap() }
 fn compute_state_root(balances: &BTreeMap<String, u128>, gm: &Option<String>) -> String {
@@ -793,8 +908,8 @@ async fn main() {
             drop(g); // release lock before pruning
             let g2 = CHAIN.lock();
             let removed = prune_old_undos_count(&g2.db, &keep);
-            VISION_PRUNE_RUNS.fetch_add(1, Ordering::Relaxed);
-            VISION_UNDOS_PRUNED.fetch_add(removed, Ordering::Relaxed);
+                PROM_VISION_PRUNE_RUNS.inc();
+                PROM_VISION_UNDOS_PRUNED.inc_by(removed);
         }
     });
 
@@ -868,6 +983,12 @@ async fn main() {
 
     // Spawn a background mempool sweeper controlled by VISION_MEMPOOL_SWEEP_SECS (default 60s)
     mempool::spawn_mempool_sweeper();
+    // Log mempool TTL and sweeper interval for operator visibility
+    {
+        let ttl = mempool_ttl_secs();
+        let sweep = std::env::var("VISION_MEMPOOL_SWEEP_SECS").ok().and_then(|s| s.parse::<u64>().ok()).unwrap_or(60);
+        info!(mempool_ttl_secs = ttl, mempool_sweep_secs = sweep, "mempool TTL sweeping configured");
+    }
 
     
     // handlers are defined at module scope (moved)
@@ -903,7 +1024,13 @@ async fn main() {
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     info!(listen = %addr.to_string(), "Vision node listening");
 
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    let listener = match tokio::net::TcpListener::bind(addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            tracing::error!(listen = %addr.to_string(), err = ?e, "failed to bind to address");
+            std::process::exit(1);
+        }
+    };
     axum::serve(listener, app)
         .with_graceful_shutdown(async {
             let _ = tokio::signal::ctrl_c().await;
@@ -962,6 +1089,7 @@ fn build_app() -> Router {
         .route("/readyz", get(readyz))
         .route("/admin/ping", get(admin_ping_handler).post(admin_ping_handler))
         .route("/admin/info", get(admin_info).post(admin_info))
+    .route("/admin/mempool/sweeper", get(admin_mempool_sweeper).post(admin_mempool_sweeper))
         // Explorer
         .route("/block/:height/tx_hashes", get(get_block_tx_hashes))
         .route("/block/:height", get(get_block))
@@ -1015,9 +1143,41 @@ fn build_app() -> Router {
         }
     }
 
-    let svc = svc.layer(axum::middleware::from_fn(request_limits_middleware));
+    // apply middleware to API routes
+    let api = svc.layer(axum::middleware::from_fn(request_limits_middleware));
 
-    svc
+    // Serve static files from an absolute path. Prefer VISION_PUBLIC_DIR if set,
+    // otherwise resolve relative to the running executable's directory and
+    // fall back to the current working directory. This avoids depending on the
+    // process working directory at startup.
+    // Prefer an explicit override. If not set, resolve `public/` relative to
+    // the running executable's location so releases that place `public/`
+    // next to the binary will work without relying on a specific cwd.
+    let public_dir: PathBuf = std::env::var("VISION_PUBLIC_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            std::env::current_exe()
+                .ok()
+                .and_then(|exe| exe.parent().map(|d| d.to_path_buf()))
+                .unwrap_or_else(|| std::env::current_dir().unwrap())
+                .join("public")
+        });
+    let index_file = public_dir.join("index.html");
+    info!(public_dir = %public_dir.display(), "serving static files from");
+    let static_files = Router::new().nest_service(
+        "/",
+        ServeDir::new(public_dir).not_found_service(ServeFile::new(index_file)),
+    );
+
+    // Mount API first, then version route, then static UI fallback.
+    // This ensures API routes (e.g., /status) have priority and everything else
+    // falls back to the single-page app entry.
+    let app = Router::new()
+        .merge(api)
+        .merge(version::router())
+        .merge(static_files);
+
+    app
 }
 
 
@@ -1348,7 +1508,7 @@ async fn submit_tx(ConnectInfo(addr): ConnectInfo<SocketAddr>, Json(SubmitTx { t
 
     match verify_tx(&tx) {
         Ok(_) => {
-            VISION_GOSSIP_IN.fetch_add(1, Ordering::Relaxed);
+            PROM_VISION_GOSSIP_IN.inc();
             let mut g = CHAIN.lock();
 
             // Fast fail: ensure the tx's fee_limit covers base_fee * estimated_weight
@@ -1623,9 +1783,10 @@ async fn airdrop_protected(
     }
 
     let mut g = CHAIN.lock();
-    let gm = match g.gamemaster.clone() {
-        Some(s) => s,
-        None => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error":"no gamemaster set"}))),
+    let gm = if let Some(s) = g.gamemaster.clone() {
+        s
+    } else {
+        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error":"no gamemaster set"})));
     };
     let gm_key = acct_key(&gm);
     g.balances.entry(gm_key.clone()).or_insert(0);
@@ -1790,10 +1951,12 @@ fn execute_tx_with_nonce_and_fees(
         "cash" => {
             match tx.method.as_str() {
                 "mint" => {
-                    match gm.clone() {
-                        None => return Err("mint disabled: no gamemaster set".into()),
-                        Some(gmaddr) if gmaddr != *sender_addr => return Err("mint not authorized".into()),
-                        _ => {}
+                    if let Some(gmaddr) = gm.as_ref() {
+                        if gmaddr != sender_addr {
+                            return Err("mint not authorized".into());
+                        }
+                    } else {
+                        return Err("mint disabled: no gamemaster set".into());
                     }
                     let args: CashMintArgs = serde_json::from_slice(&tx.args).map_err(|_| "bad args".to_string())?;
                     let to_key = acct_key(&args.to);
@@ -1893,6 +2056,7 @@ fn execute_and_mine(
         pow_hash: "0".repeat(64),
         state_root: new_state_root.clone(),
         tx_root,
+        // fill receipts_root after exec results and pow are available
         receipts_root: parent.header.receipts_root.clone(),
         da_commitment: None,
     };
@@ -1906,6 +2070,50 @@ fn execute_and_mine(
         nonce_ctr = nonce_ctr.wrapping_add(1);
     }
 
+    // Build receipts (in the same tx order) and compute a Merkle root over their hashes.
+    // Each receipt commits to (ok, error, height, block_hash).
+    let receipt_height = parent.header.number + 1;
+    let mut receipts_vec: Vec<Receipt> = Vec::new();
+    for tx in &txs {
+        let th = hex::encode(tx_hash(tx));
+        if let Some(res) = exec_results.get(&th) {
+            let r = Receipt { ok: res.is_ok(), error: res.clone().err(), height: receipt_height, block_hash: hdr.pow_hash.clone() };
+            receipts_vec.push(r);
+        } else {
+            // should not happen; create a negative receipt
+            let r = Receipt { ok: false, error: Some("missing exec result".to_string()), height: receipt_height, block_hash: hdr.pow_hash.clone() };
+            receipts_vec.push(r);
+        }
+    }
+    // compute merkle root of receipts: leaf = blake3(serialized_receipt)
+    let receipts_root = if receipts_vec.is_empty() {
+        "0".repeat(64)
+    } else {
+        let mut level: Vec<[u8;32]> = Vec::with_capacity(receipts_vec.len());
+        for r in &receipts_vec {
+            let bytes = serde_json::to_vec(r).unwrap_or_default();
+            let hash = blake3::hash(&bytes);
+            let mut arr = [0u8;32]; arr.copy_from_slice(hash.as_bytes());
+            level.push(arr);
+        }
+        while level.len() > 1 {
+            let mut next: Vec<[u8;32]> = Vec::with_capacity((level.len()+1)/2);
+            for i in (0..level.len()).step_by(2) {
+                let left = level[i];
+                let right = if i+1 < level.len() { level[i+1] } else { level[i] };
+                let mut h = Hasher::new();
+                h.update(&left);
+                h.update(&right);
+                let out = h.finalize();
+                let mut arr = [0u8;32]; arr.copy_from_slice(out.as_bytes());
+                next.push(arr);
+            }
+            level = next;
+        }
+        hex32(level[0])
+    };
+    hdr.receipts_root = receipts_root;
+
     // Accept new state
     // compute undo deltas
     let undo = compute_undo(&g.balances, &g.nonces, &g.gamemaster, &balances, &nonces, &gm);
@@ -1916,10 +2124,10 @@ fn execute_and_mine(
 
     let mut block = Block { header: hdr, txs, weight: 0 };
     // compute serialized weight and record
-    if let Ok(bts) = serde_json::to_vec(&block) {
+        if let Ok(bts) = serde_json::to_vec(&block) {
         let w = bts.len() as u64;
         block.weight = w;
-        VISION_BLOCK_WEIGHT_LAST.store(w, Ordering::Relaxed);
+        PROM_VISION_BLOCK_WEIGHT_LAST.set(w as i64);
     }
 
     persist_state(&g.db, &g.balances, &g.nonces, &g.gamemaster);
@@ -1965,8 +2173,9 @@ fn execute_and_mine(
     persist_ema(&g.db, g.ema_block_time);
     persist_difficulty(&g.db, g.difficulty);
     // metrics
-    VISION_BLOCKS_MINED.fetch_add(1, Ordering::Relaxed);
-    VISION_TXS_APPLIED.fetch_add(g.blocks.last().unwrap().txs.len() as u64, Ordering::Relaxed);
+    PROM_VISION_BLOCKS_MINED.inc();
+    let txs_last = g.blocks.last().unwrap().txs.len() as u64;
+    PROM_VISION_TXS_APPLIED.inc_by(txs_last);
     (block, exec_results)
 }
 
@@ -1988,7 +2197,7 @@ fn apply_block_from_peer(g: &mut Chain, blk: &Block) -> Result<(), String> {
 
     // Insert into side_blocks (we'll decide whether to reorg)
     g.side_blocks.insert(blk.header.pow_hash.clone(), blk.clone());
-    VISION_SIDE_BLOCKS.store(g.side_blocks.len() as u64, Ordering::Relaxed);
+    PROM_VISION_SIDE_BLOCKS.set(g.side_blocks.len() as i64);
 
     // compute cumulative work for this block
     let parent_cum = g.cumulative_work.get(&blk.header.parent_hash).cloned().unwrap_or(0);
@@ -2038,7 +2247,7 @@ fn apply_block_from_peer(g: &mut Chain, blk: &Block) -> Result<(), String> {
             persist_state(&g.db, &g.balances, &g.nonces, &g.gamemaster);
             persist_block_only(&g.db, blk.header.number, blk);
             // update last-seen block weight metric
-            VISION_BLOCK_WEIGHT_LAST.store(blk.weight, Ordering::Relaxed);
+            PROM_VISION_BLOCK_WEIGHT_LAST.set(blk.weight as i64);
             let _ = g.db.flush();
             g.blocks.push(blk.clone());
             g.seen_blocks.insert(blk.header.pow_hash.clone());
@@ -2072,15 +2281,16 @@ fn apply_block_from_peer(g: &mut Chain, blk: &Block) -> Result<(), String> {
             }
             persist_ema(&g.db, g.ema_block_time);
             persist_difficulty(&g.db, g.difficulty);
-            VISION_BLOCKS_MINED.fetch_add(1, Ordering::Relaxed);
-            VISION_TXS_APPLIED.fetch_add(blk.txs.len() as u64, Ordering::Relaxed);
+            PROM_VISION_BLOCKS_MINED.inc();
+            let _txs = blk.txs.len() as u64;
+            PROM_VISION_TXS_APPLIED.inc_by(_txs);
         }
         return Ok(());
     }
 
     // Heavier chain found -> perform reorg to heaviest_hash
     info!(heaviest = %heaviest_hash, "reorg: adopting heavier tip");
-    VISION_REORGS.fetch_add(1, Ordering::Relaxed);
+    PROM_VISION_REORGS.inc();
     // MAX_REORG guard: don't accept reorganizations that are too large
     let max_reorg = g.limits.max_reorg;
     let old_tip_index = g.blocks.len().saturating_sub(1);
@@ -2107,7 +2317,7 @@ fn apply_block_from_peer(g: &mut Chain, blk: &Block) -> Result<(), String> {
 
     // Now check the reorg size: old_tip_index - ancestor_index
     if old_tip_index.saturating_sub(ancestor_index) as u64 > max_reorg {
-        VISION_REORG_REJECTED.fetch_add(1, Ordering::Relaxed);
+    PROM_VISION_REORG_REJECTED.inc();
         return Err(format!("reorg too large: {} > max {}", old_tip_index.saturating_sub(ancestor_index), max_reorg));
     }
 
@@ -2126,14 +2336,14 @@ fn apply_block_from_peer(g: &mut Chain, blk: &Block) -> Result<(), String> {
             for (k, vopt) in undo.balances.iter() {
                 match vopt {
                     Some(v) => { g.balances.insert(k.clone(), *v); }
-                    None => { g.balances.remove(k); }
+                    _ => { g.balances.remove(k); }
                 }
             }
             // revert nonces
             for (k, vopt) in undo.nonces.iter() {
                 match vopt {
                     Some(v) => { g.nonces.insert(k.clone(), *v); }
-                    None => { g.nonces.remove(k); }
+                    _ => { g.nonces.remove(k); }
                 }
             }
             // revert gamemaster if present
@@ -2202,9 +2412,10 @@ fn apply_block_from_peer(g: &mut Chain, blk: &Block) -> Result<(), String> {
     let miner_key = acct_key("miner");
     let mut applied = 0usize;
     for hsh in &path {
-        let b = match g.side_blocks.get(hsh) {
-            Some(bb) => bb.clone(),
-            None => return Err("missing side block during reorg".into()),
+        let b = if let Some(bb) = g.side_blocks.get(hsh) {
+            bb.clone()
+        } else {
+            return Err("missing side block during reorg".into());
         };
 
         // execute txs against current state
@@ -2246,7 +2457,8 @@ fn apply_block_from_peer(g: &mut Chain, blk: &Block) -> Result<(), String> {
         }
         persist_state(&g.db, &g.balances, &g.nonces, &g.gamemaster);
     persist_block_only(&g.db, b.header.number, &b);
-    VISION_BLOCK_WEIGHT_LAST.store(b.weight, Ordering::Relaxed);
+    // record last block weight in Prometheus (remove legacy atomic)
+    PROM_VISION_BLOCK_WEIGHT_LAST.set(b.weight as i64);
         let _ = g.db.flush();
 
         g.blocks.push(b.clone());
@@ -2257,7 +2469,7 @@ fn apply_block_from_peer(g: &mut Chain, blk: &Block) -> Result<(), String> {
 
     // record reorg length (number of blocks switched)
     let reorg_len = applied as u64;
-    VISION_REORG_LENGTH_TOTAL.fetch_add(reorg_len, Ordering::Relaxed);
+    PROM_VISION_REORG_LENGTH_TOTAL.inc_by(reorg_len);
 
     // recompute cumulative_work and ensure side block metric
     g.cumulative_work.clear();
@@ -2271,7 +2483,7 @@ fn apply_block_from_peer(g: &mut Chain, blk: &Block) -> Result<(), String> {
     persist_snapshot(&g.db, g.blocks.last().unwrap().header.number, &g.balances, &g.nonces, &g.gamemaster);
 
     let dur_ms = reorg_start.elapsed().as_millis() as u64;
-    VISION_REORG_DURATION_MS.store(dur_ms, Ordering::Relaxed);
+    PROM_VISION_REORG_DURATION_MS.set(dur_ms as i64);
 
     // Re-add orphaned txs to mempool if not present in new chain
     let now = now_ts();
@@ -2287,7 +2499,7 @@ fn apply_block_from_peer(g: &mut Chain, blk: &Block) -> Result<(), String> {
     }
 
     // update side-block metric
-    VISION_SIDE_BLOCKS.store(g.side_blocks.len() as u64, Ordering::Relaxed);
+    PROM_VISION_SIDE_BLOCKS.set(g.side_blocks.len() as i64);
 
     Ok(())
 }
@@ -2638,20 +2850,191 @@ mod builder_tests {
     }
 }
 
+#[cfg(test)]
+mod receipts_tests {
+    use super::*;
+
+    #[test]
+    fn receipts_merkle_root_and_persistence() {
+        let mut g = fresh_chain();
+        // create a simple tx that will be executed (execute_tx_with_nonce_and_fees does not verify sig)
+        let tx = Tx { nonce: 0, sender_pubkey: "pk0".into(), access_list: vec![], module: "noop".into(), method: "ping".into(), args: vec![], tip: 0, fee_limit: 1000, sig: String::new() };
+    let parent = g.blocks.last().cloned().unwrap();
+    let parent_receipts_root = parent.header.receipts_root.clone();
+    let (block, _res) = execute_and_mine(&mut g, vec![tx.clone()], "miner", Some(&parent));
+        // receipts_root should be set (non-zero when txs included)
+        assert!(block.header.receipts_root.len() == 64, "receipts_root must be 64-hex chars");
+        // persisted receipt exists in DB under RCPT_PREFIX + tx_hash
+        let th = hex::encode(tx_hash(&tx));
+        let key = format!("{}{}", RCPT_PREFIX, th);
+        let found = g.db.get(key.as_bytes()).unwrap();
+        assert!(found.is_some(), "receipt must be persisted to DB");
+        let rbytes = found.unwrap();
+        let r: Receipt = serde_json::from_slice(&rbytes).expect("deserialize receipt");
+        assert_eq!(r.height, block.header.number);
+        assert_eq!(r.block_hash, block.header.pow_hash);
+        // if parent had no receipts and we included one, root should not equal parent
+        if parent_receipts_root == "0".repeat(64) {
+            assert_ne!(block.header.receipts_root, parent_receipts_root);
+        }
+    }
+}
+
+#[cfg(test)]
+mod mempool_sweeper_tests {
+    use super::*;
+
+    #[test]
+    fn prune_mempool_increments_sweep_metrics_when_ttl_and_expired() {
+        // configure TTL small and create an expired tx
+        std::env::set_var("VISION_MEMPOOL_TTL_SECS", "1");
+        let mut g = fresh_chain();
+        let tx = Tx { nonce: 0, sender_pubkey: "pka".into(), access_list: vec![], module: "noop".into(), method: "ping".into(), args: vec![], tip: 1, fee_limit: 1000, sig: String::new() };
+        g.mempool_bulk.push_back(tx.clone());
+        let th = hex::encode(tx_hash(&tx));
+        // set timestamp far in the past to mark expired
+        g.mempool_ts.insert(th.clone(), now_ts().saturating_sub(3600));
+        g.seen_txs.insert(th.clone());
+
+    // reset Prometheus metrics to known values for the test
+    PROM_VISION_MEMPOOL_SWEEPS.reset();
+    PROM_VISION_MEMPOOL_REMOVED_TOTAL.reset();
+    PROM_VISION_MEMPOOL_REMOVED_LAST.set(0);
+
+        mempool::prune_mempool(&mut g);
+
+    let sweeps = PROM_VISION_MEMPOOL_SWEEPS.get() as u64;
+    let removed_last = PROM_VISION_MEMPOOL_REMOVED_LAST.get() as i64 as u64;
+    let removed_total = PROM_VISION_MEMPOOL_REMOVED_TOTAL.get() as u64;
+        assert!(sweeps >= 1, "expected at least one sweep run after prune_mempool");
+        assert!(removed_last > 0 || removed_total > 0, "expected some removed entries when TTL expired");
+    }
+}
+
+// Generic error classifier (downcast-based) used by sync helpers and tests.
+fn classify_error_any(err: &(dyn std::error::Error + 'static)) -> &'static str {
+    // Walk the source chain looking for concrete std::io::Error kinds
+    let mut cur: Option<&(dyn std::error::Error + 'static)> = Some(err);
+    while let Some(e) = cur {
+        if let Some(ioe) = e.downcast_ref::<std::io::Error>() {
+            match ioe.kind() {
+                std::io::ErrorKind::ConnectionRefused => return "connection_refused",
+                std::io::ErrorKind::TimedOut => return "timeout",
+                _ => {}
+            }
+            if let Some(code) = ioe.raw_os_error() {
+                if code == 10061 { return "connection_refused"; }
+            }
+        }
+        cur = e.source();
+    }
+    // If we reached here, try a conservative string-based DNS detection as a fallback
+    let mut cur2: Option<&(dyn std::error::Error + 'static)> = Some(err);
+    while let Some(e) = cur2 {
+        let s = e.to_string().to_lowercase();
+        if s.contains("name or service not known") || s.contains("no such host") || s.contains("getaddrinfo") || s.contains("could not resolve") || s.contains("dns") || s.contains("nodename") {
+            return "dns_error";
+        }
+        cur2 = e.source();
+    }
+    "request_error"
+}
+
 
 // =================== Sync endpoints ===================
 
 // Pull blocks from a remote peer: body { "src":"http://127.0.0.1:7070", "from": <opt>, "to": <opt> }
 async fn sync_pull(Json(req): Json<SyncPullReq>) -> (StatusCode, Json<serde_json::Value>) {
     let src = req.src.trim().trim_end_matches('/').to_string();
-    // remote height
-    let src_h_txt = match HTTP.get(format!("{}/height", src)).send().await {
-        Ok(r) => match r.text().await { Ok(s) => s, Err(e) => return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": format!("src height read: {}", e)}))) },
-        Err(e) => return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": format!("src height req: {}", e)}))),
+    // helper to produce enriched BAD_GATEWAY responses that include the originating src
+    let make_bad = |msg: String| -> (StatusCode, Json<serde_json::Value>) {
+        (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"src": src.clone(), "error": msg})))
     };
+
+    // helper to classify reqwest errors into prometheus label values (delegates to module helper)
+    fn classify_reqwest_error(e: &reqwest::Error) -> &'static str {
+        if e.is_timeout() { return "timeout"; }
+        if e.is_connect() {
+            if let Some(src) = e.source() {
+                if let Some(ioe) = src.downcast_ref::<std::io::Error>() {
+                    if ioe.kind() == std::io::ErrorKind::ConnectionRefused { return "connection_refused"; }
+                }
+            }
+        }
+        classify_error_any(e)
+    }
+
+    // per-peer backoff check
+    let now_unix = now_secs();
+    if let Some(next_allowed) = PEER_BACKOFF.get(&src) {
+        if *next_allowed.value() > now_unix {
+            PROM_SYNC_PULL_FAILURES.with_label_values(&["backoff"]).inc();
+            return make_bad("peer temporarily backoffed".to_string());
+        }
+    }
+
+    // remote height (with timeout + retry/backoff + jitter)
+    debug!(src = %src, "sync_pull: fetching remote height");
+    let mut src_h_txt = String::new();
+    let max_attempts = std::env::var("VISION_SYNC_PULL_MAX_ATTEMPTS").ok().and_then(|s| s.parse::<u32>().ok()).unwrap_or(4);
+    let base_backoff_ms = std::env::var("VISION_SYNC_PULL_BACKOFF_BASE_MS").ok().and_then(|s| s.parse::<u64>().ok()).unwrap_or(100);
+    let peer_backoff_secs = std::env::var("VISION_PEER_BACKOFF_SECS").ok().and_then(|s| s.parse::<u64>().ok()).unwrap_or(60);
+    for attempt in 1..=max_attempts {
+        let res = tokio::time::timeout(std::time::Duration::from_secs(3), HTTP.get(format!("{}/height", src)).send()).await;
+        match res {
+            Ok(Ok(r)) => match r.text().await {
+                Ok(s) => { src_h_txt = s; break; }
+                Err(e) => {
+                    debug!(src = %src, err = ?e, attempt = attempt, "sync_pull: failed reading src height body");
+                    if attempt < max_attempts {
+                        PROM_SYNC_PULL_RETRIES.inc();
+                        // exponential backoff with jitter
+                        let backoff = base_backoff_ms.saturating_mul(1 << (attempt - 1));
+                        let jitter = (now_unix % (base_backoff_ms as u64)) as u64;
+                        tokio::time::sleep(std::time::Duration::from_millis(backoff + jitter)).await;
+                        continue;
+                    }
+                    PROM_SYNC_PULL_FAILURES.with_label_values(&["read_error"]).inc();
+                    // set per-peer backoff
+                    PEER_BACKOFF.insert(src.clone(), now_unix.saturating_add(peer_backoff_secs));
+                    return make_bad(format!("src height read: {} | debug: {:?}", e, e));
+                }
+            },
+            Ok(Err(e)) => {
+                let reason = classify_reqwest_error(&e);
+                debug!(src = %src, err = ?e, attempt = attempt, "sync_pull: reqwest error fetching src height");
+                if attempt < max_attempts {
+                    PROM_SYNC_PULL_RETRIES.inc();
+                    let backoff = base_backoff_ms.saturating_mul(1 << (attempt - 1));
+                    let jitter = (now_unix % (base_backoff_ms as u64)) as u64;
+                    tokio::time::sleep(std::time::Duration::from_millis(backoff + jitter)).await;
+                    continue;
+                }
+                PROM_SYNC_PULL_FAILURES.with_label_values(&[reason]).inc();
+                PEER_BACKOFF.insert(src.clone(), now_unix.saturating_add(peer_backoff_secs));
+                return make_bad(format!("src height req: {} | debug: {:?}", e, e));
+            }
+            Err(_) => {
+                debug!(src = %src, attempt = attempt, "sync_pull: src height request timed out");
+                if attempt < max_attempts {
+                    PROM_SYNC_PULL_RETRIES.inc();
+                    let backoff = base_backoff_ms.saturating_mul(1 << (attempt - 1));
+                    let jitter = (now_unix % (base_backoff_ms as u64)) as u64;
+                    tokio::time::sleep(std::time::Duration::from_millis(backoff + jitter)).await;
+                    continue;
+                }
+                PROM_SYNC_PULL_FAILURES.with_label_values(&["timeout"]).inc();
+                PEER_BACKOFF.insert(src.clone(), now_unix.saturating_add(peer_backoff_secs));
+                return make_bad("src height req: timeout".to_string());
+            }
+        }
+    }
     let src_h: u64 = match src_h_txt.trim().parse() {
         Ok(v) => v,
-        Err(_) => return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error":"bad src height"}))),
+        Err(_) => {
+            PROM_SYNC_PULL_FAILURES.with_label_values(&["bad_src_height"]).inc();
+            return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error":"bad src height"})))
+        }
     };
     // local height
     let dst_h = {
@@ -2666,15 +3049,52 @@ async fn sync_pull(Json(req): Json<SyncPullReq>) -> (StatusCode, Json<serde_json
 
     let mut pulled = 0u64;
     for h in start..=end {
-        let resp = HTTP
-            .get(format!("{}/block/{}", src, h))
-            .send().await;
-        let blk: Block = match resp {
-            Ok(r) => match r.json().await {
-                Ok(b) => b,
-                Err(e) => return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": format!("decode block {}: {}", h, e)}))),
-            },
-            Err(e) => return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"error": format!("fetch block {}: {}", h, e)}))),
+        debug!(src = %src, height = h, "sync_pull: fetching block");
+        let mut blk_opt: Option<Block> = None;
+        let max_attempts = 2u32;
+        for attempt in 1..=max_attempts {
+            let resp_res = tokio::time::timeout(std::time::Duration::from_secs(5), HTTP.get(format!("{}/block/{}", src, h)).send()).await;
+            match resp_res {
+                Ok(Ok(r)) => {
+                    match r.json().await {
+                        Ok(b) => { blk_opt = Some(b); break; }
+                        Err(e) => {
+                            debug!(src = %src, height = h, err = ?e, "sync_pull: failed decoding block JSON");
+                            PROM_SYNC_PULL_FAILURES.with_label_values(&["decode_error"]).inc();
+                            return make_bad(format!("decode block {}: {} | debug: {:?}", h, e, e));
+                        }
+                    }
+                }
+                Ok(Err(e)) => {
+                    let reason = classify_reqwest_error(&e);
+                    debug!(src = %src, height = h, err = ?e, attempt = attempt, "sync_pull: reqwest error fetching block");
+                    if attempt < max_attempts {
+                        PROM_SYNC_PULL_RETRIES.inc();
+                        let backoff = base_backoff_ms.saturating_mul(1 << (attempt - 1));
+                        let jitter = (now_unix % (base_backoff_ms as u64)) as u64;
+                        tokio::time::sleep(std::time::Duration::from_millis(backoff + jitter)).await;
+                        continue;
+                    }
+                    PROM_SYNC_PULL_FAILURES.with_label_values(&[reason]).inc();
+                    return make_bad(format!("fetch block {}: {} | debug: {:?}", h, e, e));
+                }
+                Err(_) => {
+                    debug!(src = %src, height = h, attempt = attempt, "sync_pull: fetch block timed out");
+                    if attempt < max_attempts {
+                        PROM_SYNC_PULL_RETRIES.inc();
+                        let backoff = base_backoff_ms.saturating_mul(1 << (attempt - 1));
+                        let jitter = (now_unix % (base_backoff_ms as u64)) as u64;
+                        tokio::time::sleep(std::time::Duration::from_millis(backoff + jitter)).await;
+                        continue;
+                    }
+                    PROM_SYNC_PULL_FAILURES.with_label_values(&["timeout"]).inc();
+                    return make_bad(format!("fetch block {}: timeout", h));
+                }
+            }
+        }
+        let blk: Block = match blk_opt {
+            Some(b) => b,
+            None => { PROM_SYNC_PULL_FAILURES.with_label_values(&["request_error"]).inc(); return make_bad(format!("fetch block {}: unknown error", h)); }
         };
         // apply block via centralized handler (handles side-blocks and reorg)
         let mut g = CHAIN.lock();
@@ -2719,9 +3139,10 @@ fn persist_state(db: &Db, balances: &BTreeMap<String, u128>, nonces: &BTreeMap<S
         }
     }
     // persist GM as part of state
-    match gm {
-        Some(s) => { let _ = db.insert(META_GM.as_bytes(), IVec::from(s.as_bytes())); },
-        None => { let _ = db.remove(META_GM.as_bytes()); },
+    if let Some(s) = gm {
+        let _ = db.insert(META_GM.as_bytes(), IVec::from(s.as_bytes()));
+    } else {
+        let _ = db.remove(META_GM.as_bytes());
     }
     let _ = db.flush();
 }
@@ -2737,7 +3158,7 @@ fn persist_snapshot(db: &Db, height: u64, balances: &BTreeMap<String,u128>, nonc
     let snap = serde_json::json!({ "height": height, "balances": balances, "nonces": nonces, "gm": gm });
     let _ = db.insert(snap_key.as_bytes(), serde_json::to_vec(&snap).unwrap());
     let _ = db.flush();
-    VISION_SNAPSHOTS.fetch_add(1, Ordering::Relaxed);
+    PROM_VISION_SNAPSHOTS.inc();
             info!(snapshot_height = height, "snapshot persisted");
             // prune old snapshots/undos based on retention (env seconds as number of snapshots to keep)
             let retain = std::env::var("VISION_SNAPSHOT_RETENTION").ok().and_then(|s| s.parse::<usize>().ok()).unwrap_or(10);
@@ -3072,7 +3493,7 @@ async fn broadcast_tx_to_peers(peers: Vec<String>, tx: Tx) -> Result<(), ()> {
     for p in peers {
         let url = format!("{}/gossip/tx", p.trim_end_matches('/'));
         let _ = HTTP.post(url).json(&env).send().await;
-        VISION_GOSSIP_OUT.fetch_add(1, Ordering::Relaxed);
+        PROM_VISION_GOSSIP_OUT.inc();
     }
     Ok(())
 }
@@ -3080,8 +3501,8 @@ async fn broadcast_block_to_peers(peers: Vec<String>, block: Block) -> Result<()
     let env = serde_json::json!({ "block": block });
     for p in peers {
         let url = format!("{}/gossip/block", p.trim_end_matches('/'));
-        let _ = HTTP.post(url).json(&env).send().await;
-        VISION_GOSSIP_OUT.fetch_add(1, Ordering::Relaxed);
+    let _ = HTTP.post(url).json(&env).send().await;
+    PROM_VISION_GOSSIP_OUT.inc();
     }
     Ok(())
 }
@@ -3179,7 +3600,7 @@ async fn metrics_prom() -> impl axum::response::IntoResponse {
     let mempool_len: u64 = (g.mempool_critical.len() + g.mempool_bulk.len()) as u64;
 
     let block_weight_limit = g.limits.block_weight_limit;
-    let last_weight: u64 = VISION_BLOCK_WEIGHT_LAST.load(Ordering::Relaxed);
+    let last_weight: u64 = PROM_VISION_BLOCK_WEIGHT_LAST.get() as u64;
     let weight_util = if block_weight_limit > 0 {
         (last_weight as f64) / (block_weight_limit as f64)
     } else { 0.0 };
@@ -3202,7 +3623,7 @@ async fn metrics_prom() -> impl axum::response::IntoResponse {
     let tip_p95: u64 = if tips.is_empty() { 0 } else { tips[(tips.len() * 95 / 100).min(tips.len()-1)] };
     let mempool_crit_len = g.mempool_critical.len() as u64;
     let mempool_bulk_len = g.mempool_bulk.len() as u64;
-    let reorgs = VISION_REORGS.load(Ordering::Relaxed);
+    let reorgs = PROM_VISION_REORGS.get() as u64;
     // compute fee-per-byte percentiles for mempool (simple est_tx_weight)
     let mut fee_per_byte: Vec<f64> = Vec::new();
     for t in g.mempool_critical.iter().chain(g.mempool_bulk.iter()) {
@@ -3230,13 +3651,26 @@ async fn metrics_prom() -> impl axum::response::IntoResponse {
     # HELP vision_reorg_length_total Total number of blocks moved by reorgs\n# TYPE vision_reorg_length_total counter\nvision_reorg_length_total {}\n\
          # HELP vision_fee_tip_p50 Median fee tip\n# TYPE vision_fee_tip_p50 gauge\nvision_fee_tip_p50 {}\n\
          # HELP vision_fee_tip_p95 95th percentile fee tip\n# TYPE vision_fee_tip_p95 gauge\nvision_fee_tip_p95 {}\n",
-        height, peers, mempool_len, mempool_crit_len, mempool_bulk_len, weight_util, diff_bits, target_block_time, retarget_win, last_block_time_secs, mtp, reorgs, VISION_SIDE_BLOCKS.load(Ordering::Relaxed), VISION_SNAPSHOTS.load(Ordering::Relaxed), VISION_REORG_LENGTH_TOTAL.load(Ordering::Relaxed), tip_p50, tip_p95
+        height, peers, mempool_len, mempool_crit_len, mempool_bulk_len, weight_util, diff_bits, target_block_time, retarget_win, last_block_time_secs, mtp, reorgs, PROM_VISION_SIDE_BLOCKS.get() as u64, PROM_VISION_SNAPSHOTS.get() as u64, PROM_VISION_REORG_LENGTH_TOTAL.get() as u64, tip_p50, tip_p95
     );
 
-    // include admin ping counter
-    let admin_pings = ADMIN_PING_TOTAL.load(Ordering::Relaxed);
+    // include admin ping counter (from Prometheus registry)
+    let admin_pings = PROM_ADMIN_PING_TOTAL.get() as u64;
+    let sweeps_count = PROM_VISION_MEMPOOL_SWEEPS.get() as u64;
+    let removed_total = PROM_VISION_MEMPOOL_REMOVED_TOTAL.get() as u64;
+    let removed_last = PROM_VISION_MEMPOOL_REMOVED_LAST.get() as i64 as u64;
+    let last_ms = PROM_VISION_MEMPOOL_SWEEP_LAST_MS.get() as i64 as u64;
     let body = format!("{}\n# HELP vision_admin_ping_total Total admin ping requests\n# TYPE vision_admin_ping_total counter\nvision_admin_ping_total {}\n", body, admin_pings);
-    let body = format!("{}\n# HELP vision_block_weight_limit Configured block weight limit (bytes)\n# TYPE vision_block_weight_limit gauge\nvision_block_weight_limit {}\n# HELP vision_snapshot_every_blocks Snapshot cadence (blocks)\n# TYPE vision_snapshot_every_blocks gauge\nvision_snapshot_every_blocks {}\n# HELP vision_fee_per_byte_p50 Median fee-per-byte in mempool\n# TYPE vision_fee_per_byte_p50 gauge\nvision_fee_per_byte_p50 {}\n# HELP vision_fee_per_byte_p95 95th percentile fee-per-byte in mempool\n# TYPE vision_fee_per_byte_p95 gauge\nvision_fee_per_byte_p95 {}\n", body, block_weight_limit, g.limits.snapshot_every_blocks, fpb_p50, fpb_p95);
+    let body = format!("{}\n# HELP vision_block_weight_limit Configured block weight limit (bytes)\n# TYPE vision_block_weight_limit gauge\nvision_block_weight_limit {}\n# HELP vision_snapshot_every_blocks Snapshot cadence (blocks)\n# TYPE vision_snapshot_every_blocks gauge\nvision_snapshot_every_blocks {}\n# HELP vision_fee_per_byte_p50 Median fee-per-byte in mempool\n# TYPE vision_fee_per_byte_p50 gauge\nvision_fee_per_byte_p50 {}\n# HELP vision_fee_per_byte_p95 95th percentile fee-per-byte in mempool\n# TYPE vision_fee_per_byte_p95 gauge\nvision_fee_per_byte_p95 {}\n# HELP vision_mempool_sweep_runs Total mempool sweeper runs\n# TYPE vision_mempool_sweep_runs counter\nvision_mempool_sweep_runs {}\n# HELP vision_mempool_removed_total Total mempool entries removed by TTL\n# TYPE vision_mempool_removed_total counter\nvision_mempool_removed_total {}\n# HELP vision_mempool_removed_last Number of entries removed in the last sweep\n# TYPE vision_mempool_removed_last gauge\nvision_mempool_removed_last {}\n# HELP vision_mempool_sweep_last_ms Last mempool sweep duration (ms)\n# TYPE vision_mempool_sweep_last_ms gauge\nvision_mempool_sweep_last_ms {}\n",
+        body, block_weight_limit, g.limits.snapshot_every_blocks, fpb_p50, fpb_p95, sweeps_count, removed_total, removed_last, last_ms);
+
+    // Render prometheus registry metrics (including the native histogram) and append to body
+    let encoder = TextEncoder::new();
+    let metric_families = PROM_REGISTRY.gather();
+    let mut buffer = Vec::new();
+    encoder.encode(&metric_families, &mut buffer).ok();
+    let prom_text = String::from_utf8_lossy(&buffer);
+    let body = format!("{}{}", body, prom_text);
     let headers = [(axum::http::header::CONTENT_TYPE, axum::http::HeaderValue::from_static("text/plain; version=0.0.4"))];
     (headers, body)
 }
@@ -3508,6 +3942,7 @@ fn api_error_struct(status: StatusCode, code: &str, message: &str) -> (StatusCod
     let body = serde_json::json!({ "error": { "code": code, "message": message } });
     (status, Json(body))
 }
+    
 
 #[cfg(test)]
 mod extra_api_tests {

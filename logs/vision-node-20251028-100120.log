@@ -1,0 +1,4 @@
+﻿[2m2025-10-28T13:51:50.083060Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Vision node starting up [3madmin_token[0m[2m=[0munset
+[2m2025-10-28T13:51:50.083251Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m mempool TTL sweeping configured [3mmempool_ttl_secs[0m[2m=[0m900 [3mmempool_sweep_secs[0m[2m=[0m60
+[2m2025-10-28T13:51:50.083637Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m serving static files from [3mpublic_dir[0m[2m=[0mC:\vision-node\target\debug\public
+[2m2025-10-28T13:51:50.083976Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Vision node listening [3mlisten[0m[2m=[0m127.0.0.1:7070

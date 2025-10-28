@@ -1,0 +1,38 @@
+﻿[2m2025-10-27T20:34:15.428313Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Vision node starting up [3madmin_token[0m[2m=[0munset
+[2m2025-10-27T20:34:15.428403Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m build metadata [3mversion[0m[2m=[0m0.1.0 [3mgit[0m[2m=[0munknown [3mbuilt[0m[2m=[0munknown
+vision-node.exe : DEBUG: 
+load_latest_snapshot entry, 
+VISION_SNAPSHOT_DIR not set
+At line:4 char:5
++     & $exePath @argsArr 2>&1 
+| Out-File -FilePath $outFile 
+-Encoding  ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : N 
+   otSpecified: (DEBUG: load_l  
+  at...HOT_DIR not set:String   
+ ) [], RemoteException
+    + FullyQualifiedErrorId : N 
+   ativeCommandError
+ 
+DEBUG: 
+VISION_SNAPSHOT_PREFER_DB=true
+[2m2025-10-27T20:34:15.650954Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m hydrated peer meta count [3mhydrated_peer_meta[0m[2m=[0m3
+[2m2025-10-27T20:34:15.959732Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m blockstore: compact succeeded
+[2m2025-10-27T20:34:15.959771Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m compaction/prune executed
+[2m2025-10-27T20:34:16.128275Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Vision node listening [3mlisten[0m[2m=[0m127.0.0.1:7070
+[2m2025-10-27T20:34:16.131624Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m >>> Incoming GET /peers
+[2m2025-10-27T20:34:16.131805Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m <<< Responded 200 OK (193┬╡s)
+[2m2025-10-27T20:34:16.132175Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m >>> Incoming GET /peers/meta
+[2m2025-10-27T20:34:16.132314Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m <<< Responded 200 OK (139.2┬╡s)
+[2m2025-10-27T20:34:16.132509Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m >>> Incoming POST /sync/pull
+[2m2025-10-27T20:34:16.133497Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m >>> Incoming GET /height
+[2m2025-10-27T20:34:16.133565Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m <<< Responded 200 OK (69.5┬╡s)
+[2m2025-10-27T20:34:16.133861Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m <<< Responded 200 OK (1.3513ms)
+[2m2025-10-27T20:34:18.176733Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m >>> Incoming POST /sync/pull
+[2m2025-10-27T20:34:20.204031Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m <<< Responded 502 Bad Gateway (2.0272975s)
+[2m2025-10-27T20:34:20.204544Z[0m [31mERROR[0m [2mtower_http::trace::on_failure[0m[2m:[0m response failed [3mclassification[0m[2m=[0mStatus code: 502 Bad Gateway [3mlatency[0m[2m=[0m2027 ms
+[2m2025-10-27T20:34:20.435704Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m >>> Incoming GET /status
+[2m2025-10-27T20:34:20.437137Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m >>> Incoming GET /height
+[2m2025-10-27T20:34:20.437205Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m <<< Responded 200 OK (69.6┬╡s)
+[2m2025-10-27T20:34:22.244438Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m >>> Incoming POST /sync/pull

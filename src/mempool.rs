@@ -92,6 +92,8 @@ pub fn bulk_eviction_index(g: &Chain, incoming: &Tx) -> Option<usize> {
 }
 
 pub fn prune_mempool(g: &mut Chain) {
+    // measure duration for any caller
+    let start = std::time::Instant::now();
     let ttl = std::env::var("VISION_MEMPOOL_TTL_SECS").ok().and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
     if ttl == 0 { return; }
     let now = now_ts();
@@ -110,7 +112,26 @@ pub fn prune_mempool(g: &mut Chain) {
         }
         true
     });
-    for h in removed { g.seen_txs.remove(&h); g.mempool_ts.remove(&h); }
+    for h in &removed { g.seen_txs.remove(h); g.mempool_ts.remove(h); }
+    // update global sweep metrics (use Prometheus metrics; remove legacy atomics)
+    let removed_count = removed.len() as u64;
+    crate::PROM_VISION_MEMPOOL_SWEEPS.inc();
+    crate::PROM_VISION_MEMPOOL_REMOVED_TOTAL.inc_by(removed_count);
+    crate::PROM_VISION_MEMPOOL_REMOVED_LAST.set(removed_count as i64);
+    // finish timing & update duration metric (Prometheus gauge + histogram)
+    let dur_ms = start.elapsed().as_millis() as u64;
+    crate::PROM_VISION_MEMPOOL_SWEEP_LAST_MS.set(dur_ms as i64);
+    // determine mempool size at end of sweep
+    let mempool_len = (g.mempool_critical.len() + g.mempool_bulk.len()) as u64;
+    // record history entry (timestamp, removed_count, duration_ms, mempool_size)
+    {
+        let mut hist = crate::VISION_MEMPOOL_SWEEP_HISTORY.lock();
+        hist.push_back((now, removed_count, dur_ms, mempool_len));
+        if hist.len() > 10 { hist.pop_front(); }
+    }
+    // observe prometheus histogram (seconds)
+    let dur_secs = (dur_ms as f64) / 1000.0;
+    crate::VISION_MEMPOOL_SWEEP_DURATION_HISTOGRAM.observe(dur_secs);
 }
 
 pub fn spawn_mempool_sweeper() {
