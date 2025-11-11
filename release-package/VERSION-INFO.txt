@@ -1,0 +1,49 @@
+Vision Node v0.1.0-testnet1
+Integrated Release - November 10, 2025
+
+BUILD INFORMATION:
+- Node Version: v0.1.0-testnet1
+- Build Type: Release (optimized)
+- Features: Full build (all features enabled)
+
+INCLUDED COMPONENTS:
+1. Vision Node (Rust) - Core blockchain node
+2. Vision Wallet (React) - Web-based wallet UI at /app
+3. Miner Panel (HTML) - Mining control panel at /panel.html
+4. Dashboard (HTML) - Blockchain explorer at /dashboard.html
+
+PACKAGE CONTENTS:
+- vision-node.exe (34MB) - Main executable
+- public/ - Static web assets (panel, dashboard)
+- wallet/dist/ - Integrated wallet build
+- README.txt - User documentation
+- START-VISION-NODE.bat - Quick start script
+
+WHAT'S NEW IN THIS RELEASE:
+✓ Unified single-executable deployment
+✓ Wallet integrated into node (no separate installation)
+✓ Runtime configuration for wallet
+✓ All API endpoints properly routed with /api prefix
+✓ HashRouter for SPA compatibility
+✓ Production-optimized builds
+
+DEFAULT PORTS:
+- HTTP API: 7070
+- P2P Network: 7070
+
+STARTUP:
+Run START-VISION-NODE.bat or vision-node.exe directly
+
+ENDPOINTS:
+- http://127.0.0.1:7070/app - Wallet
+- http://127.0.0.1:7070/panel.html - Miner Panel
+- http://127.0.0.1:7070/dashboard.html - Dashboard
+- http://127.0.0.1:7070/api/* - JSON API
+
+DATA:
+Blockchain stored in: ./vision_data_7070/
+
+NOTES:
+- This is a testnet release
+- Wallet and node are now a single package
+- No separate wallet download needed
