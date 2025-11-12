@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  rust-ci:
+    name: Rust (Ubuntu)
+    runs-on: ubuntu-latest
+    env:
+      STRIPE_TEST_NO_VERIFY: "1"
+      ADMIN_TOKEN: "devtoken123"
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --all-targets
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Ensure vision-market binary exists
+        # Build the vision-market binary explicitly so integration tests
+        # can spawn it directly (tests prefer spawning target/debug/vision-market).
+        run: cargo build -p vision-market --bin vision-market --features dev --quiet
+
+      - name: Ensure simple_server binary exists
+        # Some integration tests spawn the simple_server binary directly; build it so
+        # the tests will find target/debug/simple_server (or simple_server.exe on Windows)
+        run: cargo build --bin simple_server --quiet
+
+      - name: Tests
+        # Enable the crate-local `dev` feature so integration tests can
+        # call helpers gated with `#[cfg(any(test, feature = "dev"))]`.
+        # Run tests for the package under test explicitly so the feature
+        # flag applies to that package when integration tests build it.
+        # Avoid enabling permissive bech32 behavior (it's a separate feature).
+        run: cargo test -p vision-market --features dev --quiet
+
+  rust-ci-windows:
+    name: Rust (Windows)
+    runs-on: windows-latest
+    env:
+      STRIPE_TEST_NO_VERIFY: "1"
+      ADMIN_TOKEN: "devtoken123"
+      RUST_TEST_THREADS: "1"
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        shell: pwsh
+        run: cargo build --all-targets
+
+      - name: Clippy
+        shell: pwsh
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Ensure vision-market binary exists (Windows)
+        shell: pwsh
+        run: cargo build -p vision-market --bin vision-market --features dev --quiet
+
+      - name: Ensure simple_server binary exists (Windows)
+        shell: pwsh
+        run: cargo build --bin simple_server --quiet
+
+      - name: Tests (single-threaded)
+        shell: pwsh
+        # Run tests for the package under test with the `dev` feature so
+        # integration tests can access helpers behind the `dev` gate.
+        run: cargo test -p vision-market --features dev --quiet -- --test-threads=1

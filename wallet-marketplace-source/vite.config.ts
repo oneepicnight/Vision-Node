@@ -48,7 +48,7 @@ export default defineConfig(({ command, mode }) => {
       react(),
       patchAxiosOutput(),
     ],
-    base: mode === 'production' ? '/app/' : '/',  // Use /app/ for production build
+    base: '/app/',  // Wallet is served at /app by the node
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),

@@ -1,0 +1,12 @@
+[confirmations]
+btc = 2
+bch = 2
+doge = 40
+
+[market]
+listing_expiry_blocks = 120
+min_land_lot = 100
+
+[stripe]
+secret = "sk_test_xxx"
+webhook_secret = "whsec_xxx"

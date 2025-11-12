@@ -1,0 +1,23 @@
+name: Bech32 decode check
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master, '**' ]
+
+jobs:
+  bech32-probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+      - name: Build and run bech32_probe
+        run: |
+          cargo build --manifest-path bech32_probe/Cargo.toml --verbose
+          echo '--- running probe ---'
+          cargo run --manifest-path bech32_probe/Cargo.toml --quiet || true

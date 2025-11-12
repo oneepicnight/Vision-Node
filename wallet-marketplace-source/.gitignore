@@ -1,0 +1,10 @@
+﻿/target/
+/node_modules/
+/dist/
+/.parcel-cache/
+/.vite/
+/wallet_data/
+/.DS_Store
+/.env
+/.env.*
+/coverage/

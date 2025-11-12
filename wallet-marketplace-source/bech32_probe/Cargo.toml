@@ -1,0 +1,10 @@
+[package]
+name = "bech32_probe"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bech32 = "0.11"
+bitcoin = "0.29"
+
+[workspace]

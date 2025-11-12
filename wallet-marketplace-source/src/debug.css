@@ -1,0 +1,23 @@
+/* Debug CSS - Simple version */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #0f172a;
+  color: white;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.debug-test {
+  background: red;
+  color: white;
+  padding: 20px;
+  text-align: center;
+}

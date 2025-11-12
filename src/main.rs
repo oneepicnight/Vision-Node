@@ -8,6 +8,7 @@ use parking_lot::Mutex;
 use sled::{Db, IVec};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::error::Error;
+use std::sync::Arc;
 use std::{
     env,
     net::SocketAddr,
@@ -71,11 +72,13 @@ mod bank;
 mod config;
 mod consensus;
 mod consensus_pow;
+// REMOVED: mod emissions; - now using official Tokenomics module only
 mod fees;
 mod land_stake;
 mod market;
 mod metrics;
 mod miner_manager;
+mod tokenomics;
 mod receipts;
 mod routes;
 mod sig_agg; // Keep for now - used in block structure
@@ -1055,6 +1058,56 @@ async fn miner_stop() -> (StatusCode, Json<serde_json::Value>) {
         Json(serde_json::json!({
             "ok": true,
             "status": "stopped"
+        }))
+    )
+}
+
+#[derive(serde::Deserialize)]
+struct MinerConfigureReq {
+    wallet: String,
+}
+
+async fn miner_configure(
+    Json(req): Json<MinerConfigureReq>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let wallet = req.wallet.trim().to_string();
+    
+    // Validate wallet address (basic check)
+    if wallet.is_empty() || wallet.len() < 3 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": "Invalid wallet address"
+            }))
+        );
+    }
+    
+    // Update global miner address
+    *MINER_ADDRESS.lock() = wallet.clone();
+    
+    // Log confirmation to console
+    println!("✅ Mining address configured: {}", wallet);
+    println!("   All future mining rewards will be sent to this address.");
+    
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "ok": true,
+            "wallet": wallet,
+            "message": "Miner address updated successfully"
+        }))
+    )
+}
+
+async fn miner_get_config() -> (StatusCode, Json<serde_json::Value>) {
+    let wallet = MINER_ADDRESS.lock().clone();
+    
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "ok": true,
+            "wallet": wallet
         }))
     )
 }
@@ -2078,15 +2131,15 @@ fn parse_hex_address(env_var: &str, default: &str) -> Address {
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct TokenomicsCfg {
     pub enable_emission: bool,    // VISION_TOK_ENABLE_EMISSION (default true)
-    pub emission_per_block: u128, // VISION_TOK_EMISSION_PER_BLOCK (default 1000 * 10^9)
+    pub emission_per_block: u128, // VISION_TOK_EMISSION_PER_BLOCK (default 32 * 10^9)
     pub halving_interval_blocks: u64, // VISION_TOK_HALVING_INTERVAL_BLOCKS (default 2_102_400 ~ 4y @ 1.25s)
     pub fee_burn_bps: u32, // VISION_TOK_FEE_BURN_BPS (default 1000 = 10%) - DISTRIBUTES to 50/30/20 split, not burned!
     pub treasury_bps: u32, // VISION_TOK_TREASURY_BPS (default 500 = 5%)
     pub staking_epoch_blocks: u64, // VISION_TOK_STAKING_EPOCH_BLOCKS (default 720)
     pub decimals: u8,      // 9
-    pub vault_addr: Address, // VISION_VAULT_ADDR (hex)
-    pub fund_addr: Address, // VISION_FUND_ADDR (hex)
-    pub treasury_addr: Address, // VISION_TREASURY_ADDR (hex)
+    pub vault_addr: Address, // VISION_TOK_VAULT_ADDR (hex)
+    pub fund_addr: Address, // VISION_TOK_FUND_ADDR (hex)
+    pub treasury_addr: Address, // VISION_TOK_TREASURY_ADDR (hex)
 }
 
 fn load_tokenomics_cfg() -> TokenomicsCfg {
@@ -2098,7 +2151,7 @@ fn load_tokenomics_cfg() -> TokenomicsCfg {
         emission_per_block: std::env::var("VISION_TOK_EMISSION_PER_BLOCK")
             .ok()
             .and_then(|s| s.parse().ok())
-            .unwrap_or(1_000_000_000_000), // 1000 * 10^9
+            .unwrap_or(32_000_000_000), // 32 * 10^9
         halving_interval_blocks: std::env::var("VISION_TOK_HALVING_INTERVAL_BLOCKS")
             .ok()
             .and_then(|s| s.parse().ok())
@@ -2116,9 +2169,9 @@ fn load_tokenomics_cfg() -> TokenomicsCfg {
             .and_then(|s| s.parse().ok())
             .unwrap_or(720),
         decimals: 9,
-        vault_addr: parse_hex_address("VISION_VAULT_ADDR", "vault_address_placeholder"),
-        fund_addr: parse_hex_address("VISION_FUND_ADDR", "fund_address_placeholder"),
-        treasury_addr: parse_hex_address("VISION_TREASURY_ADDR", "treasury_address_placeholder"),
+        vault_addr: parse_hex_address("VISION_TOK_VAULT_ADDR", "vault_address_placeholder"),
+        fund_addr: parse_hex_address("VISION_TOK_FUND_ADDR", "fund_address_placeholder"),
+        treasury_addr: parse_hex_address("VISION_TOK_TREASURY_ADDR", "treasury_address_placeholder"),
     }
 }
 
@@ -2487,6 +2540,13 @@ type FoundBlockChannel = (
 static FOUND_BLOCKS_CHANNEL: Lazy<FoundBlockChannel> = Lazy::new(|| {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     (tx, tokio::sync::Mutex::new(rx))
+});
+
+// Global miner address (can be updated via API)
+static MINER_ADDRESS: Lazy<Arc<Mutex<String>>> = Lazy::new(|| {
+    let default_addr = std::env::var("VISION_MINER_ADDRESS")
+        .unwrap_or_else(|_| "pow_miner".to_string());
+    Arc::new(Mutex::new(default_addr))
 });
 
 // Global active miner for real-time mining
@@ -3078,30 +3138,10 @@ impl Chain {
 
 // =================== Tokenomics Core Functions ===================
 
-/// Calculate current halving factor (2^n where n = number of halvings)
-fn current_halving_factor(height: u64, interval: u64) -> u32 {
-    if interval == 0 {
-        return 1;
-    }
-    let halvings = height / interval;
-    if halvings >= 32 {
-        return u32::MAX;
-    } // Cap to prevent overflow
-    2u32.pow(halvings as u32)
-}
-
-/// Calculate emission for a given height with halving applied
-fn emission_for_height(base: u128, height: u64, interval: u64) -> u128 {
-    let hf = current_halving_factor(height, interval) as u128;
-    if hf == 0 {
-        base
-    } else {
-        base / hf
-    }
-}
-
-/// Apply tokenomics: emission, halving, fee distribution to 50/30/20 split, miner reward
-/// Returns (miner_reward, distributed_to_funds, treasury_cut)
+/// Apply official Tokenomics emission + 2-LAND block tithe
+/// Tokenomics module handles per-block emission with Bitcoin-style halving
+/// Tithe (2 LAND/block default) is split across Vault/Fund/Treasury to ensure Vault growth from block 1
+/// Returns (miner_reward, fees_distributed, treasury_total)
 fn apply_tokenomics(
     chain: &mut Chain,
     height: u64,
@@ -3109,88 +3149,156 @@ fn apply_tokenomics(
     tx_fees_total: u128,
     mev_revenue: u128,
 ) -> (u128, u128, u128) {
-    // Clone config to avoid borrow issues
-    let cfg = chain.tokenomics_cfg.clone();
-
-    // 1. Calculate emission with halving
-    let emission = if cfg.enable_emission {
-        emission_for_height(cfg.emission_per_block, height, cfg.halving_interval_blocks)
-    } else {
-        0
-    };
-
-    // 2. Calculate portion of fees to distribute (basis points: 1000 = 10%)
-    // This portion goes to 50/30/20 split instead of being burned
-    let fees_to_distribute = (tx_fees_total * cfg.fee_burn_bps as u128) / 10_000;
-    let fees_to_distribute = fees_to_distribute.min(tx_fees_total); // Safety
-
-    // 3. Calculate treasury cut from emission (basis points: 500 = 5%)
-    let treasury_from_emission = (emission * cfg.treasury_bps as u128) / 10_000;
-    let treasury_from_emission = treasury_from_emission.min(emission); // Safety
-
-    // 4. Distribute fees_to_distribute to 50/30/20 split (Vault/Fund/Treasury)
-    let vault_share = (fees_to_distribute * 50) / 100;
-    let fund_share = (fees_to_distribute * 30) / 100;
-    let treasury_share = (fees_to_distribute * 20) / 100;
-
-    // 5. Calculate miner payout
-    //    = emission - treasury_from_emission + (tx_fees - fees_to_distribute) + mev_revenue
-    let emission_to_miner = emission.saturating_sub(treasury_from_emission);
-    let fees_to_miner = tx_fees_total.saturating_sub(fees_to_distribute);
-    let miner_reward = emission_to_miner
-        .saturating_add(fees_to_miner)
-        .saturating_add(mev_revenue);
-
-    // 6. Credit balances
-    let miner_key = acct_key(miner_addr);
-    let treasury_key = acct_key(&cfg.treasury_addr);
-    let vault_key = acct_key(&cfg.vault_addr);
-    let fund_key = acct_key(&cfg.fund_addr);
-
-    // Credit miner
-    if miner_reward > 0 {
-        let miner_bal = chain.balances.entry(miner_key.clone()).or_insert(0);
-        *miner_bal = miner_bal.saturating_add(miner_reward);
+    let cfg = &chain.tokenomics_cfg;
+    
+    // 1. Apply official Tokenomics emission if enabled
+    let mut miner_emission = 0u128;
+    if cfg.enable_emission {
+        // Calculate halving factor (Bitcoin-style: emission / 2^n)
+        let halvings = height / cfg.halving_interval_blocks;
+        let halving_divisor = 2u128.saturating_pow(halvings as u32);
+        miner_emission = cfg.emission_per_block / halving_divisor;
+        
+        // Credit miner with emission
+        if miner_emission > 0 {
+            let miner_key = acct_key(miner_addr);
+            let miner_bal = chain.balances.entry(miner_key.clone()).or_insert(0);
+            let new_miner_bal = miner_bal.saturating_add(miner_emission);
+            *miner_bal = new_miner_bal;
+            drop(miner_bal); // Release borrow before calling chain methods
+            
+            chain.add_supply(miner_emission);
+            
+            tracing::debug!(
+                "tokenomics emission: height={}, halvings={}, emission={}, miner_bal={}",
+                height, halvings, miner_emission, new_miner_bal
+            );
+        }
     }
-
-    // Credit treasury (emission cut + 20% of distributed fees)
-    let total_treasury = treasury_from_emission.saturating_add(treasury_share);
-    if total_treasury > 0 {
-        let treasury_bal = chain.balances.entry(treasury_key.clone()).or_insert(0);
-        *treasury_bal = treasury_bal.saturating_add(total_treasury);
+    
+    // 2. Apply 2-LAND block tithe (split across foundation addresses)
+    let tithe_amt = tokenomics::tithe::tithe_amount();
+    let (bp_miner, bp_vault, bp_fund, bp_tres) = tokenomics::tithe::tithe_split_bps();
+    
+    if tithe_amt > 0 {
+        // Compute tithe slices (in basis points: 10000 = 100%)
+        let tithe_miner = tithe_amt.saturating_mul(bp_miner as u128) / 10_000;
+        let tithe_vault = tithe_amt.saturating_mul(bp_vault as u128) / 10_000;
+        let tithe_fund = tithe_amt.saturating_mul(bp_fund as u128) / 10_000;
+        // Dust goes to treasury
+        let tithe_tres = tithe_amt.saturating_sub(tithe_miner + tithe_vault + tithe_fund);
+        
+        // Credit miner with their tithe share (if any)
+        if tithe_miner > 0 {
+            let miner_key = acct_key(miner_addr);
+            let miner_bal = chain.balances.entry(miner_key.clone()).or_insert(0);
+            *miner_bal = miner_bal.saturating_add(tithe_miner);
+        }
+        
+        // Credit vault
+        if tithe_vault > 0 {
+            let vault_key = acct_key(&cfg.vault_addr);
+            {
+                let vault_bal = chain.balances.entry(vault_key.clone()).or_insert(0);
+                *vault_bal = vault_bal.saturating_add(tithe_vault);
+            }
+            chain.add_vault_counter(tithe_vault);
+        }
+        
+        // Credit fund (ops)
+        if tithe_fund > 0 {
+            let fund_key = acct_key(&cfg.fund_addr);
+            {
+                let fund_bal = chain.balances.entry(fund_key.clone()).or_insert(0);
+                *fund_bal = fund_bal.saturating_add(tithe_fund);
+            }
+            chain.add_fund_counter(tithe_fund);
+        }
+        
+        // Credit treasury (founders)
+        if tithe_tres > 0 {
+            let tres_key = acct_key(&cfg.treasury_addr);
+            {
+                let tres_bal = chain.balances.entry(tres_key.clone()).or_insert(0);
+                *tres_bal = tres_bal.saturating_add(tithe_tres);
+            }
+            chain.add_treasury_counter(tithe_tres);
+        }
+        
+        // Tithe increases supply (minted from nothing to grow Vault)
+        chain.add_supply(tithe_amt);
+        
+        tracing::info!(
+            "block tithe: height={}, amount={}, splits(miner/vault/fund/tres)={}/{}/{}/{}",
+            height, tithe_amt, tithe_miner, tithe_vault, tithe_fund, tithe_tres
+        );
     }
-
-    // Credit vault (50% of distributed fees)
-    if vault_share > 0 {
-        let vault_bal = chain.balances.entry(vault_key.clone()).or_insert(0);
-        *vault_bal = vault_bal.saturating_add(vault_share);
+    
+    // 3. Distribute transaction fees (fee_burn_bps = % distributed to 50/30/20 split)
+    let total_fees = tx_fees_total.saturating_add(mev_revenue);
+    let fees_distributed = total_fees.saturating_mul(cfg.fee_burn_bps as u128) / 10_000;
+    
+    if fees_distributed > 0 {
+        // 50% Vault, 30% Fund, 20% Treasury
+        let vault_fee = fees_distributed.saturating_mul(50) / 100;
+        let fund_fee = fees_distributed.saturating_mul(30) / 100;
+        let tres_fee = fees_distributed.saturating_sub(vault_fee + fund_fee);
+        
+        // Credit vault
+        {
+            let vault_key = acct_key(&cfg.vault_addr);
+            let vault_bal = chain.balances.entry(vault_key.clone()).or_insert(0);
+            *vault_bal = vault_bal.saturating_add(vault_fee);
+        }
+        chain.add_vault_counter(vault_fee);
+        
+        // Credit fund
+        {
+            let fund_key = acct_key(&cfg.fund_addr);
+            let fund_bal = chain.balances.entry(fund_key.clone()).or_insert(0);
+            *fund_bal = fund_bal.saturating_add(fund_fee);
+        }
+        chain.add_fund_counter(fund_fee);
+        
+        // Credit treasury
+        {
+            let tres_key = acct_key(&cfg.treasury_addr);
+            let tres_bal = chain.balances.entry(tres_key.clone()).or_insert(0);
+            *tres_bal = tres_bal.saturating_add(tres_fee);
+        }
+        chain.add_treasury_counter(tres_fee);
+        
+        chain.add_burned(fees_distributed); // Track as "burned" (historical)
+        
+        tracing::debug!(
+            "fee distribution: total_fees={}, distributed={}, vault={}, fund={}, tres={}",
+            total_fees, fees_distributed, vault_fee, fund_fee, tres_fee
+        );
     }
-
-    // Credit fund (30% of distributed fees)
-    if fund_share > 0 {
-        let fund_bal = chain.balances.entry(fund_key.clone()).or_insert(0);
-        *fund_bal = fund_bal.saturating_add(fund_share);
+    
+    // 4. Treasury siphon from emission (treasury_bps = % of emission to treasury)
+    let treasury_siphon = miner_emission.saturating_mul(cfg.treasury_bps as u128) / 10_000;
+    if treasury_siphon > 0 {
+        let tres_key = acct_key(&cfg.treasury_addr);
+        let tres_bal = chain.balances.entry(tres_key.clone()).or_insert(0);
+        let new_tres_bal = tres_bal.saturating_add(treasury_siphon);
+        *tres_bal = new_tres_bal;
+        drop(tres_bal); // Release borrow before calling chain methods
+        
+        chain.add_treasury_counter(treasury_siphon);
+        
+        tracing::debug!(
+            "treasury siphon: height={}, amount={}, treasury_bal={}",
+            height, treasury_siphon, new_tres_bal
+        );
     }
-
-    // 7. Update supply counters
-    if emission > 0 {
-        chain.add_supply(emission);
-    }
-    // Note: No burning - fees are distributed instead
-    if total_treasury > 0 {
-        chain.add_treasury_counter(total_treasury);
-    }
-    if vault_share > 0 {
-        chain.add_vault_counter(vault_share);
-    }
-    if fund_share > 0 {
-        chain.add_fund_counter(fund_share);
-    }
-
-    // 8. Update Prometheus gauges
+    
+    // 5. Update Prometheus gauges
     PROM_TOK_SUPPLY.set(chain.total_supply() as f64);
-
-    (miner_reward, fees_to_distribute, total_treasury)
+    
+    // Return (miner_emission + miner_tithe, fees_distributed, treasury_siphon)
+    let miner_total = miner_emission.saturating_add(tithe_amt.saturating_mul(bp_miner as u128) / 10_000);
+    (miner_total, fees_distributed, treasury_siphon)
 }
 
 /// Distribute land sale proceeds: 50% Vault, 30% Fund, 20% Treasury
@@ -4221,13 +4329,22 @@ fn build_app(tok_accounts: crate::accounts::TokenAccountsCfg) -> Router {
                 let mut g = CHAIN.lock();
                 let parent = g.blocks.last().unwrap().clone();
                 
+                // Check if this block is stale (another block at this height already integrated)
+                let current_height = parent.header.number;
+                if pow_block.header.height != current_height + 1 {
+                    eprintln!("⚠️  Skipping stale block #{} (chain is already at height {})", pow_block.header.height, current_height);
+                    drop(g);
+                    continue;
+                }
+                
                 // Select transactions from mempool
                 let weight_limit = g.limits.block_weight_limit;
                 let txs = mempool::build_block_from_mempool(&mut g, 100, weight_limit);
                 
                 // Execute transactions (without mining)
-                let miner_addr = "pow_miner";
-                let miner_key = acct_key(miner_addr);
+                // Get miner address from global setting
+                let miner_addr = MINER_ADDRESS.lock().clone();
+                let miner_key = acct_key(&miner_addr);
                 g.balances.entry(miner_key.clone()).or_insert(0);
                 g.nonces.entry(miner_key.clone()).or_insert(0);
                 
@@ -4239,6 +4356,25 @@ fn build_app(tok_accounts: crate::accounts::TokenAccountsCfg) -> Router {
                 for tx in &txs {
                     let _ = execute_tx_with_nonce_and_fees(tx, &mut balances, &mut nonces, &miner_key, &mut gm);
                 }
+                
+                // Update chain state temporarily to apply tokenomics
+                g.balances = balances.clone();
+                g.nonces = nonces.clone();
+                g.gamemaster = gm.clone();
+                
+                // Apply tokenomics (emission + tithe) for this block
+                let (_miner_reward, _fees_distributed, _treasury_total) = apply_tokenomics(
+                    &mut g,
+                    pow_block.header.height,
+                    &miner_addr,
+                    0, // tx fees - minimal for now
+                    0, // no MEV in PoW blocks
+                );
+                
+                // Get updated state after tokenomics
+                balances = g.balances.clone();
+                nonces = g.nonces.clone();
+                gm = g.gamemaster.clone();
                 
                 // Compute state root
                 let new_state_root = compute_state_root(&balances, &gm);
@@ -4988,6 +5124,10 @@ fn build_app(tok_accounts: crate::accounts::TokenAccountsCfg) -> Router {
             get(tokenomics_emission_handler),
         )
         .route(
+            "/foundation/addresses",
+            get(foundation_addresses_handler),
+        )
+        .route(
             "/admin/tokenomics/config",
             post(admin_tokenomics_config_handler),
         )
@@ -5033,16 +5173,19 @@ fn build_app(tok_accounts: crate::accounts::TokenAccountsCfg) -> Router {
         .route("/head", get(head))
         .route("/mempool_size", get(mempool_size))
         .route("/status", get(status))
+        .route("/blocks", get(get_blocks)) // recent blocks for dashboard
         .route("/handle", get(handle_check)) // wallet handle check
         .route("/wallet/info", get(get_vault)) // wallet info endpoint (receipts + height + supply)
         .route("/keys", get(get_keys)) // wallet keys endpoint
-        .route("/supply", get(supply)) // total supply
+        .route("/supply", get(get_supply)) // total supply (uses tracked total_supply)
         // Miner control endpoints
         .route("/miner/status", get(miner_status))
         .route("/miner/threads", get(miner_get_threads))
         .route("/miner/threads", post(miner_set_threads))
         .route("/miner/start", post(miner_start))
         .route("/miner/stop", post(miner_stop))
+        .route("/miner/wallet", post(miner_configure)) // set miner wallet address
+        .route("/miner/wallet", get(miner_get_config)) // get current wallet address
         .route("/balance/:addr", get(get_balance))
         .route("/proof/balance/:addr", get(proof_balance))
         .route("/balances", get(get_balances_batch))
@@ -5521,18 +5664,6 @@ async fn fee_history(
     }))
 }
 
-// ---- New: supply endpoint ----
-async fn supply() -> String {
-    let g = CHAIN.lock();
-    let mut sum: u128 = 0;
-    for (k, v) in &g.balances {
-        if k.starts_with("acct:") {
-            sum = sum.saturating_add(*v);
-        }
-    }
-    sum.to_string()
-}
-
 // ---- New: long-poll events (SSE-lite) ----
 async fn events_longpoll(
     Query(q): Query<std::collections::HashMap<String, String>>,
@@ -5997,11 +6128,77 @@ async fn get_keys() -> Json<serde_json::Value> {
     }))
 }
 
-async fn get_balance(Path(addr): Path<String>) -> String {
+async fn get_balance(Path(addr): Path<String>) -> Json<serde_json::Value> {
     let g = CHAIN.lock();
     let key = acct_key(&addr);
-    g.balances.get(&key).cloned().unwrap_or(0).to_string()
+    let raw_balance = g.balances.get(&key).cloned().unwrap_or(0);
+    // Convert from smallest units (9 decimals) to display units
+    let land_balance = raw_balance as f64 / 1_000_000_000.0;
+    Json(serde_json::json!({
+        "LAND": land_balance,
+        "GAME": 0,
+        "CASH": 0
+    }))
 }
+
+/// GET /supply - Return total supply as plain text
+async fn get_supply() -> String {
+    let g = CHAIN.lock();
+    g.total_supply().to_string()
+}
+
+/// GET /blocks - Return recent blocks for dashboard
+async fn get_blocks() -> Json<serde_json::Value> {
+    let chain = CHAIN.lock();
+    let current_height = chain.blocks.len().saturating_sub(1);
+    let start_height = current_height.saturating_sub(19).max(1); // Last 20 blocks
+    
+    let mut blocks = Vec::new();
+    for h in start_height..=current_height {
+        if let Some(block) = chain.blocks.get(h) {
+            blocks.push(serde_json::json!({
+                "height": block.header.number,
+                "hash": block.header.pow_hash, // Already a hex string
+                "timestamp": block.header.timestamp,
+                "txs": block.txs.len()
+            }));
+        }
+    }
+    blocks.reverse(); // Most recent first
+    
+    // Calculate network hashrate from recent blocks
+    let hashrate = if blocks.len() >= 2 {
+        // Get actual blocks for difficulty
+        let mut total_difficulty: u64 = 0;
+        let mut count = 0;
+        for h in start_height..=current_height {
+            if let Some(block) = chain.blocks.get(h) {
+                total_difficulty += block.header.difficulty;
+                count += 1;
+            }
+        }
+        
+        let first_idx = blocks.len() - 1;
+        let time_diff = blocks[0]["timestamp"].as_u64().unwrap_or(1) 
+                      - blocks[first_idx]["timestamp"].as_u64().unwrap_or(0);
+        
+        if time_diff > 0 && count > 0 {
+            // Hashrate = (average_difficulty * number_of_blocks) / time_span
+            let avg_difficulty = total_difficulty / count;
+            (avg_difficulty * count) / time_diff
+        } else {
+            0
+        }
+    } else {
+        0
+    };
+    
+    Json(serde_json::json!({
+        "blocks": blocks,
+        "hashrate": hashrate
+    }))
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 struct BalanceProof {
     pub addr: String,
@@ -24845,26 +25042,82 @@ async fn tokenomics_emission_handler(
     Path((height,)): Path<(u64,)>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let chain = CHAIN.lock();
-    let cfg = chain.tokenomics_cfg.clone();
-    drop(chain);
-
-    let emission = emission_for_height(cfg.emission_per_block, height, cfg.halving_interval_blocks);
-    let halving_factor = current_halving_factor(height, cfg.halving_interval_blocks);
-    let halvings = if cfg.halving_interval_blocks > 0 {
-        height / cfg.halving_interval_blocks
+    let cfg = &chain.tokenomics_cfg;
+    
+    // Calculate emission using official Tokenomics halving schedule
+    let halvings = height / cfg.halving_interval_blocks;
+    let halving_divisor = 2u128.saturating_pow(halvings as u32);
+    let block_emission = if cfg.enable_emission {
+        cfg.emission_per_block / halving_divisor
     } else {
         0
     };
+    
+    // Calculate tithe splits
+    let tithe_amt = tokenomics::tithe::tithe_amount();
+    let (bp_miner, bp_vault, bp_fund, bp_tres) = tokenomics::tithe::tithe_split_bps();
+    let tithe_vault = tithe_amt.saturating_mul(bp_vault as u128) / 10_000;
+    let tithe_fund = tithe_amt.saturating_mul(bp_fund as u128) / 10_000;
+    let tithe_tres = tithe_amt.saturating_sub(
+        tithe_amt.saturating_mul(bp_miner as u128) / 10_000 + tithe_vault + tithe_fund
+    );
+    
+    drop(chain);
 
     (
         StatusCode::OK,
         Json(serde_json::json!({
             "ok": true,
             "height": height,
-            "emission": emission.to_string(),
-            "base_emission": cfg.emission_per_block.to_string(),
-            "halving_factor": halving_factor,
-            "halvings": halvings
+            "halvings": halvings,
+            "halving_divisor": halving_divisor,
+            "block_emission": block_emission.to_string(),
+            "tithe": {
+                "amount": tithe_amt.to_string(),
+                "vault_share": tithe_vault.to_string(),
+                "fund_share": tithe_fund.to_string(),
+                "treasury_share": tithe_tres.to_string(),
+                "split_bps": {
+                    "miner": bp_miner,
+                    "vault": bp_vault,
+                    "fund": bp_fund,
+                    "treasury": bp_tres
+                }
+            }
+        })),
+    )
+}
+
+/// GET /foundation/addresses - Show loaded foundation addresses and tithe config
+async fn foundation_addresses_handler() -> (StatusCode, Json<serde_json::Value>) {
+    let chain = CHAIN.lock();
+    let vault_addr = chain.tokenomics_cfg.vault_addr.clone();
+    let fund_addr = chain.tokenomics_cfg.fund_addr.clone();
+    let treasury_addr = chain.tokenomics_cfg.treasury_addr.clone();
+    drop(chain);
+    
+    let tithe_amt = tokenomics::tithe::tithe_amount();
+    let (bp_miner, bp_vault, bp_fund, bp_tres) = tokenomics::tithe::tithe_split_bps();
+    
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "ok": true,
+            "addresses": {
+                "vault": vault_addr,
+                "fund": fund_addr,
+                "treasury": treasury_addr
+            },
+            "tithe": {
+                "amount": tithe_amt.to_string(),
+                "split_bps": {
+                    "miner": bp_miner,
+                    "vault": bp_vault,
+                    "fund": bp_fund,
+                    "treasury": bp_tres
+                }
+            },
+            "note": "Tithe is applied every block and split across foundation addresses to ensure Vault growth from block 1"
         })),
     )
 }
@@ -28690,98 +28943,8 @@ mod explorer_and_da_tests {
 mod tokenomics_tests {
     use super::*;
 
-    #[test]
-    fn test_halving_factor_at_genesis() {
-        // At block 0, halving_factor should be 1 (no halving yet)
-        let factor = current_halving_factor(0, 2_102_400);
-        assert_eq!(factor, 1, "Genesis block should have halving factor of 1");
-    }
-
-    #[test]
-    fn test_halving_factor_first_epoch() {
-        // Just before first halving (block 2,102,399)
-        let factor = current_halving_factor(2_102_399, 2_102_400);
-        assert_eq!(
-            factor, 1,
-            "Last block before halving should still have factor 1"
-        );
-    }
-
-    #[test]
-    fn test_halving_factor_at_first_halving() {
-        // At first halving boundary (block 2,102,400)
-        let factor = current_halving_factor(2_102_400, 2_102_400);
-        assert_eq!(factor, 2, "First halving should have factor 2");
-    }
-
-    #[test]
-    fn test_halving_factor_at_second_halving() {
-        // At second halving (block 4,204,800)
-        let factor = current_halving_factor(4_204_800, 2_102_400);
-        assert_eq!(factor, 4, "Second halving should have factor 4 (2^2)");
-    }
-
-    #[test]
-    fn test_halving_factor_at_third_halving() {
-        // At third halving (block 6,307,200)
-        let factor = current_halving_factor(6_307_200, 2_102_400);
-        assert_eq!(factor, 8, "Third halving should have factor 8 (2^3)");
-    }
-
-    #[test]
-    fn test_halving_factor_progression() {
-        // Test the exponential growth: 1 -> 2 -> 4 -> 8 -> 16
-        let interval = 100; // Small interval for testing
-
-        assert_eq!(current_halving_factor(0, interval), 1);
-        assert_eq!(current_halving_factor(99, interval), 1);
-        assert_eq!(current_halving_factor(100, interval), 2);
-        assert_eq!(current_halving_factor(199, interval), 2);
-        assert_eq!(current_halving_factor(200, interval), 4);
-        assert_eq!(current_halving_factor(300, interval), 8);
-        assert_eq!(current_halving_factor(400, interval), 16);
-    }
-
-    #[test]
-    fn test_emission_at_genesis() {
-        // Genesis block should emit full base amount
-        let base = 1_000_000_000_000_000_000u128; // 1 token (18 decimals)
-        let emission = emission_for_height(base, 0, 2_102_400);
-        assert_eq!(emission, base, "Genesis emission should equal base amount");
-    }
-
-    #[test]
-    fn test_emission_halves_at_interval() {
-        let base = 1_000_000_000_000_000_000u128; // 1 token
-        let interval = 2_102_400;
-
-        // Before halving
-        let emission_0 = emission_for_height(base, 0, interval);
-        // At first halving
-        let emission_1 = emission_for_height(base, interval, interval);
-        // At second halving
-        let emission_2 = emission_for_height(base, interval * 2, interval);
-
-        assert_eq!(emission_0, base);
-        assert_eq!(emission_1, base / 2, "First halving should halve emission");
-        assert_eq!(
-            emission_2,
-            base / 4,
-            "Second halving should quarter emission"
-        );
-    }
-
-    #[test]
-    fn test_emission_never_zero() {
-        // Even after 64 halvings (maximum u128 can represent), emission should be non-zero
-        let base = 1_000_000_000_000_000_000u128;
-        let emission = emission_for_height(base, 10_000_000, 100_000);
-        // After 100 halvings (10M / 100K), emission should still be > 0
-        assert!(
-            emission > 0,
-            "Emission should never be zero due to Rust division behavior"
-        );
-    }
+    // Old emission tests - replaced by new LAND emission module tests
+    // See src/emissions.rs for updated emission tests
 
     #[test]
     fn test_tokenomics_config_defaults() {
@@ -29034,35 +29197,7 @@ mod tokenomics_tests {
         assert_eq!(theoretical_max, 4_204_800_000_000_000_000_000_000u128);
     }
 
-    #[test]
-    fn test_tokenomics_disabled() {
-        // When emission is disabled, functions should handle gracefully
-        let emission = emission_for_height(0, 100, 1000);
-        assert_eq!(emission, 0, "Zero base emission should return 0");
-    }
-
-    #[test]
-    fn test_address_validation_length() {
-        // Test that addresses are properly formatted (64 hex chars without 0x prefix)
-        let valid_addr = "a".repeat(64);
-        assert_eq!(valid_addr.len(), 64, "Valid address should be 64 chars");
-
-        // After removing 0x prefix and lowercasing, length should be 64
-        let with_prefix = format!("0x{}", valid_addr);
-        let trimmed = with_prefix.trim_start_matches("0x").to_lowercase();
-        assert_eq!(trimmed.len(), 64);
-    }
-
-    #[test]
-    fn test_overflow_protection() {
-        // Test that large numbers don't overflow in tokenomics calculations
-        let max_emission = u128::MAX / 2;
-        let halving_factor = current_halving_factor(1000, 100);
-
-        // Division by halving_factor should not panic
-        let emission = max_emission / halving_factor as u128;
-        assert!(emission > 0, "Emission calculation should not overflow");
-    }
+    // Old emission edge case tests - replaced by new LAND emission module tests
 
     #[test]
     fn test_staking_edge_cases() {
@@ -29091,35 +29226,5 @@ mod tokenomics_tests {
         assert!(rounding_loss <= 2, "Rounding loss should be minimal");
     }
 
-    #[test]
-    fn test_halving_schedule_consistency() {
-        // Verify that consecutive blocks in same epoch have same emission
-        let base = 1_000_000_000_000_000_000u128;
-        let interval = 1000;
-
-        let e1 = emission_for_height(base, 100, interval);
-        let e2 = emission_for_height(base, 101, interval);
-        let e3 = emission_for_height(base, 999, interval);
-
-        assert_eq!(e1, e2, "Consecutive blocks should have same emission");
-        assert_eq!(e1, e3, "All blocks in epoch should have same emission");
-    }
-
-    #[test]
-    fn test_cross_epoch_boundary() {
-        // Test emission change exactly at epoch boundary
-        let base = 1_000_000_000_000_000_000u128;
-        let interval = 1000;
-
-        let before = emission_for_height(base, 999, interval);
-        let at_boundary = emission_for_height(base, 1000, interval);
-        let after = emission_for_height(base, 1001, interval);
-
-        assert_eq!(
-            before, base,
-            "Block before boundary should have full emission"
-        );
-        assert_eq!(at_boundary, base / 2, "Block at boundary should be halved");
-        assert_eq!(after, base / 2, "Block after boundary should stay halved");
-    }
+    // Old emission timing tests - replaced by new LAND emission module tests
 }

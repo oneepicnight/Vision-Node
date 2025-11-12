@@ -1,0 +1,2 @@
+Starting vision-node on 0.0.0.0:8080
+Server listening on http://0.0.0.0:8080

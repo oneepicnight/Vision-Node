@@ -1,0 +1,34 @@
+name: bech32-strict-tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Run tests (strict bech32)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Show Rust and Cargo version
+        run: |
+          rustc --version
+          cargo --version
+
+      - name: Run diagnostic bech32 test (strict)
+        env:
+          # Ensure permissive mode is NOT enabled in CI
+          BECH32_PERMISSIVE: '0'
+          RUST_BACKTRACE: full
+        run: |
+          # Run only the diagnostic bech32 test to verify polymod and strict decode
+          cargo test -j 1 --test bech32_polymod --manifest-path ./Cargo.toml -- --nocapture

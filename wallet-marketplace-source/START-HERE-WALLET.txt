@@ -1,0 +1,93 @@
+╔════════════════════════════════════════╗
+║   VISION WALLET v1.0 - QUICK START     ║
+╚════════════════════════════════════════╝
+
+👉 INSTALLATION (3 STEPS):
+
+1. Extract ALL files to a folder
+   (Keep them all together!)
+
+2. Double-click: INSTALL-WALLET.bat
+   (This creates a desktop shortcut)
+
+3. Double-click "Vision Wallet" on desktop
+   (Opens 2 servers, then browser to localhost:4173)
+
+Done! 🎉
+
+════════════════════════════════════════
+
+⚠️ IMPORTANT - VISION NODE REQUIRED:
+
+Before starting the wallet, you MUST have
+Vision Node running on port 7070!
+
+Get it here: VisionNode-v1.0-Installer.zip
+
+1. Install Vision Node first
+2. Start Vision Node (desktop shortcut)
+3. THEN start Vision Wallet
+
+════════════════════════════════════════
+
+📋 WHAT'S INCLUDED:
+
+✓ vision-market.exe - Backend server
+✓ frontend_server.exe - Frontend server
+✓ dist/ - Production UI
+✓ INSTALL-WALLET.bat - Setup installer
+✓ START-WALLET.bat - Launcher
+✓ README-WALLET-INSTALL.txt - Full guide
+
+════════════════════════════════════════
+
+⚡ FOR END USERS:
+
+Just run INSTALL-WALLET.bat once,
+then use the desktop shortcut forever!
+
+Desktop Icon: 💰 "Vision Wallet"
+
+No configuration needed!
+No technical knowledge required!
+
+════════════════════════════════════════
+
+🎯 WHAT IT DOES:
+
+✓ LAND Marketplace (Buy/Sell tokens)
+✓ Exchange Trading (BTC/BCH/DOGE to LAND)
+✓ Cash Orders (LAND for cash)
+✓ Wallet & Vault Management
+
+════════════════════════════════════════
+
+📱 OPEN IN BROWSER:
+
+After starting, open: http://localhost:4173
+
+You'll see:
+- Dashboard
+- Market listings
+- Exchange trading
+- Wallet operations
+- Vault status
+
+════════════════════════════════════════
+
+🔗 THREE SERVICES:
+
+1. Vision Node:   http://localhost:7070
+   (Must be running FIRST!)
+
+2. Backend API:   http://localhost:8080
+   (Starts automatically)
+
+3. Frontend UI:   http://localhost:4173
+   (Starts automatically)
+
+════════════════════════════════════════
+
+Need help? Read README-WALLET-INSTALL.txt
+
+Version 1.0 | November 7, 2025

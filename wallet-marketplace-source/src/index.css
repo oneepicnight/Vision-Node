@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #090915;
+    --foreground: #d9e1ff;
+    --muted: #9aa3c7;
+    --glass: rgba(255,255,255,0.06);
+    --glass-2: rgba(255,255,255,0.12);
+  }
+
+  * {
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  body {
+    @apply bg-slate-950 text-slate-100;
+    background: radial-gradient(1200px 600px at 70% -10%, rgba(138,92,255,0.15), transparent 60%),
+                radial-gradient(900px 500px at 10% 10%, rgba(74,209,255,0.10), transparent 60%),
+                #090915;
+  }
+}
