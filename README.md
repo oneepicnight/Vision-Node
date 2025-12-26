@@ -116,4 +116,9 @@ Welcome to the long game.
 
 TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
 
-[Standard Apache 2.0 license text continues here verbatim]
+Vision
+
+Copyright 2025 Vision Contributors
+
+This product includes software developed by the Vision Project.
+
