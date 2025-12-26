@@ -38,6 +38,17 @@ If it compromises determinism, it doesn’t ship.
 
 ---
 
+## Trademark Notice
+
+“Vision”, “Vision Node”, and related names and logos are trademarks of the Vision Project.
+
+This repository is open source, but use of the Vision name, branding, or network identity
+for derivative projects or alternative networks requires explicit permission.
+
+Forks must not represent themselves as the official Vision network.
+
+---
+
 ## Quick Start (5 Minutes)
 
 ### Requirements
@@ -46,6 +57,7 @@ If it compromises determinism, it doesn’t ship.
 - Open ports for P2P (default: 7072)
 
 ### Build
+
 ```bash
 cargo build --release
 Run
