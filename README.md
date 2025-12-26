@@ -105,7 +105,7 @@ See SECURITY.md.
 Community
 Vision is built by people who show up.
 
-Discord: (add link)
+Discord:(https://discord.gg/P7pSSHuBjD)
 
 Issues & discussions live here on GitHub
 
