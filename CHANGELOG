@@ -1,0 +1,10 @@
+# Changelog
+
+## v1.0.0
+- Initial open-source release
+- Core consensus finalized
+- P2P networking stabilized
+- Genesis rules locked
+- Version gating enforced
+
+This is the foundation.
