@@ -1,0 +1,42 @@
+# Vision Roadmap
+
+This roadmap describes direction, not deadlines.
+
+---
+
+## Phase 0 — Foundation (Complete)
+- Core blockchain
+- PoW consensus
+- Genesis rules
+- P2P networking
+- Sync safety
+
+---
+
+## Phase 1 — Stability
+- Tooling improvements
+- UX polish
+- Better diagnostics
+- Contributor docs
+
+---
+
+## Phase 2 — Ecosystem
+- APIs
+- Indexing
+- External tooling support
+
+---
+
+## Phase 3 — Governance
+- On-chain proposals
+- Rule evolution safeguards
+
+---
+
+## Phase 4 — World Layer
+- Game/world integration
+- Economic extensions
+- Long-term persistence
+
+Vision is built to last.
