@@ -1,0 +1,49 @@
+# Contributing to Vision
+
+First off — thank you for showing up.
+
+Vision is a serious system. Contributions are welcome, but consensus safety comes first.
+
+---
+
+## How to Contribute
+
+1. Fork the repository
+2. Create a feature or fix branch
+3. Keep changes focused and explain *why*
+4. Submit a pull request
+
+---
+
+## Expectations
+
+- Rust stable only
+- Clear commit messages
+- No breaking consensus changes without discussion
+- Deterministic behavior is mandatory
+- Readability beats cleverness
+
+---
+
+## What Not to Submit
+
+- Consensus rule changes without approval
+- “Refactors” that obscure logic
+- Cosmetic churn with no functional gain
+- Experimental features without flags
+
+---
+
+## Code Style
+
+- Explicit > implicit
+- Comments where intent matters
+- Logs should help humans at 3am
+
+---
+
+## Discussions
+
+Big ideas belong in discussions **before** PRs.
+
+Let’s build this right.
