@@ -1,0 +1,40 @@
+# Security Policy
+
+Vision takes security seriously.
+
+---
+
+## Reporting Vulnerabilities
+
+If you discover a security issue:
+
+- Do NOT open a public issue
+- Do NOT disclose details publicly
+- Contact the maintainers privately
+
+(https://discord.gg/P7pSSHuBjD)
+
+---
+
+## Scope
+
+In scope:
+- Consensus flaws
+- P2P attacks
+- Remote crashes
+- Chain safety violations
+
+Out of scope:
+- DoS from malformed configs
+- Local machine issues
+- Experimental or disabled features
+
+---
+
+## Response Timeline
+
+- Acknowledgement within 72 hours
+- Fix timeline depends on severity
+- Credit given where appropriate
+
+Thank you for helping keep Vision safe.
