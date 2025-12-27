@@ -1,6 +1,9 @@
 #![allow(unused_mut)]
 // Suppress warnings for feature-gated code that's unused in lite builds
-#![cfg_attr(not(feature = "full"), allow(dead_code, unused_imports, unused_variables))]
+#![cfg_attr(
+    not(feature = "full"),
+    allow(dead_code, unused_imports, unused_variables)
+)]
 
 // --- imports & globals (merged from restored variant) ---
 use once_cell::sync::Lazy;
@@ -45,12 +48,11 @@ static HTTP: Lazy<Client> = Lazy::new(|| {
 });
 
 use async_graphql::{
-    EmptySubscription, InputObject, Object, Result as GqlResult, Schema,
-    SimpleObject,
+    EmptySubscription, InputObject, Object, Result as GqlResult, Schema, SimpleObject,
 };
 use blake3::Hasher;
 use dashmap::DashMap;
-use ed25519_dalek::{SigningKey, VerifyingKey, Signature, Signer, Verifier};
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use prometheus::{
     Encoder, Gauge, Histogram, HistogramOpts, HistogramVec, IntCounter, IntCounterVec, IntGauge,
     IntGaugeVec, Registry, TextEncoder,
@@ -60,156 +62,158 @@ use tracing_subscriber::EnvFilter;
 // ============================================================================
 // v1.0 CORE MODULES (ALWAYS COMPILED)
 // ============================================================================
-mod mempool;
-mod miner;
-mod p2p;
-mod pow;
-mod types;
-mod version;
 mod accounts;
 mod api;
 mod auto_sync;
 mod bank;
-mod chain;           // Core blockchain module
+mod chain; // Core blockchain module
 mod config;
 mod consensus;
 mod consensus_pow;
 mod fees;
 mod identity;
-mod market;          // Core vault fee routing
+mod market; // Core vault fee routing
+mod mempool;
 mod metrics;
+mod miner;
 mod miner_manager;
-mod mining_readiness;  // Core mining status
-mod tokenomics;
+mod mining_readiness; // Core mining status
+mod p2p;
+mod pow;
 mod receipts;
 mod routes;
-mod sig_agg;     // Block structure
+mod sig_agg; // Block structure
+mod tokenomics;
 mod treasury;
+mod types;
 mod vault_epoch;
+mod version;
 mod vision_constants;
 mod wallet;
 
-// v1.0 MOOD STUB (feature-gate actual mood, always provide stub interface)
-#[cfg(not(feature = "staging"))]
-mod mood {
-    #[derive(Clone, Debug)]
-    pub struct Mood;
-    
-    #[derive(Clone, Debug)]
-    pub struct MoodSnapshot {
-        pub mood: Mood,
-        pub score: u32,
-    }
-    
-    pub fn compute_mood(
-        _height: u64,
-        _peer_count: usize,
-        _mempool_size: usize,
-        _anomalies: u32,
-        _traumas: u32,
-        _guardian_active: bool,
-        _testnet_phase: u32,
-    ) -> MoodSnapshot {
-        MoodSnapshot {
-            mood: Mood,
-            score: 50,
-        }
-    }
-}
-
 // ============================================================================
-// STAGED FEATURES (compile only if enabled)
+// STAGED FEATURES (with real/stub wrapper pattern)
 // ============================================================================
-// v1.0 STUBS for staged modules (provide interface when feature disabled)
-#[cfg(not(feature = "staging"))]
-mod airdrop {
-    pub mod cash {}
-}
+// When staging is ON: compile real modules
+// When staging is OFF: compile stub modules (no signing, no keys, returns NOT_FOUND)
 
-#[cfg(not(feature = "staging"))]
-mod foundation_config {}
-
-#[cfg(not(feature = "staging"))]
-mod governance {}
-
-#[cfg(not(feature = "staging"))]
-mod governance_democracy {}
-
-#[cfg(not(feature = "staging"))]
-mod guardian {
-    pub mod consciousness {}
-    pub mod integrity {}
-    pub mod events {}
-}
-
-#[cfg(not(feature = "staging"))]
-mod land_deeds {}
-
-#[cfg(not(feature = "staging"))]
-mod land_stake {}
-
-#[cfg(not(feature = "staging"))]
-mod legacy {}
-
-#[cfg(not(feature = "staging"))]
-mod node_approval {}
-
-#[cfg(not(feature = "staging"))]
-mod runtime_mode {}
-
-#[cfg(not(feature = "staging"))]
-mod tip {}
-
-// Full feature stubs (compiled only when feature enabled)
+// AIRDROP
 #[cfg(feature = "staging")]
 mod airdrop;
+#[cfg(not(feature = "staging"))]
+#[path = "stubs/airdrop.rs"]
+mod airdrop;
 
+// FOUNDATION CONFIG
 #[cfg(feature = "staging")]
 mod foundation_config;
+#[cfg(not(feature = "staging"))]
+#[path = "stubs/foundation_config.rs"]
+mod foundation_config;
 
-#[cfg(feature = "guardian")]
+// GUARDIAN (stage ON maps to staging, stage OFF has alias)
+#[cfg(feature = "staging")]
+mod guardian;
+#[cfg(not(feature = "staging"))]
+#[path = "stubs/guardian.rs"]
 mod guardian;
 
-#[cfg(feature = "guardian")]
+// GUARDIAN CONSCIOUSNESS
+#[cfg(feature = "staging")]
+mod guardian_consciousness;
+#[cfg(not(feature = "staging"))]
+#[path = "stubs/guardian_consciousness.rs"]
 mod guardian_consciousness;
 
-#[cfg(any(feature = "staging", feature = "guardian"))]
+// GOVERNANCE
+#[cfg(feature = "staging")]
+mod governance;
+#[cfg(not(feature = "staging"))]
+#[path = "stubs/governance.rs"]
 mod governance;
 
-#[cfg(any(feature = "staging", feature = "guardian"))]
+// GOVERNANCE DEMOCRACY
+#[cfg(feature = "staging")]
+mod governance_democracy;
+#[cfg(not(feature = "staging"))]
+#[path = "stubs/governance_democracy.rs"]
 mod governance_democracy;
 
+// LAND DEEDS
 #[cfg(feature = "staging")]
 mod land_deeds;
+#[cfg(not(feature = "staging"))]
+#[path = "stubs/land_deeds.rs"]
+mod land_deeds;
 
+// LAND STAKE
 #[cfg(feature = "staging")]
 mod land_stake;
+#[cfg(not(feature = "staging"))]
+#[path = "stubs/land_stake.rs"]
+mod land_stake;
 
+// MOOD
 #[cfg(feature = "staging")]
 mod mood;
+#[cfg(not(feature = "staging"))]
+#[path = "stubs/mood.rs"]
+mod mood;
 
+// MOOD ROUTER
 #[cfg(feature = "staging")]
 mod mood_router;
+#[cfg(not(feature = "staging"))]
+#[path = "stubs/mood_router.rs"]
+mod mood_router;
 
+// NODE APPROVAL
 #[cfg(feature = "staging")]
 mod node_approval;
+#[cfg(not(feature = "staging"))]
+#[path = "stubs/node_approval.rs"]
+mod node_approval;
 
+// RUNTIME MODE
 #[cfg(feature = "staging")]
 mod runtime_mode;
+#[cfg(not(feature = "staging"))]
+#[path = "stubs/runtime_mode.rs"]
+mod runtime_mode;
 
+// TIP
 #[cfg(feature = "staging")]
 mod tip;
+#[cfg(not(feature = "staging"))]
+#[path = "stubs/tip.rs"]
+mod tip;
 
+// LEGACY
 #[cfg(feature = "staging")]
 mod legacy;
+#[cfg(not(feature = "staging"))]
+#[path = "stubs/legacy.rs"]
+mod legacy;
 
+// EBID
 #[cfg(feature = "staging")]
 mod ebid;
+#[cfg(not(feature = "staging"))]
+#[path = "stubs/ebid.rs"]
+mod ebid;
 
+// PENDING REWARDS
 #[cfg(feature = "staging")]
 mod pending_rewards;
+#[cfg(not(feature = "staging"))]
+#[path = "stubs/pending_rewards.rs"]
+mod pending_rewards;
 
+// ORACLE
 #[cfg(feature = "staging")]
+mod oracle;
+#[cfg(not(feature = "staging"))]
+#[path = "stubs/oracle.rs"]
 mod oracle;
 
 // Prometheus helper functions
@@ -301,24 +305,48 @@ static PROM_VISION_SNAPSHOTS: Lazy<IntCounter> =
 // P2P Headers-First Sync Metrics
 pub static PROM_P2P_HEADERS_SENT: Lazy<IntCounter> =
     Lazy::new(|| mk_int_counter("vision_p2p_headers_sent_total", "Headers sent to peers"));
-pub static PROM_P2P_HEADERS_RECEIVED: Lazy<IntCounter> =
-    Lazy::new(|| mk_int_counter("vision_p2p_headers_received_total", "Headers received from peers"));
+pub static PROM_P2P_HEADERS_RECEIVED: Lazy<IntCounter> = Lazy::new(|| {
+    mk_int_counter(
+        "vision_p2p_headers_received_total",
+        "Headers received from peers",
+    )
+});
 pub static PROM_P2P_BLOCKS_SENT: Lazy<IntCounter> =
     Lazy::new(|| mk_int_counter("vision_p2p_blocks_sent_total", "Blocks sent to peers"));
-pub static PROM_P2P_BLOCKS_RECEIVED: Lazy<IntCounter> =
-    Lazy::new(|| mk_int_counter("vision_p2p_blocks_received_total", "Blocks received from peers"));
+pub static PROM_P2P_BLOCKS_RECEIVED: Lazy<IntCounter> = Lazy::new(|| {
+    mk_int_counter(
+        "vision_p2p_blocks_received_total",
+        "Blocks received from peers",
+    )
+});
 pub static PROM_P2P_ANNOUNCES_SENT: Lazy<IntCounter> =
     Lazy::new(|| mk_int_counter("vision_p2p_announces_sent_total", "Block announces sent"));
-pub static PROM_P2P_ANNOUNCES_RECEIVED: Lazy<IntCounter> =
-    Lazy::new(|| mk_int_counter("vision_p2p_announces_received_total", "Block announces received"));
+pub static PROM_P2P_ANNOUNCES_RECEIVED: Lazy<IntCounter> = Lazy::new(|| {
+    mk_int_counter(
+        "vision_p2p_announces_received_total",
+        "Block announces received",
+    )
+});
 pub static PROM_P2P_ORPHANS: Lazy<IntGauge> =
     Lazy::new(|| mk_int_gauge("vision_p2p_orphans", "Current orphan blocks count"));
-pub static PROM_P2P_ORPHANS_ADOPTED: Lazy<IntCounter> =
-    Lazy::new(|| mk_int_counter("vision_p2p_orphans_adopted_total", "Orphans successfully adopted"));
-pub static PROM_P2P_DUPES_DROPPED: Lazy<IntCounter> =
-    Lazy::new(|| mk_int_counter("vision_p2p_dupes_dropped_total", "Duplicate blocks/headers dropped"));
-pub static PROM_P2P_INFLIGHT_BLOCKS: Lazy<IntGauge> =
-    Lazy::new(|| mk_int_gauge("vision_p2p_inflight_blocks", "Blocks currently being fetched"));
+pub static PROM_P2P_ORPHANS_ADOPTED: Lazy<IntCounter> = Lazy::new(|| {
+    mk_int_counter(
+        "vision_p2p_orphans_adopted_total",
+        "Orphans successfully adopted",
+    )
+});
+pub static PROM_P2P_DUPES_DROPPED: Lazy<IntCounter> = Lazy::new(|| {
+    mk_int_counter(
+        "vision_p2p_dupes_dropped_total",
+        "Duplicate blocks/headers dropped",
+    )
+});
+pub static PROM_P2P_INFLIGHT_BLOCKS: Lazy<IntGauge> = Lazy::new(|| {
+    mk_int_gauge(
+        "vision_p2p_inflight_blocks",
+        "Blocks currently being fetched",
+    )
+});
 
 // ============================================================================
 // v1.0 GLOBAL STATICS - REQUIRED ACROSS MODULES
@@ -347,8 +375,9 @@ pub static PEER_MANAGER: once_cell::sync::Lazy<P2PManager> =
 
 /// Placeholder for constellation memory (optional)
 #[allow(dead_code)]
-pub static CONSTELLATION_MEMORY: once_cell::sync::Lazy<std::sync::Arc<tokio::sync::Mutex<Vec<u8>>>> =
-    once_cell::sync::Lazy::new(|| std::sync::Arc::new(tokio::sync::Mutex::new(Vec::new())));
+pub static CONSTELLATION_MEMORY: once_cell::sync::Lazy<
+    std::sync::Arc<tokio::sync::Mutex<Vec<u8>>>,
+> = once_cell::sync::Lazy::new(|| std::sync::Arc::new(tokio::sync::Mutex::new(Vec::new())));
 
 /// Placeholder for EBID manager (optional)
 #[allow(dead_code)]
@@ -393,50 +422,109 @@ impl HealthDB {
     }
 }
 
-pub static HEALTH_DB: once_cell::sync::Lazy<HealthDB> =
-    once_cell::sync::Lazy::new(|| HealthDB);
+pub static HEALTH_DB: once_cell::sync::Lazy<HealthDB> = once_cell::sync::Lazy::new(|| HealthDB);
 pub static PROM_P2P_PEERS: Lazy<IntGauge> =
     Lazy::new(|| mk_int_gauge("vision_p2p_peers", "Connected peers count"));
-pub static PROM_P2P_HEADERS_PER_SEC: Lazy<IntGauge> =
-    Lazy::new(|| mk_int_gauge("vision_p2p_headers_per_sec", "Headers sync speed (per second)"));
-pub static PROM_P2P_BLOCKS_PER_SEC: Lazy<IntGauge> =
-    Lazy::new(|| mk_int_gauge("vision_p2p_blocks_per_sec", "Blocks sync speed (per second)"));
+pub static PROM_P2P_HEADERS_PER_SEC: Lazy<IntGauge> = Lazy::new(|| {
+    mk_int_gauge(
+        "vision_p2p_headers_per_sec",
+        "Headers sync speed (per second)",
+    )
+});
+pub static PROM_P2P_BLOCKS_PER_SEC: Lazy<IntGauge> = Lazy::new(|| {
+    mk_int_gauge(
+        "vision_p2p_blocks_per_sec",
+        "Blocks sync speed (per second)",
+    )
+});
 pub static PROM_CHAIN_REORGS: Lazy<IntCounter> =
     Lazy::new(|| mk_int_counter("vision_chain_reorgs_total", "Chain reorganizations"));
-pub static PROM_CHAIN_REORG_BLOCKS_ROLLED_BACK: Lazy<IntCounter> =
-    Lazy::new(|| mk_int_counter("vision_chain_reorg_blocks_rolled_back_total", "Blocks rolled back during reorgs"));
-pub static PROM_CHAIN_REORG_TXS_REINSERTED: Lazy<IntCounter> =
-    Lazy::new(|| mk_int_counter("vision_chain_reorg_txs_reinserted_total", "Transactions reinserted to mempool from reorgs"));
+pub static PROM_CHAIN_REORG_BLOCKS_ROLLED_BACK: Lazy<IntCounter> = Lazy::new(|| {
+    mk_int_counter(
+        "vision_chain_reorg_blocks_rolled_back_total",
+        "Blocks rolled back during reorgs",
+    )
+});
+pub static PROM_CHAIN_REORG_TXS_REINSERTED: Lazy<IntCounter> = Lazy::new(|| {
+    mk_int_counter(
+        "vision_chain_reorg_txs_reinserted_total",
+        "Transactions reinserted to mempool from reorgs",
+    )
+});
 pub static PROM_CHAIN_REORG_DEPTH: Lazy<IntGauge> =
     Lazy::new(|| mk_int_gauge("vision_chain_reorg_depth_last", "Depth of last chain reorg"));
 
 // Compact Block Metrics
-pub static PROM_COMPACT_BLOCKS_SENT: Lazy<IntCounter> =
-    Lazy::new(|| mk_int_counter("vision_compact_blocks_sent_total", "Compact blocks sent to peers"));
-pub static PROM_COMPACT_BLOCKS_RECEIVED: Lazy<IntCounter> =
-    Lazy::new(|| mk_int_counter("vision_compact_blocks_received_total", "Compact blocks received from peers"));
-pub static PROM_COMPACT_BLOCK_RECONSTRUCTIONS: Lazy<IntCounter> =
-    Lazy::new(|| mk_int_counter("vision_compact_block_reconstructions_total", "Successful compact block reconstructions"));
-pub static PROM_COMPACT_BLOCK_RECONSTRUCTION_FAILURES: Lazy<IntCounter> =
-    Lazy::new(|| mk_int_counter("vision_compact_block_reconstruction_failures_total", "Failed compact block reconstructions"));
-pub static PROM_COMPACT_BLOCK_BANDWIDTH_SAVED: Lazy<IntCounter> =
-    Lazy::new(|| mk_int_counter("vision_compact_block_bandwidth_saved_bytes", "Total bytes saved via compact blocks"));
-pub static PROM_COMPACT_BLOCK_AVG_SAVINGS_PCT: Lazy<IntGauge> =
-    Lazy::new(|| mk_int_gauge("vision_compact_block_avg_savings_pct", "Average bandwidth savings percentage"));
+pub static PROM_COMPACT_BLOCKS_SENT: Lazy<IntCounter> = Lazy::new(|| {
+    mk_int_counter(
+        "vision_compact_blocks_sent_total",
+        "Compact blocks sent to peers",
+    )
+});
+pub static PROM_COMPACT_BLOCKS_RECEIVED: Lazy<IntCounter> = Lazy::new(|| {
+    mk_int_counter(
+        "vision_compact_blocks_received_total",
+        "Compact blocks received from peers",
+    )
+});
+pub static PROM_COMPACT_BLOCK_RECONSTRUCTIONS: Lazy<IntCounter> = Lazy::new(|| {
+    mk_int_counter(
+        "vision_compact_block_reconstructions_total",
+        "Successful compact block reconstructions",
+    )
+});
+pub static PROM_COMPACT_BLOCK_RECONSTRUCTION_FAILURES: Lazy<IntCounter> = Lazy::new(|| {
+    mk_int_counter(
+        "vision_compact_block_reconstruction_failures_total",
+        "Failed compact block reconstructions",
+    )
+});
+pub static PROM_COMPACT_BLOCK_BANDWIDTH_SAVED: Lazy<IntCounter> = Lazy::new(|| {
+    mk_int_counter(
+        "vision_compact_block_bandwidth_saved_bytes",
+        "Total bytes saved via compact blocks",
+    )
+});
+pub static PROM_COMPACT_BLOCK_AVG_SAVINGS_PCT: Lazy<IntGauge> = Lazy::new(|| {
+    mk_int_gauge(
+        "vision_compact_block_avg_savings_pct",
+        "Average bandwidth savings percentage",
+    )
+});
 
 // Transaction Gossip Metrics
 pub static PROM_TX_INV_SENT: Lazy<IntCounter> =
     Lazy::new(|| mk_int_counter("vision_tx_inv_sent_total", "Transaction INV messages sent"));
-pub static PROM_TX_INV_RECEIVED: Lazy<IntCounter> =
-    Lazy::new(|| mk_int_counter("vision_tx_inv_received_total", "Transaction INV messages received"));
-pub static PROM_TX_GETDATA_SENT: Lazy<IntCounter> =
-    Lazy::new(|| mk_int_counter("vision_tx_getdata_sent_total", "Transaction GETDATA requests sent"));
-pub static PROM_TX_GETDATA_RECEIVED: Lazy<IntCounter> =
-    Lazy::new(|| mk_int_counter("vision_tx_getdata_received_total", "Transaction GETDATA requests received"));
-pub static PROM_TX_GOSSIP_RECEIVED: Lazy<IntCounter> =
-    Lazy::new(|| mk_int_counter("vision_tx_gossip_received_total", "Transactions received via gossip"));
-pub static PROM_TX_GOSSIP_DUPLICATES: Lazy<IntCounter> =
-    Lazy::new(|| mk_int_counter("vision_tx_gossip_duplicates_total", "Duplicate transactions filtered"));
+pub static PROM_TX_INV_RECEIVED: Lazy<IntCounter> = Lazy::new(|| {
+    mk_int_counter(
+        "vision_tx_inv_received_total",
+        "Transaction INV messages received",
+    )
+});
+pub static PROM_TX_GETDATA_SENT: Lazy<IntCounter> = Lazy::new(|| {
+    mk_int_counter(
+        "vision_tx_getdata_sent_total",
+        "Transaction GETDATA requests sent",
+    )
+});
+pub static PROM_TX_GETDATA_RECEIVED: Lazy<IntCounter> = Lazy::new(|| {
+    mk_int_counter(
+        "vision_tx_getdata_received_total",
+        "Transaction GETDATA requests received",
+    )
+});
+pub static PROM_TX_GOSSIP_RECEIVED: Lazy<IntCounter> = Lazy::new(|| {
+    mk_int_counter(
+        "vision_tx_gossip_received_total",
+        "Transactions received via gossip",
+    )
+});
+pub static PROM_TX_GOSSIP_DUPLICATES: Lazy<IntCounter> = Lazy::new(|| {
+    mk_int_counter(
+        "vision_tx_gossip_duplicates_total",
+        "Duplicate transactions filtered",
+    )
+});
 
 static PROM_SYNC_PULL_FAILURES: Lazy<IntCounterVec> = Lazy::new(|| {
     IntCounterVec::new(
@@ -1161,12 +1249,12 @@ async fn miner_status() -> Json<serde_json::Value> {
     let enabled = threads > 0;
     let stats = ACTIVE_MINER.stats();
     let mining_stats = ACTIVE_MINER.get_stats();
-    
+
     // Get recent blocks
     let chain = CHAIN.lock();
     let current_height = chain.blocks.len().saturating_sub(1);
     let start_height = current_height.saturating_sub(9).max(1);
-    
+
     let mut recent_blocks = Vec::new();
     for h in start_height..=current_height {
         if let Some(block) = chain.blocks.get(h) {
@@ -1180,7 +1268,7 @@ async fn miner_status() -> Json<serde_json::Value> {
     }
     recent_blocks.reverse(); // Most recent first
     drop(chain); // Release lock
-    
+
     Json(serde_json::json!({
         "enabled": enabled,
         "threads": threads,
@@ -1219,48 +1307,46 @@ async fn miner_set_threads(
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({
                 "error": format!("Thread count exceeds maximum of {}", max_threads)
-            }))
+            })),
         );
     }
-    
+
     ACTIVE_MINER.set_threads(req.threads);
-    
+
     (
         StatusCode::OK,
         Json(serde_json::json!({
             "ok": true,
             "threads": req.threads
-        }))
+        })),
     )
 }
 
-async fn miner_start(
-    Json(req): Json<SetThreadsReq>,
-) -> (StatusCode, Json<serde_json::Value>) {
+async fn miner_start(Json(req): Json<SetThreadsReq>) -> (StatusCode, Json<serde_json::Value>) {
     let max_threads = num_cpus::get() * 2;
     let threads = req.threads.min(max_threads).max(1);
-    
+
     ACTIVE_MINER.start(threads);
-    
+
     (
         StatusCode::OK,
         Json(serde_json::json!({
             "ok": true,
             "threads": threads,
             "status": "started"
-        }))
+        })),
     )
 }
 
 async fn miner_stop() -> (StatusCode, Json<serde_json::Value>) {
     ACTIVE_MINER.stop();
-    
+
     (
         StatusCode::OK,
         Json(serde_json::json!({
             "ok": true,
             "status": "stopped"
-        }))
+        })),
     )
 }
 
@@ -1273,7 +1359,7 @@ async fn miner_configure(
     Json(req): Json<MinerConfigureReq>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     let wallet = req.wallet.trim().to_string();
-    
+
     // Validate wallet address (basic check)
     if wallet.is_empty() || wallet.len() < 3 {
         return (
@@ -1281,36 +1367,36 @@ async fn miner_configure(
             Json(serde_json::json!({
                 "ok": false,
                 "error": "Invalid wallet address"
-            }))
+            })),
         );
     }
-    
+
     // Update global miner address
     *MINER_ADDRESS.lock() = wallet.clone();
-    
+
     // Log confirmation to console
     println!("✅ Mining address configured: {}", wallet);
     println!("   All future mining rewards will be sent to this address.");
-    
+
     (
         StatusCode::OK,
         Json(serde_json::json!({
             "ok": true,
             "wallet": wallet,
             "message": "Miner address updated successfully"
-        }))
+        })),
     )
 }
 
 async fn miner_get_config() -> (StatusCode, Json<serde_json::Value>) {
     let wallet = MINER_ADDRESS.lock().clone();
-    
+
     (
         StatusCode::OK,
         Json(serde_json::json!({
             "ok": true,
             "wallet": wallet
-        }))
+        })),
     )
 }
 
@@ -1769,14 +1855,14 @@ async fn peers_add_handler(Json(req): Json<AddPeerReq>) -> (StatusCode, Json<ser
             &format!("Invalid peer URL: {}", e),
         );
     }
-    
+
     // Check if we've hit max peers
     let g = CHAIN.lock();
     let current_peer_count = g.peers.len();
     let db = g.db.clone();
     let peers_snapshot = g.peers.clone();
     drop(g);
-    
+
     if current_peer_count >= max_peers() {
         return api_error_struct(
             StatusCode::TOO_MANY_REQUESTS,
@@ -1784,7 +1870,7 @@ async fn peers_add_handler(Json(req): Json<AddPeerReq>) -> (StatusCode, Json<ser
             &format!("Maximum peer limit ({}) reached", max_peers()),
         );
     }
-    
+
     // Check if peer is banned (using existing function signature with db)
     if is_peer_banned(&db, &req.url) {
         return api_error_struct(
@@ -1793,7 +1879,7 @@ async fn peers_add_handler(Json(req): Json<AddPeerReq>) -> (StatusCode, Json<ser
             "This peer has been banned due to malicious behavior",
         );
     }
-    
+
     // Check subnet diversity (using existing function signature)
     if !check_subnet_limit(&peers_snapshot, &req.url) {
         return api_error_struct(
@@ -1802,7 +1888,7 @@ async fn peers_add_handler(Json(req): Json<AddPeerReq>) -> (StatusCode, Json<ser
             "Too many peers from this subnet (Sybil attack prevention)",
         );
     }
-    
+
     peers_add(&req.url);
     (
         StatusCode::OK,
@@ -1812,19 +1898,19 @@ async fn peers_add_handler(Json(req): Json<AddPeerReq>) -> (StatusCode, Json<ser
 
 fn peers_add(u: &str) {
     let mut g = CHAIN.lock();
-    
+
     // Check max peers again (race condition protection)
     if g.peers.len() >= max_peers() {
         tracing::warn!("Attempted to add peer {} but max limit reached", u);
         return;
     }
-    
+
     // Subnet diversity double-check under lock
     if !check_subnet_limit(&g.peers, u) {
         tracing::warn!("Rejected peer {} due to subnet saturation", u);
         return;
     }
-    
+
     if hygiene_allow_add(u) {
         g.peers.insert(u.to_string());
         let _ = g.db.insert(
@@ -2373,7 +2459,10 @@ fn load_tokenomics_cfg() -> TokenomicsCfg {
         decimals: 9,
         vault_addr: parse_hex_address("VISION_TOK_VAULT_ADDR", "vault_address_placeholder"),
         fund_addr: parse_hex_address("VISION_TOK_FUND_ADDR", "fund_address_placeholder"),
-        treasury_addr: parse_hex_address("VISION_TOK_TREASURY_ADDR", "treasury_address_placeholder"),
+        treasury_addr: parse_hex_address(
+            "VISION_TOK_TREASURY_ADDR",
+            "treasury_address_placeholder",
+        ),
     }
 }
 
@@ -2746,8 +2835,8 @@ static FOUND_BLOCKS_CHANNEL: Lazy<FoundBlockChannel> = Lazy::new(|| {
 
 // Global miner address (can be updated via API)
 static MINER_ADDRESS: Lazy<Arc<Mutex<String>>> = Lazy::new(|| {
-    let default_addr = std::env::var("VISION_MINER_ADDRESS")
-        .unwrap_or_else(|_| "pow_miner".to_string());
+    let default_addr =
+        std::env::var("VISION_MINER_ADDRESS").unwrap_or_else(|_| "pow_miner".to_string());
     Arc::new(Mutex::new(default_addr))
 });
 
@@ -2755,37 +2844,41 @@ static MINER_ADDRESS: Lazy<Arc<Mutex<String>>> = Lazy::new(|| {
 static ACTIVE_MINER: Lazy<std::sync::Arc<miner::ActiveMiner>> = Lazy::new(|| {
     use consensus_pow::DifficultyConfig;
     use pow::visionx::VisionXParams;
-    
+
     let params = VisionXParams {
-        dataset_mb: 64,      // 64 MB dataset
-        mix_iters: 65536,    // Mixing iterations
-        write_every: 1024,   // Write frequency
-        epoch_blocks: 32,    // Epoch length
+        dataset_mb: 64,    // 64 MB dataset
+        mix_iters: 65536,  // Mixing iterations
+        write_every: 1024, // Write frequency
+        epoch_blocks: 32,  // Epoch length
     };
-    
+
     let difficulty_config = DifficultyConfig {
-        target_block_time: 2,            // 2 seconds per block (smooth & fast)
-        adjustment_interval: 120,        // 120 block LWMA window (~4 minutes of history)
-        min_solve_divisor: 4,            // Min solve time = 0.5s (prevents timestamp manipulation)
-        max_solve_multiplier: 10,        // Max solve time = 20s (prevents stalling)
-        max_change_up_percent: 110,      // Max +10% per block (prevents oscillation)
-        max_change_down_percent: 90,     // Max -10% per block (smooth adjustment)
-        max_adjustment_factor: 4.0,      // Deprecated, kept for compatibility
-        min_difficulty: 10000,           // Minimum difficulty floor
+        target_block_time: 2,        // 2 seconds per block (smooth & fast)
+        adjustment_interval: 120,    // 120 block LWMA window (~4 minutes of history)
+        min_solve_divisor: 4,        // Min solve time = 0.5s (prevents timestamp manipulation)
+        max_solve_multiplier: 10,    // Max solve time = 20s (prevents stalling)
+        max_change_up_percent: 110,  // Max +10% per block (prevents oscillation)
+        max_change_down_percent: 90, // Max -10% per block (smooth adjustment)
+        max_adjustment_factor: 4.0,  // Deprecated, kept for compatibility
+        min_difficulty: 10000,       // Minimum difficulty floor
     };
-    
+
     let initial_difficulty = 10000;
-    
+
     // Pass the sender side of the channel
     let callback = Some(FOUND_BLOCKS_CHANNEL.0.clone());
-    
-    std::sync::Arc::new(miner::ActiveMiner::new(params, difficulty_config, initial_difficulty, callback))
+
+    std::sync::Arc::new(miner::ActiveMiner::new(
+        params,
+        difficulty_config,
+        initial_difficulty,
+        callback,
+    ))
 });
 
 // Global matching engine for exchange trading
-static MATCHING_ENGINE: Lazy<std::sync::Arc<market::engine::MatchingEngine>> = Lazy::new(|| {
-    std::sync::Arc::new(market::engine::MatchingEngine::new())
-});
+static MATCHING_ENGINE: Lazy<std::sync::Arc<market::engine::MatchingEngine>> =
+    Lazy::new(|| std::sync::Arc::new(market::engine::MatchingEngine::new()));
 
 // Global database context for shared access
 static DB_CTX: Lazy<std::sync::Arc<metrics::DbCtx>> = Lazy::new(|| {
@@ -3059,7 +3152,7 @@ impl Chain {
                 }
             }
         }
-        
+
         let db = match sled::open(path) {
             Ok(d) => d,
             Err(e) => {
@@ -3352,7 +3445,7 @@ fn apply_tokenomics(
     mev_revenue: u128,
 ) -> (u128, u128, u128) {
     let cfg = &chain.tokenomics_cfg;
-    
+
     // 1. Apply official Tokenomics emission if enabled
     let mut miner_emission = 0u128;
     if cfg.enable_emission {
@@ -3360,7 +3453,7 @@ fn apply_tokenomics(
         let halvings = height / cfg.halving_interval_blocks;
         let halving_divisor = 2u128.saturating_pow(halvings as u32);
         miner_emission = cfg.emission_per_block / halving_divisor;
-        
+
         // Credit miner with emission
         if miner_emission > 0 {
             let miner_key = acct_key(miner_addr);
@@ -3368,20 +3461,23 @@ fn apply_tokenomics(
             let new_miner_bal = miner_bal.saturating_add(miner_emission);
             *miner_bal = new_miner_bal;
             drop(miner_bal); // Release borrow before calling chain methods
-            
+
             chain.add_supply(miner_emission);
-            
+
             tracing::debug!(
                 "tokenomics emission: height={}, halvings={}, emission={}, miner_bal={}",
-                height, halvings, miner_emission, new_miner_bal
+                height,
+                halvings,
+                miner_emission,
+                new_miner_bal
             );
         }
     }
-    
+
     // 2. Apply 2-LAND block tithe (split across foundation addresses)
     let tithe_amt = tokenomics::tithe::tithe_amount();
     let (bp_miner, bp_vault, bp_fund, bp_tres) = tokenomics::tithe::tithe_split_bps();
-    
+
     if tithe_amt > 0 {
         // Compute tithe slices (in basis points: 10000 = 100%)
         let tithe_miner = tithe_amt.saturating_mul(bp_miner as u128) / 10_000;
@@ -3389,14 +3485,14 @@ fn apply_tokenomics(
         let tithe_fund = tithe_amt.saturating_mul(bp_fund as u128) / 10_000;
         // Dust goes to treasury
         let tithe_tres = tithe_amt.saturating_sub(tithe_miner + tithe_vault + tithe_fund);
-        
+
         // Credit miner with their tithe share (if any)
         if tithe_miner > 0 {
             let miner_key = acct_key(miner_addr);
             let miner_bal = chain.balances.entry(miner_key.clone()).or_insert(0);
             *miner_bal = miner_bal.saturating_add(tithe_miner);
         }
-        
+
         // Credit vault
         if tithe_vault > 0 {
             let vault_key = acct_key(&cfg.vault_addr);
@@ -3406,7 +3502,7 @@ fn apply_tokenomics(
             }
             chain.add_vault_counter(tithe_vault);
         }
-        
+
         // Credit fund (ops)
         if tithe_fund > 0 {
             let fund_key = acct_key(&cfg.fund_addr);
@@ -3416,7 +3512,7 @@ fn apply_tokenomics(
             }
             chain.add_fund_counter(tithe_fund);
         }
-        
+
         // Credit treasury (founders)
         if tithe_tres > 0 {
             let tres_key = acct_key(&cfg.treasury_addr);
@@ -3426,26 +3522,31 @@ fn apply_tokenomics(
             }
             chain.add_treasury_counter(tithe_tres);
         }
-        
+
         // Tithe increases supply (minted from nothing to grow Vault)
         chain.add_supply(tithe_amt);
-        
+
         tracing::info!(
             "block tithe: height={}, amount={}, splits(miner/vault/fund/tres)={}/{}/{}/{}",
-            height, tithe_amt, tithe_miner, tithe_vault, tithe_fund, tithe_tres
+            height,
+            tithe_amt,
+            tithe_miner,
+            tithe_vault,
+            tithe_fund,
+            tithe_tres
         );
     }
-    
+
     // 3. Distribute transaction fees (fee_burn_bps = % distributed to 50/30/20 split)
     let total_fees = tx_fees_total.saturating_add(mev_revenue);
     let fees_distributed = total_fees.saturating_mul(cfg.fee_burn_bps as u128) / 10_000;
-    
+
     if fees_distributed > 0 {
         // 50% Vault, 30% Fund, 20% Treasury
         let vault_fee = fees_distributed.saturating_mul(50) / 100;
         let fund_fee = fees_distributed.saturating_mul(30) / 100;
         let tres_fee = fees_distributed.saturating_sub(vault_fee + fund_fee);
-        
+
         // Credit vault
         {
             let vault_key = acct_key(&cfg.vault_addr);
@@ -3453,7 +3554,7 @@ fn apply_tokenomics(
             *vault_bal = vault_bal.saturating_add(vault_fee);
         }
         chain.add_vault_counter(vault_fee);
-        
+
         // Credit fund
         {
             let fund_key = acct_key(&cfg.fund_addr);
@@ -3461,7 +3562,7 @@ fn apply_tokenomics(
             *fund_bal = fund_bal.saturating_add(fund_fee);
         }
         chain.add_fund_counter(fund_fee);
-        
+
         // Credit treasury
         {
             let tres_key = acct_key(&cfg.treasury_addr);
@@ -3469,15 +3570,19 @@ fn apply_tokenomics(
             *tres_bal = tres_bal.saturating_add(tres_fee);
         }
         chain.add_treasury_counter(tres_fee);
-        
+
         chain.add_burned(fees_distributed); // Track as "burned" (historical)
-        
+
         tracing::debug!(
             "fee distribution: total_fees={}, distributed={}, vault={}, fund={}, tres={}",
-            total_fees, fees_distributed, vault_fee, fund_fee, tres_fee
+            total_fees,
+            fees_distributed,
+            vault_fee,
+            fund_fee,
+            tres_fee
         );
     }
-    
+
     // 4. Treasury siphon from emission (treasury_bps = % of emission to treasury)
     let treasury_siphon = miner_emission.saturating_mul(cfg.treasury_bps as u128) / 10_000;
     if treasury_siphon > 0 {
@@ -3486,20 +3591,23 @@ fn apply_tokenomics(
         let new_tres_bal = tres_bal.saturating_add(treasury_siphon);
         *tres_bal = new_tres_bal;
         drop(tres_bal); // Release borrow before calling chain methods
-        
+
         chain.add_treasury_counter(treasury_siphon);
-        
+
         tracing::debug!(
             "treasury siphon: height={}, amount={}, treasury_bal={}",
-            height, treasury_siphon, new_tres_bal
+            height,
+            treasury_siphon,
+            new_tres_bal
         );
     }
-    
+
     // 5. Update Prometheus gauges
     PROM_TOK_SUPPLY.set(chain.total_supply() as f64);
-    
+
     // Return (miner_emission + miner_tithe, fees_distributed, treasury_siphon)
-    let miner_total = miner_emission.saturating_add(tithe_amt.saturating_mul(bp_miner as u128) / 10_000);
+    let miner_total =
+        miner_emission.saturating_add(tithe_amt.saturating_mul(bp_miner as u128) / 10_000);
     (miner_total, fees_distributed, treasury_siphon)
 }
 
@@ -4104,12 +4212,12 @@ struct StatusView {
 /// Generate and log compact block statistics
 fn log_compact_block_stats(block: &Block) -> (usize, usize, f64) {
     let compact = p2p::compact::CompactBlock::from_block_auto(block);
-    
+
     // Estimate full block size (rough calculation)
     let full_size = serde_json::to_vec(block).map(|v| v.len()).unwrap_or(0);
     let compact_size = compact.size_bytes();
     let savings = compact.estimated_savings(full_size);
-    
+
     tracing::info!(
         target: "compact_block",
         block_height = block.header.number,
@@ -4121,14 +4229,14 @@ fn log_compact_block_stats(block: &Block) -> (usize, usize, f64) {
         prefilled = compact.prefilled_txs.len(),
         "Generated compact block"
     );
-    
+
     // Update metrics
     PROM_COMPACT_BLOCKS_SENT.inc();
     if full_size > compact_size {
         PROM_COMPACT_BLOCK_BANDWIDTH_SAVED.inc_by((full_size - compact_size) as u64);
     }
     PROM_COMPACT_BLOCK_AVG_SAVINGS_PCT.set((savings * 100.0) as i64);
-    
+
     (full_size, compact_size, savings)
 }
 
@@ -4185,17 +4293,17 @@ async fn main() {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(30)).await;
-            
+
             // Expire old orphans (5 minutes)
             let orphan_pool_arc = p2p::routes::orphan_pool();
             let mut orphan_pool = orphan_pool_arc.lock();
             orphan_pool.expire_older_than(Duration::from_secs(300));
             let orphan_count = orphan_pool.len();
             drop(orphan_pool);
-            
+
             // Update orphan metric
             PROM_P2P_ORPHANS.set(orphan_count as i64);
-            
+
             // Update peer count metric
             let peer_count = {
                 let g = CHAIN.lock();
@@ -4510,60 +4618,72 @@ fn build_app(tok_accounts: crate::accounts::TokenAccountsCfg) -> Router {
     // The feature system is active (banners work), but route gating is pending.
 
     let base = Router::new();
-    
+
     // Create miner state for routes
     let miner_state = routes::miner::MinerState {
         miner: ACTIVE_MINER.clone(),
     };
     let miner_routes = routes::miner::miner_router(miner_state);
-    
+
     // Don't start mining automatically - let user control via miner panel
     eprintln!("⛏️  Miner ready (use /api/miner/start or miner panel to begin)");
-    
+
     // Spawn task to integrate found PoW blocks into main chain
     {
         tokio::spawn(async move {
             let mut rx = FOUND_BLOCKS_CHANNEL.1.lock().await;
             while let Some(pow_block) = rx.recv().await {
-                eprintln!("🔗 Integrating PoW block #{} into chain...", pow_block.header.height);
-                
+                eprintln!(
+                    "🔗 Integrating PoW block #{} into chain...",
+                    pow_block.header.height
+                );
+
                 // Lock chain and execute transactions
                 let mut g = CHAIN.lock();
                 let parent = g.blocks.last().unwrap().clone();
-                
+
                 // Check if this block is stale (another block at this height already integrated)
                 let current_height = parent.header.number;
                 if pow_block.header.height != current_height + 1 {
-                    eprintln!("⚠️  Skipping stale block #{} (chain is already at height {})", pow_block.header.height, current_height);
+                    eprintln!(
+                        "⚠️  Skipping stale block #{} (chain is already at height {})",
+                        pow_block.header.height, current_height
+                    );
                     drop(g);
                     continue;
                 }
-                
+
                 // Select transactions from mempool
                 let weight_limit = g.limits.block_weight_limit;
                 let txs = mempool::build_block_from_mempool(&mut g, 100, weight_limit);
-                
+
                 // Execute transactions (without mining)
                 // Get miner address from global setting
                 let miner_addr = MINER_ADDRESS.lock().clone();
                 let miner_key = acct_key(&miner_addr);
                 g.balances.entry(miner_key.clone()).or_insert(0);
                 g.nonces.entry(miner_key.clone()).or_insert(0);
-                
+
                 let mut balances = g.balances.clone();
                 let mut nonces = g.nonces.clone();
                 let mut gm = g.gamemaster.clone();
-                
+
                 // Execute all transactions
                 for tx in &txs {
-                    let _ = execute_tx_with_nonce_and_fees(tx, &mut balances, &mut nonces, &miner_key, &mut gm);
+                    let _ = execute_tx_with_nonce_and_fees(
+                        tx,
+                        &mut balances,
+                        &mut nonces,
+                        &miner_key,
+                        &mut gm,
+                    );
                 }
-                
+
                 // Update chain state temporarily to apply tokenomics
                 g.balances = balances.clone();
                 g.nonces = nonces.clone();
                 g.gamemaster = gm.clone();
-                
+
                 // Apply tokenomics (emission + tithe) for this block
                 let (_miner_reward, _fees_distributed, _treasury_total) = apply_tokenomics(
                     &mut g,
@@ -4572,12 +4692,12 @@ fn build_app(tok_accounts: crate::accounts::TokenAccountsCfg) -> Router {
                     0, // tx fees - minimal for now
                     0, // no MEV in PoW blocks
                 );
-                
+
                 // Get updated state after tokenomics
                 balances = g.balances.clone();
                 nonces = g.nonces.clone();
                 gm = g.gamemaster.clone();
-                
+
                 // Compute state root
                 let new_state_root = compute_state_root(&balances, &gm);
                 let tx_root = if txs.is_empty() {
@@ -4585,7 +4705,7 @@ fn build_app(tok_accounts: crate::accounts::TokenAccountsCfg) -> Router {
                 } else {
                     tx_root_placeholder(&txs)
                 };
-                
+
                 // Create block header with PoW values
                 let block_header = BlockHeader {
                     parent_hash: parent.header.pow_hash.clone(),
@@ -4604,7 +4724,7 @@ fn build_app(tok_accounts: crate::accounts::TokenAccountsCfg) -> Router {
                         g.limits.block_weight_limit,
                     ),
                 };
-                
+
                 // Create block
                 let block = Block {
                     header: block_header,
@@ -4612,44 +4732,44 @@ fn build_app(tok_accounts: crate::accounts::TokenAccountsCfg) -> Router {
                     weight: 0,
                     agg_signature: None,
                 };
-                
+
                 // Update chain state
                 g.balances = balances;
                 g.nonces = nonces;
                 g.gamemaster = gm;
                 g.blocks.push(block.clone());
-                
+
                 // Prune mempool
                 mempool::prune_mempool(&mut g);
-                
+
                 // Update metrics
                 PROM_VISION_HEIGHT.set(block.header.number as i64);
-                
+
                 drop(g);
-                
+
                 // Clone block for async operations
                 let block_for_announce = block.clone();
                 let block_for_broadcast = block.clone();
                 let block_for_compact = block.clone();
                 let block_for_compact_announce = block.clone();
-                
+
                 eprintln!("✅ Block #{} integrated into chain", block.header.number);
-                
+
                 // Generate and log compact block statistics
                 tokio::spawn(async move {
                     log_compact_block_stats(&block_for_compact);
                 });
-                
+
                 // Announce block to peers (headers-first) - spawn as separate task
                 tokio::spawn(async move {
                     p2p::routes::announce_block_to_peers(&block_for_announce).await;
                 });
-                
+
                 // Announce compact block to peers (Phase 2)
                 tokio::spawn(async move {
                     p2p::routes::announce_compact_block_to_peers(&block_for_compact_announce).await;
                 });
-                
+
                 // Broadcast block to peers (legacy)
                 if let Some(blk_sender) = BLOCK_BCAST_SENDER.get() {
                     let _ = blk_sender.try_send(block_for_broadcast);
@@ -4658,34 +4778,34 @@ fn build_app(tok_accounts: crate::accounts::TokenAccountsCfg) -> Router {
         });
     }
     eprintln!("⛏️  Block integrator started");
-    
+
     // Spawn background task to continuously feed mining jobs with mempool transactions
     {
         let miner = ACTIVE_MINER.clone();
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-                
+
                 // Get current chain state and build mining job
                 let (height, prev_hash, mempool_txs, height_map, epoch_seed) = {
                     let mut g = CHAIN.lock();
                     let last_block = g.blocks.last().unwrap();
                     let height = last_block.header.number + 1;
                     let prev_hash_str = &last_block.header.pow_hash;
-                    
+
                     // Parse pow_hash string to [u8; 32]
                     let mut prev_hash = [0u8; 32];
                     if let Ok(decoded) = hex::decode(prev_hash_str.trim_start_matches("0x")) {
                         let len = decoded.len().min(32);
                         prev_hash[..len].copy_from_slice(&decoded[..len]);
                     }
-                    
+
                     // Calculate epoch seed (hash of block at epoch boundary)
                     // Epoch blocks = 32 (from VisionXParams)
                     let epoch_blocks = 32u64;
                     let epoch = height / epoch_blocks;
                     let epoch_start_height = epoch * epoch_blocks;
-                    
+
                     let epoch_seed = if epoch_start_height == 0 {
                         // Genesis epoch uses all zeros
                         [0u8; 32]
@@ -4693,7 +4813,9 @@ fn build_app(tok_accounts: crate::accounts::TokenAccountsCfg) -> Router {
                         // Find the block at epoch boundary
                         let epoch_block = &g.blocks[epoch_start_height as usize];
                         let mut seed = [0u8; 32];
-                        if let Ok(decoded) = hex::decode(epoch_block.header.pow_hash.trim_start_matches("0x")) {
+                        if let Ok(decoded) =
+                            hex::decode(epoch_block.header.pow_hash.trim_start_matches("0x"))
+                        {
                             let len = decoded.len().min(32);
                             seed[..len].copy_from_slice(&decoded[..len]);
                         }
@@ -4702,18 +4824,20 @@ fn build_app(tok_accounts: crate::accounts::TokenAccountsCfg) -> Router {
                         // Fallback to genesis
                         [0u8; 32]
                     };
-                    
+
                     // Select transactions from mempool
                     let max_txs = 100;
                     let weight_limit = g.limits.block_weight_limit;
                     let height_map = g.mempool_height.clone();
-                    let mempool_txs = mempool::build_block_from_mempool(&mut g, max_txs, weight_limit);
-                    
+                    let mempool_txs =
+                        mempool::build_block_from_mempool(&mut g, max_txs, weight_limit);
+
                     (height, prev_hash, mempool_txs, height_map, epoch_seed)
                 };
-                
+
                 // Convert Tx to consensus_pow::Transaction, filtering by confirmation depth (5+ blocks)
-                let transactions: Vec<consensus_pow::Transaction> = mempool_txs.iter()
+                let transactions: Vec<consensus_pow::Transaction> = mempool_txs
+                    .iter()
                     .filter(|tx| {
                         // Only include transactions with 5+ block confirmations
                         let tx_hash = hex::encode(tx_hash(tx));
@@ -4740,13 +4864,13 @@ fn build_app(tok_accounts: crate::accounts::TokenAccountsCfg) -> Router {
                         }
                     })
                     .collect();
-                
+
                 // Update mining job with real transactions and epoch seed
                 miner.update_job(height, prev_hash, transactions, epoch_seed);
             }
         });
     }
-    
+
     let mut svc = base
         .merge(miner_routes) // Add miner control routes
         .route("/panel_status", get(panel_status))
@@ -5038,7 +5162,7 @@ fn build_app(tok_accounts: crate::accounts::TokenAccountsCfg) -> Router {
     {
         svc = svc
             .route("/wallet/devices", get(list_hardware_devices))
-            .route("/wallet/sign_hw", post(sign_transaction_hw))  // Renamed to avoid conflict
+            .route("/wallet/sign_hw", post(sign_transaction_hw)) // Renamed to avoid conflict
             .route("/wallet/derive", post(derive_address_hw))
             .route("/wallet/addresses/:device_id", get(get_device_addresses))
             .route("/wallet/device/:device_id", get(device_info))
@@ -5325,10 +5449,7 @@ fn build_app(tok_accounts: crate::accounts::TokenAccountsCfg) -> Router {
             "/tokenomics/emission/:height",
             get(tokenomics_emission_handler),
         )
-        .route(
-            "/foundation/addresses",
-            get(foundation_addresses_handler),
-        )
+        .route("/foundation/addresses", get(foundation_addresses_handler))
         .route(
             "/admin/tokenomics/config",
             post(admin_tokenomics_config_handler),
@@ -5547,7 +5668,7 @@ fn build_app(tok_accounts: crate::accounts::TokenAccountsCfg) -> Router {
                 .join("public")
         });
     info!(public_dir = %public_dir.display(), "serving static files from");
-    
+
     // Serve static files (panel.html, explorer.html, etc.)
     let static_service = ServeDir::new(&public_dir);
 
@@ -5563,9 +5684,9 @@ fn build_app(tok_accounts: crate::accounts::TokenAccountsCfg) -> Router {
                 .join("dist")
         });
     info!(wallet_dir = %wallet_dir.display(), "serving wallet from");
-    
-    let wallet_service = ServeDir::new(&wallet_dir)
-        .fallback(ServeFile::new(wallet_dir.join("index.html")));
+
+    let wallet_service =
+        ServeDir::new(&wallet_dir).fallback(ServeFile::new(wallet_dir.join("index.html")));
 
     // Root redirect to standalone miner panel
     use axum::response::Redirect;
@@ -5579,7 +5700,10 @@ fn build_app(tok_accounts: crate::accounts::TokenAccountsCfg) -> Router {
     Router::new()
         .nest("/api", api)
         .nest_service("/app", wallet_service)
-        .route("/panel", get(|| async { Redirect::permanent("/panel.html") }))
+        .route(
+            "/panel",
+            get(|| async { Redirect::permanent("/panel.html") }),
+        )
         .route("/", get(|| async { Redirect::permanent("/app") }))
         .fallback_service(static_service)
         .merge(p2p::routes::p2p_router())
@@ -5979,22 +6103,25 @@ use std::collections::HashMap;
 // GET /api/market/exchange/book?chain=BTC&depth=200
 async fn exchange_book(Query(params): Query<HashMap<String, String>>) -> Json<serde_json::Value> {
     let chain = params.get("chain").map(|s| s.as_str()).unwrap_or("BTC");
-    let depth: usize = params.get("depth").and_then(|s| s.parse().ok()).unwrap_or(50);
-    
+    let depth: usize = params
+        .get("depth")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(50);
+
     let pair = market::engine::TradingPair::new(chain, "LAND");
     let (bids, asks) = MATCHING_ENGINE.get_book(&pair, depth);
-    
+
     // Convert to price/size tuples for frontend compatibility
     let bids_formatted: Vec<(f64, f64)> = bids
         .iter()
         .map(|level| ((level.price as f64) / 1e8, (level.size as f64) / 1e8))
         .collect();
-    
+
     let asks_formatted: Vec<(f64, f64)> = asks
         .iter()
         .map(|level| ((level.price as f64) / 1e8, (level.size as f64) / 1e8))
         .collect();
-    
+
     Json(serde_json::json!({
         "bids": bids_formatted,
         "asks": asks_formatted,
@@ -6005,9 +6132,9 @@ async fn exchange_book(Query(params): Query<HashMap<String, String>>) -> Json<se
 // GET /api/market/exchange/ticker?chain=BTC
 async fn exchange_ticker(Query(params): Query<HashMap<String, String>>) -> Json<serde_json::Value> {
     let chain = params.get("chain").map(|s| s.as_str()).unwrap_or("BTC");
-    
+
     let pair = market::engine::TradingPair::new(chain, "LAND");
-    
+
     if let Some(ticker) = MATCHING_ENGINE.get_ticker(&pair) {
         Json(serde_json::json!({
             "chain": chain,
@@ -6033,11 +6160,14 @@ async fn exchange_ticker(Query(params): Query<HashMap<String, String>>) -> Json<
 // GET /api/market/exchange/trades?chain=BTC&limit=50
 async fn exchange_trades(Query(params): Query<HashMap<String, String>>) -> Json<serde_json::Value> {
     let chain = params.get("chain").map(|s| s.as_str()).unwrap_or("BTC");
-    let limit: usize = params.get("limit").and_then(|s| s.parse().ok()).unwrap_or(50);
-    
+    let limit: usize = params
+        .get("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(50);
+
     let pair = market::engine::TradingPair::new(chain, "LAND");
     let trades = MATCHING_ENGINE.get_trades(&pair, limit);
-    
+
     let trades_formatted: Vec<serde_json::Value> = trades
         .iter()
         .map(|t| {
@@ -6051,18 +6181,20 @@ async fn exchange_trades(Query(params): Query<HashMap<String, String>>) -> Json<
             })
         })
         .collect();
-    
+
     Json(serde_json::json!(trades_formatted))
 }
 
 // GET /api/market/exchange/my/orders?owner=demo-user-1
-async fn exchange_my_orders(Query(params): Query<HashMap<String, String>>) -> Json<serde_json::Value> {
+async fn exchange_my_orders(
+    Query(params): Query<HashMap<String, String>>,
+) -> Json<serde_json::Value> {
     let owner = params.get("owner").map(|s| s.as_str()).unwrap_or("");
     let chain = params.get("chain").map(|s| s.as_str()).unwrap_or("BTC");
-    
+
     let pair = market::engine::TradingPair::new(chain, "LAND");
     let orders = MATCHING_ENGINE.get_user_orders(&pair, owner);
-    
+
     let orders_formatted: Vec<serde_json::Value> = orders
         .iter()
         .map(|o| {
@@ -6079,39 +6211,54 @@ async fn exchange_my_orders(Query(params): Query<HashMap<String, String>>) -> Js
             })
         })
         .collect();
-    
+
     Json(serde_json::json!(orders_formatted))
 }
 
 // POST /api/market/exchange/order
-async fn exchange_create_order(Json(payload): Json<serde_json::Value>) -> (StatusCode, Json<serde_json::Value>) {
+async fn exchange_create_order(
+    Json(payload): Json<serde_json::Value>,
+) -> (StatusCode, Json<serde_json::Value>) {
     // Parse order parameters
-    let owner = payload.get("owner").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let chain = payload.get("chain").and_then(|v| v.as_str()).unwrap_or("BTC");
+    let owner = payload
+        .get("owner")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let chain = payload
+        .get("chain")
+        .and_then(|v| v.as_str())
+        .unwrap_or("BTC");
     let price_float = payload.get("price").and_then(|v| v.as_f64()).unwrap_or(0.0);
     let size_float = payload.get("size").and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let post_only = payload.get("post_only").and_then(|v| v.as_bool()).unwrap_or(false);
+    let post_only = payload
+        .get("post_only")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let tif_str = payload.get("tif").and_then(|v| v.as_str()).unwrap_or("GTC");
-    let side_str = payload.get("side").and_then(|v| v.as_str()).unwrap_or("sell");
-    
+    let side_str = payload
+        .get("side")
+        .and_then(|v| v.as_str())
+        .unwrap_or("sell");
+
     // Validate inputs
     if owner.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "Missing owner"}))
+            Json(serde_json::json!({"error": "Missing owner"})),
         );
     }
     if price_float <= 0.0 || size_float <= 0.0 {
         return (
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "Invalid price or size"}))
+            Json(serde_json::json!({"error": "Invalid price or size"})),
         );
     }
-    
+
     // Convert to satoshi units (8 decimal places)
     let price = (price_float * 1e8) as u64;
     let size = (size_float * 1e8) as u64;
-    
+
     // Parse time in force
     let tif = match tif_str {
         "IOC" => market::engine::TimeInForce::IOC,
@@ -6119,21 +6266,25 @@ async fn exchange_create_order(Json(payload): Json<serde_json::Value>) -> (Statu
         "GTT" => market::engine::TimeInForce::GTT,
         _ => market::engine::TimeInForce::GTC,
     };
-    
+
     // Create order
-    let order_id = format!("ord-{}-{}", 
-        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(),
+    let order_id = format!(
+        "ord-{}-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis(),
         rand::random::<u16>()
     );
-    
+
     let pair = market::engine::TradingPair::new(chain, "LAND");
-    
+
     // Parse side
     let side = match side_str.to_lowercase().as_str() {
         "buy" => market::engine::Side::Buy,
         _ => market::engine::Side::Sell,
     };
-    
+
     let order = market::engine::Order {
         id: order_id.clone(),
         owner: owner.clone(),
@@ -6148,7 +6299,7 @@ async fn exchange_create_order(Json(payload): Json<serde_json::Value>) -> (Statu
         post_only,
         timestamp: chrono::Utc::now().timestamp_millis() as u64,
     };
-    
+
     // Place order
     match MATCHING_ENGINE.place_limit_order(order) {
         Ok(trades) => {
@@ -6164,7 +6315,7 @@ async fn exchange_create_order(Json(payload): Json<serde_json::Value>) -> (Statu
                     })
                 })
                 .collect();
-            
+
             (
                 StatusCode::OK,
                 Json(serde_json::json!({
@@ -6172,50 +6323,61 @@ async fn exchange_create_order(Json(payload): Json<serde_json::Value>) -> (Statu
                     "order_id": order_id,
                     "trades": trades_formatted,
                     "message": if trades.is_empty() { "Order placed on book" } else { "Order partially/fully filled" }
-                }))
+                })),
             )
         }
-        Err(err) => {
-            (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({
-                    "ok": false,
-                    "error": err
-                }))
-            )
-        }
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": err
+            })),
+        ),
     }
 }
 
 // POST /api/market/exchange/buy
-async fn exchange_buy(Json(payload): Json<serde_json::Value>) -> (StatusCode, Json<serde_json::Value>) {
-    let owner = payload.get("owner").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let chain = payload.get("chain").and_then(|v| v.as_str()).unwrap_or("BTC");
+async fn exchange_buy(
+    Json(payload): Json<serde_json::Value>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let owner = payload
+        .get("owner")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let chain = payload
+        .get("chain")
+        .and_then(|v| v.as_str())
+        .unwrap_or("BTC");
     let size_float = payload.get("size").and_then(|v| v.as_f64());
-    
+
     if owner.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "Missing owner"}))
+            Json(serde_json::json!({"error": "Missing owner"})),
         );
     }
-    
+
     let size = size_float.map(|s| (s * 1e8) as u64).unwrap_or(0);
-    
+
     if size == 0 {
         return (
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "Invalid size"}))
+            Json(serde_json::json!({"error": "Invalid size"})),
         );
     }
-    
-    let order_id = format!("mkt-{}-{}", 
-        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(),
+
+    let order_id = format!(
+        "mkt-{}-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis(),
         rand::random::<u16>()
     );
-    
+
     let pair = market::engine::TradingPair::new(chain, "LAND");
-    
+
     let order = market::engine::Order {
         id: order_id.clone(),
         owner: owner.clone(),
@@ -6230,7 +6392,7 @@ async fn exchange_buy(Json(payload): Json<serde_json::Value>) -> (StatusCode, Js
         post_only: false,
         timestamp: chrono::Utc::now().timestamp_millis() as u64,
     };
-    
+
     match MATCHING_ENGINE.place_market_order(order) {
         Ok(trades) => {
             let trades_formatted: Vec<serde_json::Value> = trades
@@ -6245,7 +6407,7 @@ async fn exchange_buy(Json(payload): Json<serde_json::Value>) -> (StatusCode, Js
                     })
                 })
                 .collect();
-            
+
             let total_filled: u64 = trades.iter().map(|t| t.size).sum();
             let avg_price = if !trades.is_empty() {
                 let total_cost: u64 = trades.iter().map(|t| t.price * t.size / 1e8 as u64).sum();
@@ -6253,7 +6415,7 @@ async fn exchange_buy(Json(payload): Json<serde_json::Value>) -> (StatusCode, Js
             } else {
                 0.0
             };
-            
+
             (
                 StatusCode::OK,
                 Json(serde_json::json!({
@@ -6262,18 +6424,16 @@ async fn exchange_buy(Json(payload): Json<serde_json::Value>) -> (StatusCode, Js
                     "filled": (total_filled as f64) / 1e8,
                     "avg_price": avg_price,
                     "message": "Market buy executed"
-                }))
+                })),
             )
         }
-        Err(err) => {
-            (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({
-                    "ok": false,
-                    "error": err
-                }))
-            )
-        }
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": err
+            })),
+        ),
     }
 }
 
@@ -6282,7 +6442,7 @@ async fn get_vault() -> Json<serde_json::Value> {
     // Get recent receipts from the receipts tree
     let db = &DB_CTX.db;
     let receipts_tree = db.open_tree("receipts").ok();
-    
+
     let mut receipts = Vec::new();
     if let Some(tree) = receipts_tree {
         let mut count = 0;
@@ -6310,12 +6470,12 @@ async fn get_vault() -> Json<serde_json::Value> {
             }
         }
     }
-    
+
     let g = CHAIN.lock();
     let height = g.blocks.len() as u64;
     let total_supply: u128 = g.balances.values().sum();
     drop(g);
-    
+
     Json(serde_json::json!({
         "receipts": receipts,
         "height": height,
@@ -6354,7 +6514,7 @@ async fn get_blocks() -> Json<serde_json::Value> {
     let chain = CHAIN.lock();
     let current_height = chain.blocks.len().saturating_sub(1);
     let start_height = current_height.saturating_sub(19).max(1); // Last 20 blocks
-    
+
     let mut blocks = Vec::new();
     for h in start_height..=current_height {
         if let Some(block) = chain.blocks.get(h) {
@@ -6367,7 +6527,7 @@ async fn get_blocks() -> Json<serde_json::Value> {
         }
     }
     blocks.reverse(); // Most recent first
-    
+
     // Calculate network hashrate from recent blocks
     let hashrate = if blocks.len() >= 2 {
         // Get actual blocks for difficulty
@@ -6379,11 +6539,11 @@ async fn get_blocks() -> Json<serde_json::Value> {
                 count += 1;
             }
         }
-        
+
         let first_idx = blocks.len() - 1;
-        let time_diff = blocks[0]["timestamp"].as_u64().unwrap_or(1) 
-                      - blocks[first_idx]["timestamp"].as_u64().unwrap_or(0);
-        
+        let time_diff = blocks[0]["timestamp"].as_u64().unwrap_or(1)
+            - blocks[first_idx]["timestamp"].as_u64().unwrap_or(0);
+
         if time_diff > 0 && count > 0 {
             // Hashrate = (average_difficulty * number_of_blocks) / time_span
             let avg_difficulty = total_difficulty / count;
@@ -6394,7 +6554,7 @@ async fn get_blocks() -> Json<serde_json::Value> {
     } else {
         0
     };
-    
+
     Json(serde_json::json!({
         "blocks": blocks,
         "hashrate": hashrate
@@ -6897,7 +7057,7 @@ async fn submit_tx(
             }
             let th = hex::encode(tx_hash(&tx));
             g.mempool_ts.insert(th.clone(), now_ts());
-            
+
             // Track block height when transaction enters mempool
             let current_height = g.blocks.last().unwrap().header.number;
             g.mempool_height.insert(th.clone(), current_height);
@@ -6976,12 +7136,10 @@ async fn submit_tx(
 
 // ----- Simplified Wallet Send API -----
 /// POST /wallet/send - Simplified transaction submission
-/// 
+///
 /// This is a placeholder that currently requires external signing.
 /// For now, use POST /submit_tx directly with a fully signed transaction.
-async fn wallet_send(
-    Json(_req): Json<serde_json::Value>,
-) -> Json<serde_json::Value> {
+async fn wallet_send(Json(_req): Json<serde_json::Value>) -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "error": {
             "code": "not_implemented",
@@ -6992,13 +7150,13 @@ async fn wallet_send(
 }
 
 /// POST /wallet/sign - Sign a transaction with a private key
-/// 
+///
 /// Request body: { "tx": { nonce, sender_pubkey, ... }, "private_key": "hex_string" }
-/// 
+///
 /// This endpoint takes an unsigned transaction and a private key (hex),
 /// signs the transaction, and returns the signature + tx_hash.
 /// The frontend can then submit the signed tx via /submit_tx.
-/// 
+///
 /// **Security Warning**: Only use this on localhost for development!
 /// Never expose private keys to remote servers in production.
 async fn wallet_sign_tx(
@@ -7019,7 +7177,7 @@ async fn wallet_sign_tx(
             );
         }
     };
-    
+
     let private_key_hex = match req.get("private_key").and_then(|v| v.as_str()) {
         Some(s) => s,
         None => {
@@ -7034,7 +7192,7 @@ async fn wallet_sign_tx(
             );
         }
     };
-    
+
     // Parse transaction
     let mut tx: Tx = match serde_json::from_value(tx_value) {
         Ok(t) => t,
@@ -7050,13 +7208,13 @@ async fn wallet_sign_tx(
             );
         }
     };
-    
+
     // Clear any existing signature
     tx.sig = String::new();
-    
+
     // Get signable bytes
     let msg = signable_tx_bytes(&tx);
-    
+
     // Parse private key (32 bytes)
     let sk_bytes = match decode_hex32(private_key_hex) {
         Ok(b) => b,
@@ -7072,7 +7230,7 @@ async fn wallet_sign_tx(
             );
         }
     };
-    
+
     // Parse public key from tx.sender_pubkey
     let pk_bytes = match decode_hex32(&tx.sender_pubkey) {
         Ok(b) => b,
@@ -7088,12 +7246,12 @@ async fn wallet_sign_tx(
             );
         }
     };
-    
+
     // ed25519-dalek v2.x requires SigningKey (secret + public key)
     // SigningKey::from_keypair_bytes expects 64 bytes: [32 secret][32 public]
     let mut keypair_bytes = sk_bytes.to_vec();
     keypair_bytes.extend_from_slice(&pk_bytes);
-    
+
     let keypair_array: [u8; 64] = match keypair_bytes.try_into() {
         Ok(arr) => arr,
         Err(_) => {
@@ -7108,7 +7266,7 @@ async fn wallet_sign_tx(
             );
         }
     };
-    
+
     let signing_key = match ed25519_dalek::SigningKey::from_keypair_bytes(&keypair_array) {
         Ok(k) => k,
         Err(e) => {
@@ -7123,13 +7281,13 @@ async fn wallet_sign_tx(
             );
         }
     };
-    
+
     let sig: ed25519_dalek::Signature = signing_key.sign(&msg);
     let signature_hex = hex::encode(sig.to_bytes());
-    
+
     // Calculate tx hash
     let tx_hash = hex::encode(blake3::hash(&msg).as_bytes());
-    
+
     // Return signature and hash
     (
         StatusCode::OK,
@@ -7143,10 +7301,10 @@ async fn wallet_sign_tx(
 }
 
 /// GET /mempool - List all pending transactions
-/// 
+///
 /// Returns JSON array of transaction hashes and details from both
 /// critical and bulk mempool lanes.
-/// 
+///
 /// Query params:
 /// - limit: max number of txs to return (default: 100, max: 1000)
 /// - lane: filter by lane ("critical", "bulk", or "all")
@@ -7158,19 +7316,19 @@ async fn get_mempool(
         .and_then(|s| s.parse().ok())
         .unwrap_or(100)
         .min(1000);
-    
+
     let lane = params.get("lane").map(|s| s.as_str()).unwrap_or("all");
 
     let g = CHAIN.lock();
-    
+
     let mut txs = Vec::new();
-    
+
     // Collect from critical lane
     if lane == "all" || lane == "critical" {
         for tx in g.mempool_critical.iter().take(limit) {
             let tx_hash = hex::encode(tx_hash(tx));
             let entry_height = g.mempool_height.get(&tx_hash).copied();
-            
+
             txs.push(serde_json::json!({
                 "tx_hash": tx_hash,
                 "sender": tx.sender_pubkey,
@@ -7186,20 +7344,20 @@ async fn get_mempool(
                     entry_height.map(|e| h.saturating_sub(e))
                 })
             }));
-            
+
             if txs.len() >= limit {
                 break;
             }
         }
     }
-    
+
     // Collect from bulk lane
     if (lane == "all" || lane == "bulk") && txs.len() < limit {
         let remaining = limit - txs.len();
         for tx in g.mempool_bulk.iter().take(remaining) {
             let tx_hash = hex::encode(tx_hash(tx));
             let entry_height = g.mempool_height.get(&tx_hash).copied();
-            
+
             txs.push(serde_json::json!({
                 "tx_hash": tx_hash,
                 "sender": tx.sender_pubkey,
@@ -7217,7 +7375,7 @@ async fn get_mempool(
             }));
         }
     }
-    
+
     let stats = serde_json::json!({
         "critical_count": g.mempool_critical.len(),
         "bulk_count": g.mempool_bulk.len(),
@@ -8455,18 +8613,22 @@ async fn get_block_tx_hashes(Path(height): Path<u64>) -> Json<serde_json::Value>
 }
 async fn get_tx(Path(hash_hex): Path<String>) -> Json<serde_json::Value> {
     let g = CHAIN.lock();
-    
+
     // First check mempool for pending transactions
     for tx in g.mempool_critical.iter().chain(g.mempool_bulk.iter()) {
         let tx_hash_str = hex::encode(tx_hash(tx));
         if tx_hash_str == hash_hex {
-            let lane = if g.mempool_critical.iter().any(|t| hex::encode(tx_hash(t)) == hash_hex) {
+            let lane = if g
+                .mempool_critical
+                .iter()
+                .any(|t| hex::encode(tx_hash(t)) == hash_hex)
+            {
                 "critical"
             } else {
                 "bulk"
             };
             let entry_height = g.mempool_height.get(&tx_hash_str).copied();
-            
+
             return Json(serde_json::json!({
                 "status": "pending",
                 "lane": lane,
@@ -8479,7 +8641,7 @@ async fn get_tx(Path(hash_hex): Path<String>) -> Json<serde_json::Value> {
             }));
         }
     }
-    
+
     // Then check confirmed transactions in blocks
     for b in g.blocks.iter().rev() {
         for tx in &b.txs {
@@ -10670,7 +10832,8 @@ async fn sync_checkpoint(
                         std::time::Duration::from_secs(5),
                         HTTP.get(format!("{}/block/{}", src_clone, h)).send(),
                     )
-                    .await {
+                    .await
+                    {
                         if let Ok(block_json) = resp.text().await {
                             if let Ok(block) = serde_json::from_str::<Block>(&block_json) {
                                 blocks.push((h, block, block_json.len() as u64));
@@ -11837,7 +12000,11 @@ fn generate_merkle_proof(leaves: &[String], leaf_index: usize) -> Option<MerkleP
     let mut index = leaf_index;
 
     for level in levels.iter().take(levels.len() - 1) {
-        let sibling_index = if index.is_multiple_of(2) { index + 1 } else { index - 1 };
+        let sibling_index = if index.is_multiple_of(2) {
+            index + 1
+        } else {
+            index - 1
+        };
 
         if sibling_index < level.len() {
             siblings.push(level[sibling_index].clone());
@@ -11949,8 +12116,7 @@ fn generate_state_proof(db: &Db, key: &str) -> Option<MerkleProof> {
     for (k, v) in db.scan_prefix("bal:".as_bytes()).flatten() {
         if let Ok(state_key) = String::from_utf8(k.to_vec()) {
             let item_hash = hex::encode(
-                blake3::hash(format!("{}:{}", state_key, hex::encode(&v)).as_bytes())
-                    .as_bytes(),
+                blake3::hash(format!("{}:{}", state_key, hex::encode(&v)).as_bytes()).as_bytes(),
             );
 
             if state_key == key {
@@ -11965,8 +12131,7 @@ fn generate_state_proof(db: &Db, key: &str) -> Option<MerkleProof> {
     for (k, v) in db.scan_prefix("nonce:".as_bytes()).flatten() {
         if let Ok(state_key) = String::from_utf8(k.to_vec()) {
             let item_hash = hex::encode(
-                blake3::hash(format!("{}:{}", state_key, hex::encode(&v)).as_bytes())
-                    .as_bytes(),
+                blake3::hash(format!("{}:{}", state_key, hex::encode(&v)).as_bytes()).as_bytes(),
             );
 
             if state_key == key {
@@ -13002,8 +13167,10 @@ fn generate_zk_proof(
     let proof_hash = hash_bytes(&proof_material);
 
     // Simulate proof generation (in practice, this would be SNARK/STARK proving)
-    let proof_data = [proof_hash.to_vec(),
-        public_inputs.join(",").as_bytes().to_vec()]
+    let proof_data = [
+        proof_hash.to_vec(),
+        public_inputs.join(",").as_bytes().to_vec(),
+    ]
     .concat();
 
     let proof_id = format!("zk_{}", hex::encode(&proof_hash[..16]));
@@ -13496,16 +13663,14 @@ struct Proposal {
     proposal_data: Option<serde_json::Value>, // NEW: type-specific data
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[derive(Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 enum ProposalType {
     #[default]
-    General,          // Generic text proposals
+    General, // Generic text proposals
     TokenomicsConfig, // Tokenomics parameter changes
     TreasurySpend,    // Treasury fund allocation
     NetworkUpgrade,   // Protocol upgrades
 }
-
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct Vote {
@@ -13914,10 +14079,7 @@ fn cluster_addresses() -> Vec<AddressCluster> {
             let sender = tx.sender_pubkey.chars().take(20).collect::<String>();
             let interaction = format!("{}::{}", tx.module, tx.method);
 
-            address_modules
-                .entry(sender)
-                .or_default()
-                .push(interaction);
+            address_modules.entry(sender).or_default().push(interaction);
         }
     }
 
@@ -15625,9 +15787,7 @@ impl QueryRoot {
         // Apply filters
         if let Some(f) = filter {
             filtered_blocks.retain(|(_, b)| {
-                
-                f
-                    .min_height
+                f.min_height
                     .map(|min| b.header.number >= min as u64)
                     .unwrap_or(true)
                     && f.max_height
@@ -18710,11 +18870,19 @@ fn build_merkle_path(leaves: &[[u8; 32]], target_index: usize) -> Vec<MerkleProo
     let mut index = target_index;
 
     while level.len() > 1 {
-        let sibling_index = if index.is_multiple_of(2) { index + 1 } else { index - 1 };
+        let sibling_index = if index.is_multiple_of(2) {
+            index + 1
+        } else {
+            index - 1
+        };
 
         if sibling_index < level.len() {
             let sibling_hash = hex::encode(level[sibling_index]);
-            let position = if index.is_multiple_of(2) { "right" } else { "left" };
+            let position = if index.is_multiple_of(2) {
+                "right"
+            } else {
+                "left"
+            };
             path.push(MerkleProofNode {
                 hash: sibling_hash,
                 position: position.to_string(),
@@ -18843,7 +19011,10 @@ fn get_light_client_stats(db: &Db) -> Result<LightClientStats, String> {
     let mut latest_height = 0u64;
 
     // Count synced headers
-    for (key, _) in db.scan_prefix(LIGHT_CLIENT_HEADER_PREFIX.as_bytes()).flatten() {
+    for (key, _) in db
+        .scan_prefix(LIGHT_CLIENT_HEADER_PREFIX.as_bytes())
+        .flatten()
+    {
         headers_synced += 1;
         if let Ok(key_str) = std::str::from_utf8(&key) {
             if let Some(height_str) = key_str.strip_prefix(LIGHT_CLIENT_HEADER_PREFIX) {
@@ -19284,9 +19455,7 @@ fn deploy_evm_contract(
     match result {
         Ok(exec_result) => {
             match exec_result {
-                ExecutionResult::Success {
-                    output,  ..
-                } => {
+                ExecutionResult::Success { output, .. } => {
                     let deployed_code = match output {
                         Output::Create(code, _) => code.to_vec(),
                         _ => Vec::new(),
@@ -19413,9 +19582,7 @@ fn call_evm_contract(
 
     match result {
         Ok(exec_result) => match exec_result {
-            ExecutionResult::Success {
-                output,  ..
-            } => {
+            ExecutionResult::Success { output, .. } => {
                 let return_data = match output {
                     Output::Call(data) => data.to_vec(),
                     _ => Vec::new(),
@@ -21613,7 +21780,11 @@ fn generate_merkle_path(tree_levels: &[Vec<String>], chunk_index: usize) -> Vec<
     let mut index = chunk_index;
 
     for level in tree_levels.iter().take(tree_levels.len() - 1) {
-        let sibling_index = if index.is_multiple_of(2) { index + 1 } else { index - 1 };
+        let sibling_index = if index.is_multiple_of(2) {
+            index + 1
+        } else {
+            index - 1
+        };
 
         if sibling_index < level.len() {
             path.push(level[sibling_index].clone());
@@ -22718,10 +22889,12 @@ fn vote_on_proposal(
 
     // Auto-approve if votes_for exceeds threshold (simple majority)
     let total_votes = proposal.votes_for + proposal.votes_against;
-    if total_votes > 0 && proposal.votes_for > proposal.votes_against
-        && proposal.votes_for as f64 / total_votes as f64 > 0.66 {
-            proposal.status = UpgradeProposalStatus::Approved;
-        }
+    if total_votes > 0
+        && proposal.votes_for > proposal.votes_against
+        && proposal.votes_for as f64 / total_votes as f64 > 0.66
+    {
+        proposal.status = UpgradeProposalStatus::Approved;
+    }
 
     // Update in DB
     let key = format!("{}{}", UPGRADE_PROPOSAL_PREFIX, proposal_id);
@@ -24229,7 +24402,7 @@ fn calculate_staking_rewards(staked_amount: u128, duration_seconds: u64) -> u128
     let config = TOKENOMICS_CONFIG.lock().clone();
     let apy = config.staking_reward_rate / 100.0;
     let duration_years = duration_seconds as f64 / (365.25 * 24.0 * 3600.0);
-    
+
     (staked_amount as f64 * apy * duration_years) as u128
 }
 
@@ -25260,7 +25433,7 @@ async fn tokenomics_emission_handler(
 ) -> (StatusCode, Json<serde_json::Value>) {
     let chain = CHAIN.lock();
     let cfg = &chain.tokenomics_cfg;
-    
+
     // Calculate emission using official Tokenomics halving schedule
     let halvings = height / cfg.halving_interval_blocks;
     let halving_divisor = 2u128.saturating_pow(halvings as u32);
@@ -25269,16 +25442,16 @@ async fn tokenomics_emission_handler(
     } else {
         0
     };
-    
+
     // Calculate tithe splits
     let tithe_amt = tokenomics::tithe::tithe_amount();
     let (bp_miner, bp_vault, bp_fund, bp_tres) = tokenomics::tithe::tithe_split_bps();
     let tithe_vault = tithe_amt.saturating_mul(bp_vault as u128) / 10_000;
     let tithe_fund = tithe_amt.saturating_mul(bp_fund as u128) / 10_000;
     let tithe_tres = tithe_amt.saturating_sub(
-        tithe_amt.saturating_mul(bp_miner as u128) / 10_000 + tithe_vault + tithe_fund
+        tithe_amt.saturating_mul(bp_miner as u128) / 10_000 + tithe_vault + tithe_fund,
     );
-    
+
     drop(chain);
 
     (
@@ -25312,10 +25485,10 @@ async fn foundation_addresses_handler() -> (StatusCode, Json<serde_json::Value>)
     let fund_addr = chain.tokenomics_cfg.fund_addr.clone();
     let treasury_addr = chain.tokenomics_cfg.treasury_addr.clone();
     drop(chain);
-    
+
     let tithe_amt = tokenomics::tithe::tithe_amount();
     let (bp_miner, bp_vault, bp_fund, bp_tres) = tokenomics::tithe::tithe_split_bps();
-    
+
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -28327,32 +28500,32 @@ fn validate_peer_url(url: &str) -> Result<(), String> {
     if url.len() > 512 {
         return Err("URL too long (max 512 characters)".to_string());
     }
-    
+
     if url.is_empty() {
         return Err("URL cannot be empty".to_string());
     }
-    
+
     // Must start with http:// or https://
     if !url.starts_with("http://") && !url.starts_with("https://") {
         return Err("URL must start with http:// or https://".to_string());
     }
-    
+
     // Parse URL to validate structure
     let url_parts: Vec<&str> = url.split("://").collect();
     if url_parts.len() != 2 {
         return Err("Malformed URL".to_string());
     }
-    
+
     // Prevent null bytes and control characters
     if url.contains('\0') || url.contains('\n') || url.contains('\r') {
         return Err("URL contains invalid characters".to_string());
     }
-    
+
     // Check for suspicious patterns (path traversal, etc.)
     if url.contains("..") {
         return Err("URL contains suspicious patterns".to_string());
     }
-    
+
     Ok(())
 }
 
@@ -28920,7 +29093,8 @@ mod extra_api_tests {
         let mut keypair_bytes: Vec<u8> = hex::decode(sk_hex).unwrap();
         keypair_bytes.extend_from_slice(&hex::decode(pk_hex).unwrap());
         let keypair_array: [u8; 64] = keypair_bytes.try_into().expect("64 bytes");
-        let signing_key = ed25519_dalek::SigningKey::from_keypair_bytes(&keypair_array).expect("signing key");
+        let signing_key =
+            ed25519_dalek::SigningKey::from_keypair_bytes(&keypair_array).expect("signing key");
         use ed25519_dalek::Signer;
         let msg = signable_tx_bytes(&incoming);
         let sig = signing_key.sign(&msg).to_bytes();

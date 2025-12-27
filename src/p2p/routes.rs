@@ -52,7 +52,7 @@ pub fn p2p_router() -> Router {
 async fn handle_hello(
     Json(body): Json<serde_json::Value>,
 ) -> (StatusCode, Json<serde_json::Value>) {
-    use ed25519_dalek::{VerifyingKey, Signature, Verifier};
+    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
     use std::collections::HashSet;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -1608,4 +1608,3 @@ async fn request_missing_block_txs(block_hash: String, indices: Vec<usize>) -> R
 
     Ok(())
 }
-

@@ -6,7 +6,7 @@ use crate::identity::{local_fingerprint, local_node_id, local_pubkey_b64};
 use crate::node_approval::{ApprovalSubmitRequest, NodeApproval};
 use axum::{http::StatusCode, Json};
 use base64::{engine::general_purpose, Engine as _};
-use ed25519_dalek::{VerifyingKey, Signature, Verifier};
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 
 /// Verify Ed25519 signature for a message using base64-encoded signature and pubkey
@@ -41,8 +41,10 @@ fn verify_ed25519_b64(pubkey_b64: &str, message: &[u8], sig_b64: &str) -> Result
         ));
     }
 
-    let sig_array: [u8; 64] = sig_bytes.try_into().map_err(|_| format!("Invalid signature length"))?;
-    let signature = Signature::from_bytes(&sig_array);;
+    let sig_array: [u8; 64] = sig_bytes
+        .try_into()
+        .map_err(|_| format!("Invalid signature length"))?;
+    let signature = Signature::from_bytes(&sig_array);
 
     // Verify signature
     match pubkey.verify(message, &signature) {
@@ -255,4 +257,3 @@ pub async fn get_challenge(Json(req): Json<ChallengeRequest>) -> Json<ChallengeR
         ts_unix,
     })
 }
-

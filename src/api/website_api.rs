@@ -374,26 +374,46 @@ pub async fn get_status() -> Json<StatusResponse> {
         drop_prefix: crate::vision_constants::VISION_BOOTSTRAP_PREFIX.to_string(),
     })
 }
-pub async fn get_guardian() -> Json<GuardianResponse> {
+#[cfg(feature = "staging")]
+pub async fn get_guardian() -> impl axum::response::IntoResponse {
     let guardian_mode = false; // All nodes are constellation nodes
 
-    Json(GuardianResponse {
+    axum::Json(GuardianResponse {
         enabled: guardian_mode,
         active: guardian_mode,
         recent_actions: vec![], // TODO: Integrate with guardian consciousness module
     })
 }
 
+#[cfg(not(feature = "staging"))]
+pub async fn get_guardian() -> impl axum::response::IntoResponse {
+    (
+        axum::http::StatusCode::NOT_FOUND,
+        "staged endpoint disabled in v1.0",
+    )
+}
+
+#[cfg(feature = "staging")]
 pub async fn post_guardian(
-    Json(_payload): Json<serde_json::Value>,
-) -> Result<Json<GuardianResponse>, StatusCode> {
+    axum::Json(_payload): axum::Json<serde_json::Value>,
+) -> Result<axum::Json<GuardianResponse>, axum::http::StatusCode> {
     let guardian_mode = false; // All nodes are constellation nodes
 
-    Ok(Json(GuardianResponse {
+    Ok(axum::Json(GuardianResponse {
         enabled: guardian_mode,
         active: guardian_mode,
         recent_actions: vec![], // TODO: Integrate with guardian consciousness module
     }))
+}
+
+#[cfg(not(feature = "staging"))]
+pub async fn post_guardian(
+    _payload: axum::Json<serde_json::Value>,
+) -> impl axum::response::IntoResponse {
+    (
+        axum::http::StatusCode::NOT_FOUND,
+        "staged endpoint disabled in v1.0",
+    )
 }
 
 pub async fn get_chain_status() -> Json<ChainStatusResponse> {
@@ -697,10 +717,19 @@ pub async fn get_new_stars(
     }))
 }
 
-pub async fn get_guardian_feed() -> Json<serde_json::Value> {
-    Json(serde_json::json!({
+#[cfg(feature = "staging")]
+pub async fn get_guardian_feed() -> impl axum::response::IntoResponse {
+    axum::Json(serde_json::json!({
         "messages": []
     }))
+}
+
+#[cfg(not(feature = "staging"))]
+pub async fn get_guardian_feed() -> impl axum::response::IntoResponse {
+    (
+        axum::http::StatusCode::NOT_FOUND,
+        "staged endpoint disabled in v1.0",
+    )
 }
 
 pub async fn get_health() -> Json<serde_json::Value> {
@@ -710,7 +739,8 @@ pub async fn get_health() -> Json<serde_json::Value> {
     }))
 }
 
-pub async fn get_mood() -> Json<serde_json::Value> {
+#[cfg(feature = "staging")]
+pub async fn get_mood() -> impl axum::response::IntoResponse {
     use crate::mood;
 
     // Guardian is an observer - always use local chain state (no HTTP upstream sync)
@@ -746,7 +776,15 @@ pub async fn get_mood() -> Json<serde_json::Value> {
     );
 
     // Return the full snapshot as JSON
-    Json(serde_json::to_value(&snapshot).unwrap_or_else(|_| serde_json::json!({})))
+    axum::Json(serde_json::to_value(&snapshot).unwrap_or_else(|_| serde_json::json!({})))
+}
+
+#[cfg(not(feature = "staging"))]
+pub async fn get_mood() -> impl axum::response::IntoResponse {
+    (
+        axum::http::StatusCode::NOT_FOUND,
+        "staged endpoint disabled in v1.0",
+    )
 }
 
 /// Helper function to get health summaries for mood calculation
@@ -899,12 +937,13 @@ pub async fn get_health_traumas() -> Json<serde_json::Value> {
 
 // ===== GUARDIAN CONSCIOUSNESS ENDPOINTS =====
 
-pub async fn get_guardian_consciousness() -> Json<serde_json::Value> {
+#[cfg(feature = "staging")]
+pub async fn get_guardian_consciousness() -> impl axum::response::IntoResponse {
     let consciousness = GUARDIAN_CONSCIOUSNESS.lock();
     let report = consciousness.generate_report();
     drop(consciousness);
 
-    Json(serde_json::json!({
+    axum::Json(serde_json::json!({
         "timestamp": report.timestamp,
         "current_mood": report.current_mood,
         "mood_trend": format!("{:?}", report.mood_trend),
@@ -914,7 +953,16 @@ pub async fn get_guardian_consciousness() -> Json<serde_json::Value> {
     }))
 }
 
-pub async fn post_guardian_intervene() -> Json<serde_json::Value> {
+#[cfg(not(feature = "staging"))]
+pub async fn get_guardian_consciousness() -> impl axum::response::IntoResponse {
+    (
+        axum::http::StatusCode::NOT_FOUND,
+        "staged endpoint disabled in v1.0",
+    )
+}
+
+#[cfg(feature = "staging")]
+pub async fn post_guardian_intervene() -> impl axum::response::IntoResponse {
     // Compute current mood first
     let peer_count = crate::PEER_MANAGER.connected_validated_count().await as u32;
     let (height, mempool_size) = {
@@ -947,7 +995,7 @@ pub async fn post_guardian_intervene() -> Json<serde_json::Value> {
             let result = consciousness.execute_intervention(intervention_type);
             drop(consciousness);
 
-            Json(serde_json::json!({
+            axum::Json(serde_json::json!({
                 "success": true,
                 "intervention": format!("{:?}", intervention_type),
                 "actions": result.actions_taken,
@@ -956,12 +1004,20 @@ pub async fn post_guardian_intervene() -> Json<serde_json::Value> {
         }
         None => {
             drop(consciousness);
-            Json(serde_json::json!({
+            axum::Json(serde_json::json!({
                 "success": false,
                 "message": "No intervention needed or cooldown active"
             }))
         }
     }
+}
+
+#[cfg(not(feature = "staging"))]
+pub async fn post_guardian_intervene() -> impl axum::response::IntoResponse {
+    (
+        axum::http::StatusCode::NOT_FOUND,
+        "staged endpoint disabled in v1.0",
+    )
 }
 
 // ===== ROUTER FUNCTION =====

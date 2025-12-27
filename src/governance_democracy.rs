@@ -31,17 +31,17 @@ pub enum ProposalStatus {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GovernanceProposal {
-    pub id: String,                        // UUID
+    pub id: String, // UUID
     pub title: String,
-    pub proposal_type: String,             // "protocol", "economic", "feature", "community"
-    pub body: String,                      // Long-form description
-    pub technical_impact: Option<String>,  // Optional technical details
-    pub proposer_wallet: String,           // Wallet address of proposer
-    pub created_at: i64,                   // Unix timestamp (seconds)
-    pub closes_at: i64,                    // created_at + 48 hours
+    pub proposal_type: String, // "protocol", "economic", "feature", "community"
+    pub body: String,          // Long-form description
+    pub technical_impact: Option<String>, // Optional technical details
+    pub proposer_wallet: String, // Wallet address of proposer
+    pub created_at: i64,       // Unix timestamp (seconds)
+    pub closes_at: i64,        // created_at + 48 hours
     pub status: ProposalStatus,
-    pub yes_votes: u64,                    // Count of YES votes (one per wallet)
-    pub no_votes: u64,                     // Count of NO votes (one per wallet)
+    pub yes_votes: u64, // Count of YES votes (one per wallet)
+    pub no_votes: u64,  // Count of NO votes (one per wallet)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -58,15 +58,15 @@ pub struct WalletNotification {
     pub wallet: String,
     pub created_at: i64,
     pub message: String,
-    pub kind: String,                  // "governance_proposal", etc.
-    pub related_id: Option<String>,    // proposal_id
+    pub kind: String,               // "governance_proposal", etc.
+    pub related_id: Option<String>, // proposal_id
     pub read: bool,
 }
 
 // Storage
 static GOV_PROPOSALS: Lazy<Mutex<BTreeMap<String, GovernanceProposal>>> =
     Lazy::new(|| Mutex::new(BTreeMap::new()));
-static GOV_VOTES: Lazy<Mutex<BTreeMap<String, GovernanceVote>>> = 
+static GOV_VOTES: Lazy<Mutex<BTreeMap<String, GovernanceVote>>> =
     Lazy::new(|| Mutex::new(BTreeMap::new()));
 static WALLET_NOTIFICATIONS: Lazy<Mutex<BTreeMap<String, WalletNotification>>> =
     Lazy::new(|| Mutex::new(BTreeMap::new()));
@@ -104,8 +104,10 @@ pub fn create_governance_proposal(
         no_votes: 0,
     };
 
-    GOV_PROPOSALS.lock().insert(proposal_id.clone(), proposal.clone());
-    
+    GOV_PROPOSALS
+        .lock()
+        .insert(proposal_id.clone(), proposal.clone());
+
     tracing::info!(
         "Created governance proposal {} by {}",
         proposal_id,
@@ -139,7 +141,7 @@ pub fn record_governance_vote(
     // Check if already voted (one wallet = one vote)
     let vote_key = format!("{}:{}", proposal_id, voter_wallet);
     let mut votes = GOV_VOTES.lock();
-    
+
     if votes.contains_key(&vote_key) {
         return Err("Already voted on this proposal".to_string());
     }
@@ -222,7 +224,7 @@ pub fn check_and_close_expired_proposals() -> usize {
             } else {
                 // Calculate yes percentage
                 let yes_percentage = (proposal.yes_votes * 100) / total_votes;
-                
+
                 if yes_percentage >= 51 {
                     proposal.status = ProposalStatus::Approved;
                 } else {
@@ -264,17 +266,17 @@ pub fn create_wallet_notification(
         read: false,
     };
 
-    WALLET_NOTIFICATIONS.lock().insert(notification_id.clone(), notification);
-    
+    WALLET_NOTIFICATIONS
+        .lock()
+        .insert(notification_id.clone(), notification);
+
     notification_id
 }
 
 // Broadcast notification to all eligible wallets
-pub fn broadcast_proposal_notification(
-    proposal_id: &str,
-    eligible_wallets: Vec<String>,
-) {
-    let message = "DING DONG BITCH – A new governance proposal is live. Tap to read & vote.".to_string();
+pub fn broadcast_proposal_notification(proposal_id: &str, eligible_wallets: Vec<String>) {
+    let message =
+        "DING DONG BITCH – A new governance proposal is live. Tap to read & vote.".to_string();
 
     for wallet in eligible_wallets {
         create_wallet_notification(
@@ -305,7 +307,7 @@ pub fn list_wallet_notifications(wallet: &str) -> Vec<WalletNotification> {
 // Mark notification as read
 pub fn mark_notification_read(notification_id: &str) -> Result<(), String> {
     let mut notifications = WALLET_NOTIFICATIONS.lock();
-    
+
     if let Some(notification) = notifications.get_mut(notification_id) {
         notification.read = true;
         Ok(())
@@ -320,10 +322,22 @@ pub fn get_governance_stats() -> serde_json::Value {
     let votes = GOV_VOTES.lock();
     let notifications = WALLET_NOTIFICATIONS.lock();
 
-    let open_count = proposals.values().filter(|p| p.status == ProposalStatus::Open).count();
-    let approved_count = proposals.values().filter(|p| p.status == ProposalStatus::Approved).count();
-    let rejected_count = proposals.values().filter(|p| p.status == ProposalStatus::Rejected).count();
-    let expired_count = proposals.values().filter(|p| p.status == ProposalStatus::Expired).count();
+    let open_count = proposals
+        .values()
+        .filter(|p| p.status == ProposalStatus::Open)
+        .count();
+    let approved_count = proposals
+        .values()
+        .filter(|p| p.status == ProposalStatus::Approved)
+        .count();
+    let rejected_count = proposals
+        .values()
+        .filter(|p| p.status == ProposalStatus::Rejected)
+        .count();
+    let expired_count = proposals
+        .values()
+        .filter(|p| p.status == ProposalStatus::Expired)
+        .count();
 
     serde_json::json!({
         "proposals": {

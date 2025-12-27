@@ -1,3 +1,5 @@
+#![cfg(feature = "staging")]
+
 // v1.0 Staged Module Stubs
 // These provide minimal-but-valid implementations of gated features
 // so that code can unconditionally import them without feature checks

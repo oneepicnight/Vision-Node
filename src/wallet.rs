@@ -5,7 +5,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use ed25519_dalek::{VerifyingKey, Signature, Verifier};
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -293,7 +293,9 @@ fn verify_transfer_signature(req: &TransferReq) -> Result<(), String> {
     // 3. Decode signature (64 bytes)
     let sig_bytes = decode_hex64(&req.signature).map_err(|e| format!("invalid_signature: {e}"))?;
 
-    let sig_array: [u8; 64] = sig_bytes.try_into().map_err(|_| format!("invalid_signature_bytes"))?;
+    let sig_array: [u8; 64] = sig_bytes
+        .try_into()
+        .map_err(|_| format!("invalid_signature_bytes"))?;
     let signature = Signature::from_bytes(&sig_array);
 
     // 4. Construct canonical message to sign
@@ -436,7 +438,7 @@ fn decode_u64_le(bytes: &[u8]) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ed25519_dalek::{SigningKey, Signer};
+    use ed25519_dalek::{Signer, SigningKey};
 
     #[test]
     fn test_decode_hex32_valid() {
@@ -743,4 +745,3 @@ fn api_err(code: u16, err: &str) -> axum::response::Response {
     );
     resp
 }
-

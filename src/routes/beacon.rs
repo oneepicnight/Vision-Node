@@ -1,5 +1,5 @@
 use axum::{extract::State, http::StatusCode, Json};
-use ed25519_dalek::{SigningKey, Signer};
+use ed25519_dalek::{Signer, SigningKey};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -168,8 +168,6 @@ pub async fn heartbeat(
 /// Creates a passport with 7-day expiry, signs it with guardian keypair,
 /// and returns it for the node to store.
 fn issue_passport(node_tag: &str, now: u64) -> Result<crate::passport::NodePassport, String> {
-    
-
     const SEVEN_DAYS: u64 = 7 * 24 * 60 * 60;
     const NODE_VERSION: u32 = 111; // v1.1.1
 
@@ -193,7 +191,8 @@ fn issue_passport(node_tag: &str, now: u64) -> Result<crate::passport::NodePassp
     // Create ed25519 keypair (64 bytes: [32 secret][32 public])
     let mut keypair_bytes = sk_bytes.to_vec();
     keypair_bytes.extend_from_slice(&pk_bytes);
-    let keypair_array: [u8; 64] = keypair_bytes.try_into()
+    let keypair_array: [u8; 64] = keypair_bytes
+        .try_into()
         .map_err(|_| "Invalid keypair bytes length".to_string())?;
 
     let keypair = SigningKey::from_keypair_bytes(&keypair_array)
@@ -243,4 +242,3 @@ pub async fn health(State(state): State<BeaconState>) -> Json<HealthResponse> {
         registered_nodes: nodes.len(),
     })
 }
-

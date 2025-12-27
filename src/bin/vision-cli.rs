@@ -1,7 +1,7 @@
 use std::{fs, io::Write, path::PathBuf, str::FromStr};
 
 use clap::{Parser, Subcommand};
-use ed25519_dalek::{SigningKey, VerifyingKey, Signature, Signer};
+use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use hex::FromHex;
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
@@ -68,7 +68,10 @@ fn load_keypair(keys_path: &PathBuf) -> SigningKey {
             let secret_array: [u8; 32] = sk_bytes.try_into().expect("32 bytes");
             SigningKey::from_bytes(&secret_array)
         }
-        _ => panic!("secret_key must decode to 32 or 64 bytes, got {}", sk_bytes.len()),
+        _ => panic!(
+            "secret_key must decode to 32 or 64 bytes, got {}",
+            sk_bytes.len()
+        ),
     };
 
     if let Some(pk_hex) = kf.public_key {
@@ -84,7 +87,10 @@ fn load_keypair(keys_path: &PathBuf) -> SigningKey {
                         );
                     }
                 }
-                Ok(other) => eprintln!("⚠️  keys.json public_key length {} != 32 bytes; ignoring.", other.len()),
+                Ok(other) => eprintln!(
+                    "⚠️  keys.json public_key length {} != 32 bytes; ignoring.",
+                    other.len()
+                ),
                 Err(_) => eprintln!("⚠️  keys.json public_key is not valid hex; ignoring."),
             }
         }
@@ -219,7 +225,11 @@ fn main() {
         } => {
             let kp = load_keypair(&keys);
 
-            let args = serde_json::to_vec(&CashTransferArgs { to: to.clone(), amount }).unwrap();
+            let args = serde_json::to_vec(&CashTransferArgs {
+                to: to.clone(),
+                amount,
+            })
+            .unwrap();
 
             // Node requires access to acct:FROM and acct:TO for transfer
             let access_list = vec![format!("acct:{from}"), format!("acct:{to}")];
@@ -261,7 +271,9 @@ fn main() {
                 let txt = fs::read_to_string(csv_path).expect("read mints csv");
                 for (lineno, line) in txt.lines().enumerate() {
                     let t = line.trim();
-                    if t.is_empty() { continue; }
+                    if t.is_empty() {
+                        continue;
+                    }
                     let parts: Vec<&str> = t.split(',').map(|s| s.trim()).collect();
                     if parts.len() != 2 {
                         panic!("bad csv at line {}", lineno + 1);
@@ -281,7 +293,10 @@ fn main() {
                 panic!("empty mints");
             }
 
-            let args = serde_json::to_vec(&CashMultiMintArgs { mints: mints.clone() }).unwrap();
+            let args = serde_json::to_vec(&CashMultiMintArgs {
+                mints: mints.clone(),
+            })
+            .unwrap();
 
             // Node’s multi_mint requires access_list of each destination ONLY
             let access_list: Vec<String> = mints.iter().map(|p| format!("acct:{}", p.to)).collect();

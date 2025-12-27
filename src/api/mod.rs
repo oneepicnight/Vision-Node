@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+#[cfg(feature = "staging")]
 pub mod discord_oauth;
 
 #[cfg(feature = "staging")]

@@ -12,14 +12,14 @@ default = ["multi-currency", "full", "launch-core"]  # Ship ONE build world: FUL
 lite = []        # Deprecated: disabled by compile-time guard in src/main.rs
 full = []        # Full feature set marker (single-world build)
 launch-core = []          # Launch build surface (active routes/runtime)
-staging = []              # Parked/staging features not wired yet
-staged = []               # Old unused systems (legacy vault.rs, tokenomics-v1) - gate & don't ship
+staging = []              # Parked/staging features (guardian, mood, tip, governance, node_approval, legacy, etc.)
+staged = ["staging"]      # Alias for backward compatibility (old scripts may use --features staged)
+guardian = ["staging"]    # Alias for backward compatibility (maps to staging)
 miner-tuning = []         # Miner auto-tuner/perf/telemetry stack
 tokenomics-v2 = []        # Advanced tokenomics engine (parked in main.rs)
 archive = []              # Archive/indexing/data-availability parked code
 farm = []                 # Farm/rig control endpoints and state
 resilience = []           # Network topology/reputation experiments
-guardian = []    # Guardian node mode - eternal watcher, staking after sunset
 multi-currency = ["bitcoin", "bip32", "bitcoincore-rpc"]  # BTC/BCH/DOGE wallet support
 hwloc = ["hwloc2"]  # Advanced NUMA topology detection (optional)
 

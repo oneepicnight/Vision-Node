@@ -223,4 +223,3 @@ mod tests {
         assert_eq!(bytes_saved_by_aggregation(100, SignatureType::BLS), 9504);
     }
 }
-

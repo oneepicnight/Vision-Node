@@ -8,7 +8,7 @@
 //! - Deterministic: same pubkey always produces same node_id
 //! - Verifiable: anyone can verify node_id matches pubkey
 
-use ed25519_dalek::{SigningKey, VerifyingKey, Signer};
+use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use sha2::{Digest, Sha256};
@@ -146,7 +146,7 @@ pub fn init_node_identity(db: &sled::Db) -> anyhow::Result<Arc<RwLock<NodeIdenti
     }
 
     // Generate new keypair
-    
+
     let keypair = SigningKey::generate(&mut rand::rngs::OsRng);
 
     // Persist to database (need 64 bytes: [32 secret][32 public])`n    let mut keypair_bytes = keypair.to_bytes().to_vec();`n    keypair_bytes.extend_from_slice(keypair.verifying_key().as_bytes());`n    db.insert(KEYPAIR_KEY, keypair_bytes.as_slice())?;
@@ -251,7 +251,7 @@ mod tests {
     #[test]
     fn test_node_id_derivation_deterministic() {
         // Generate a test keypair
-        
+
         let keypair = SigningKey::generate(&mut rand::rngs::OsRng);
         let pubkey_bytes = keypair.public.to_bytes();
 
@@ -269,7 +269,6 @@ mod tests {
 
     #[test]
     fn test_different_pubkeys_different_ids() {
-        
         let keypair1 = SigningKey::generate(&mut csprng);
         let keypair2 = SigningKey::generate(&mut csprng);
 
@@ -281,7 +280,6 @@ mod tests {
 
     #[test]
     fn test_verify_node_id() {
-        
         let keypair = SigningKey::generate(&mut rand::rngs::OsRng);
         let pubkey_bytes = keypair.public.to_bytes();
         let correct_id = node_id_from_pubkey(&pubkey_bytes);
@@ -298,7 +296,6 @@ mod tests {
 
     #[test]
     fn test_node_identity_creation() {
-        
         let keypair = SigningKey::generate(&mut rand::rngs::OsRng);
         let pubkey_bytes = keypair.public.to_bytes();
 
@@ -352,6 +349,3 @@ mod tests {
         assert!(hex::decode(&node_id2).is_ok());
     }
 }
-
-
-
