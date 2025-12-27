@@ -1,0 +1,224 @@
+================================================================================
+                    PORT FORWARDING SETUP GUIDE
+                   Vision Node P2P Configuration
+================================================================================
+
+YOUR NETWORK INFORMATION:
+-------------------------
+Local IP Address:    192.168.1.130
+Router IP (Gateway): 192.168.1.1
+Public IP Address:   75.128.152.160
+Port to Forward:     7072 (TCP)
+
+================================================================================
+                        STEP-BY-STEP INSTRUCTIONS
+================================================================================
+
+STEP 1: ACCESS YOUR ROUTER
+---------------------------
+1. Open a web browser
+2. Go to: http://192.168.1.1
+3. Log in with your router credentials
+
+Common Default Credentials:
+• Username: admin    Password: admin
+• Username: admin    Password: password  
+• Username: admin    Password: (leave blank)
+• Check the sticker on your router for the default password
+
+If you've changed the password and forgot it, you may need to reset the router
+to factory defaults (look for a small reset button on the router).
+
+
+STEP 2: FIND PORT FORWARDING SETTINGS
+--------------------------------------
+The location varies by router brand. Look for one of these:
+
+Common Menu Names:
+• Port Forwarding
+• Virtual Server
+• NAT Forwarding
+• Applications & Gaming
+• Advanced Settings > Port Forwarding
+• Firewall > Port Forwarding
+• NAT > Port Forwarding
+
+Popular Router Brands:
+• TP-Link:    Advanced > NAT Forwarding > Virtual Servers
+• Netgear:    Advanced > Advanced Setup > Port Forwarding
+• Linksys:    Security > Apps and Gaming > Single Port Forwarding
+• ASUS:       WAN > Virtual Server / Port Forwarding
+• D-Link:     Advanced > Port Forwarding
+
+
+STEP 3: CREATE PORT FORWARDING RULE
+------------------------------------
+Create a new rule with these EXACT values:
+
+┌─────────────────────────────────────────────────────────────┐
+│ Service/Application Name:  Vision-Node-P2P                  │
+│ External Port Start:       7072                             │
+│ External Port End:         7072                             │
+│ Internal Port Start:       7072                             │
+│ Internal Port End:         7072                             │
+│ Internal IP Address:       192.168.1.130                    │
+│ Protocol:                  TCP  (or TCP/UDP if available)   │
+│ Enable/Status:             YES / ENABLED / ON               │
+└─────────────────────────────────────────────────────────────┘
+
+IMPORTANT NOTES:
+• Use TCP protocol (UDP not required for Vision Node)
+• Make sure "Enable" or "Active" is checked
+• Some routers call it "Port Range" - use 7072 for both start and end
+• Internal IP must match your PC's IP: 192.168.1.130
+
+
+STEP 4: SAVE AND APPLY
+-----------------------
+1. Click "Save" or "Apply" button
+2. Router may reboot automatically (wait 1-2 minutes)
+3. If it doesn't reboot, manually reboot from the router admin page
+4. Wait for router to fully restart
+
+
+STEP 5: VERIFY PORT FORWARDING
+-------------------------------
+After the router reboots, run this command in PowerShell:
+
+    Test-NetConnection -ComputerName 75.128.152.160 -Port 7072
+
+Expected Result:
+✅ TcpTestSucceeded: True   (Port is OPEN - Success!)
+❌ TcpTestSucceeded: False  (Port still blocked - check settings)
+
+
+================================================================================
+                           TROUBLESHOOTING
+================================================================================
+
+PROBLEM: Can't access router at 192.168.1.1
+SOLUTION:
+• Make sure you're connected to the network (WiFi or Ethernet)
+• Try http://192.168.0.1 instead (some routers use this)
+• Check router label for correct IP address
+• Disable VPN if connected
+
+
+PROBLEM: Forgot router password
+SOLUTION:
+• Check router label for default password
+• Try common defaults: admin/admin, admin/password
+• Factory reset router (hold reset button 10+ seconds)
+• Call your ISP - they may have set a custom password
+
+
+PROBLEM: Port still shows as blocked after setup
+SOLUTION:
+• Wait 2-3 minutes after saving (router needs time to apply)
+• Reboot the router manually
+• Check if firewall is enabled on Windows:
+    Get-NetFirewallProfile | Select-Object Name, Enabled
+• Temporarily disable Windows Firewall to test:
+    Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
+• Check if your ISP blocks port 7072 (carrier-grade NAT)
+
+
+PROBLEM: Local IP changed (not 192.168.1.130 anymore)
+SOLUTION:
+• Set a static IP or DHCP reservation for your PC
+• Update the port forwarding rule with the new IP
+• Router Settings > DHCP > DHCP Reservation
+
+
+PROBLEM: Router behind another router (double NAT)
+SOLUTION:
+• You may have ISP modem + your router = 2 NAT layers
+• Set up port forwarding on BOTH devices
+• Or set your router to "Bridge Mode" or "Passthrough Mode"
+
+
+================================================================================
+                         COMMON ROUTER INTERFACES
+================================================================================
+
+TP-LINK ROUTERS:
+1. Login at http://192.168.1.1
+2. Advanced > NAT Forwarding > Virtual Servers
+3. Click "Add"
+4. Fill in the port forwarding values
+5. Click "Save"
+
+NETGEAR ROUTERS:
+1. Login at http://192.168.1.1
+2. Advanced > Advanced Setup > Port Forwarding / Port Triggering
+3. Click "Add Custom Service"
+4. Fill in the port forwarding values
+5. Click "Apply"
+
+LINKSYS ROUTERS:
+1. Login at http://192.168.1.1
+2. Security > Apps and Gaming
+3. Click "Single Port Forwarding"
+4. Fill in the port forwarding values
+5. Click "Save Settings"
+
+ASUS ROUTERS:
+1. Login at http://192.168.1.1
+2. WAN > Virtual Server / Port Forwarding
+3. Click "Add" (+)
+4. Fill in the port forwarding values
+5. Click "Apply"
+
+D-LINK ROUTERS:
+1. Login at http://192.168.1.1
+2. Advanced > Port Forwarding
+3. Click "Add"
+4. Fill in the port forwarding values
+5. Click "Save"
+
+
+================================================================================
+                      AFTER SUCCESSFUL SETUP
+================================================================================
+
+Once port 7072 is open, your Vision Node will be accessible from the internet!
+
+Your P2P Address: 75.128.152.160:7072
+
+To share with other node operators:
+"Connect to my Vision Node at 75.128.152.160:7072"
+
+To test if peers can connect:
+1. Share your IP:Port with another Vision Node operator
+2. They should add you to their peer list
+3. Check for incoming connections:
+   netstat -ano | Where-Object { $_ -match "7072" -and $_ -match "ESTABLISHED" }
+
+
+SECURITY NOTES:
+• Port forwarding only opens port 7072 (P2P traffic)
+• Your Vision Node software handles authentication
+• No other services are exposed
+• You can close the port anytime by disabling the rule
+
+
+================================================================================
+                            NEED MORE HELP?
+================================================================================
+
+If you're still having trouble:
+1. Check your router's brand and model number (on the sticker)
+2. Search: "[Router Brand] [Model] port forwarding guide"
+3. Visit: https://portforward.com/ (has guides for 1000+ routers)
+4. Contact your ISP if they use carrier-grade NAT (blocks port forwarding)
+
+
+================================================================================
+
+Created: December 4, 2025
+Network: 192.168.1.0/24
+Public IP: 75.128.152.160
+Local IP: 192.168.1.130
+Port: 7072 TCP
+
+================================================================================

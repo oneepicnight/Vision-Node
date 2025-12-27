@@ -1,0 +1,33 @@
+🚀 Vision Node - LITE (MVP) build active
+[VISION] Build: v1.1.0-CONSTELLATION
+[VISION] Timestamp: 2025-12-01T00:00:00Z
+📡 Phase 2 Router: LITE build (MVP endpoints only)
+   ✅ Core: health, metrics, config
+   ✅ Wallet: balance, transfer, deposit
+   ✅ Market: exchange, orders, trades
+   ✅ Mining: control, status, rewards
+   ✅ Network: peers, snapshots, sync
+   ⏭️  Advanced features: disabled (enable with --features full)
+🎯 Runtime modes - solo: true, pool: false, farm: false
+🏠 Local node URL: http://127.0.0.1:7070
+⛏️  Miner ready (use /api/miner/start or miner panel to begin)
+⛏️  Block integrator started
+
+======================================================================
+[36m🌌 CONSTELLATION NODE ONLINE[0m
+======================================================================
+[36mOwner: Not configured[0m
+[36mSet GUARDIAN_OWNER_DISCORD_ID and GUARDIAN_OWNER_WALLET_ADDRESS[0m
+[36mto link this node to your identity[0m
+
+[36mThe constellation breathes.[0m
+[36mNode ID: node-2c105287-fce8-413f-811c-3d0e23c94baa[0m
+[36mStatus: Mining. Contributing. Growing.[0m
+
+[36m"Every node is a star in the constellation."[0m
+======================================================================
+
+🔄 Rebuilding VisionX dataset for epoch 0 with seed 0000...
+🎯 Mining block #1 with epoch_seed=0000..., epoch=0
+🎯 New mining job: height=1, difficulty=10000, target=00068db8bac710cb000000000000000000000000000000000000000000000000
+   Target (first 8 bytes): 00068db8bac710cb

@@ -1,5 +1,6 @@
 //! consensus.rs — minimal PoW consensus helpers (demo-grade)
-use crate::types::{leading_zero_bits, work_from_hash, blake3_hash};
+#![allow(dead_code)]
+use crate::types::{blake3_hash, leading_zero_bits, work_from_hash};
 
 /// Parameters for PoW target & timing.
 #[derive(Clone, Debug)]
@@ -34,8 +35,11 @@ pub fn meets_target(hash: &[u8; 32], target_bits: u8) -> bool {
 }
 
 /// Compute cumulative work for a chain: sum(2^leading_zero_bits(block_hash)).
-pub fn accumulated_work(block_hashes: impl IntoIterator<Item = [u8;32]>) -> u128 {
-    block_hashes.into_iter().map(|h| work_from_hash(&h)).fold(0u128, |a, w| a.saturating_add(w))
+pub fn accumulated_work(block_hashes: impl IntoIterator<Item = [u8; 32]>) -> u128 {
+    block_hashes
+        .into_iter()
+        .map(|h| work_from_hash(&h))
+        .fold(0u128, |a, w| a.saturating_add(w))
 }
 
 /// Calculate median of a slice of timestamps (seconds).
@@ -43,8 +47,14 @@ fn median_u64(ts: &[u64]) -> u64 {
     let mut v = ts.to_vec();
     v.sort_unstable();
     let n = v.len();
-    if n == 0 { return 0; }
-    if n % 2 == 1 { v[n/2] } else { (v[n/2 - 1] / 2) + (v[n/2] / 2) }
+    if n == 0 {
+        return 0;
+    }
+    if n % 2 == 1 {
+        v[n / 2]
+    } else {
+        (v[n / 2 - 1] / 2) + (v[n / 2] / 2)
+    }
 }
 
 /// Validate header timestamp against future skew and median past time.
@@ -63,10 +73,8 @@ pub fn validate_time_rules(
         if new_ts <= med {
             return Err("block timestamp not greater than median of recent".into());
         }
-    } else {
-        if new_ts <= tip_ts {
-            return Err("block timestamp must be > tip timestamp".into());
-        }
+    } else if new_ts <= tip_ts {
+        return Err("block timestamp must be > tip timestamp".into());
     }
     Ok(())
 }
@@ -79,17 +87,23 @@ pub fn validate_pow<F>(
     claimed_pow_hex: &str,
     params: &ConsensusParams,
     meets: F,
-) -> Result<[u8;32], String>
+) -> Result<[u8; 32], String>
 where
-    F: Fn(&[u8;32], u8) -> bool
+    F: Fn(&[u8; 32], u8) -> bool,
 {
     let h = blake3_hash(header_bytes);
     let claimed = hex::decode(claimed_pow_hex).map_err(|_| "bad pow_hash hex")?;
-    if claimed.len() != 32 { return Err("pow_hash must be 32 bytes".into()); }
-    let mut arr = [0u8;32];
+    if claimed.len() != 32 {
+        return Err("pow_hash must be 32 bytes".into());
+    }
+    let mut arr = [0u8; 32];
     arr.copy_from_slice(&claimed);
     // The simple demo: require our recomputed hash equals the claimed hash AND meets target bits.
-    if h != arr { return Err("invalid PoW: header hash mismatch".into()); }
-    if !meets(&arr, params.target_bits) { return Err("PoW below target".into()); }
+    if h != arr {
+        return Err("invalid PoW: header hash mismatch".into());
+    }
+    if !meets(&arr, params.target_bits) {
+        return Err("PoW below target".into());
+    }
     Ok(arr)
 }

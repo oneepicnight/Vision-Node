@@ -22,9 +22,11 @@ interface NodeStatus {
 interface WalletState {
   profile: Profile | null
   balances: Balances
+  multiCurrencyBalances: Record<string, { available: number; locked: number }>
   node: NodeStatus
   setProfile: (profile: Profile) => void
   setBalances: (balances: Partial<Balances>) => void
+  setMultiCurrencyBalances: (balances: Record<string, { available: number; locked: number }>) => void
   setNode: (node: Partial<NodeStatus>) => void
   reset: () => void
 }
@@ -34,6 +36,7 @@ import { env } from '../utils/env'
 const initialState = {
   profile: null,
   balances: { LAND: 0, GAME: 0, CASH: 0 },
+  multiCurrencyBalances: {},
   node: {
     baseUrl: (env.MOCK_CHAIN || env.WALLET_DEV_BYPASS) ? '' : (localStorage.getItem('vision.node.url') || env.NODE_URL || 'http://127.0.0.1:7070'),
     status: 'down' as const,
@@ -49,6 +52,7 @@ export const useWalletStore = create<WalletState>()(
       setBalances: (newBalances) => set({ 
         balances: { ...get().balances, ...newBalances } 
       }),
+      setMultiCurrencyBalances: (multiCurrencyBalances) => set({ multiCurrencyBalances }),
       setNode: (nodeUpdate) => set({ 
         node: { ...get().node, ...nodeUpdate } 
       }),

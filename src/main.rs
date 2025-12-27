@@ -50,7 +50,7 @@ use async_graphql::{
 };
 use blake3::Hasher;
 use dashmap::DashMap;
-use ed25519_dalek::{Keypair, PublicKey, Signature, Signer, Verifier};
+use ed25519_dalek::{SigningKey, VerifyingKey, Signature, Signer, Verifier};
 use prometheus::{
     Encoder, Gauge, Histogram, HistogramOpts, HistogramVec, IntCounter, IntCounterVec, IntGauge,
     IntGaugeVec, Registry, TextEncoder,
@@ -74,16 +74,21 @@ mod consensus;
 mod consensus_pow;
 // REMOVED: mod emissions; - now using official Tokenomics module only
 mod fees;
+mod identity;
+mod land_deeds;
 mod land_stake;
 mod market;
 mod metrics;
 mod miner_manager;
+mod mood;
+mod node_approval;
 mod tokenomics;
 mod receipts;
 mod routes;
 mod sig_agg; // Keep for now - used in block structure
 mod treasury;
 mod vault_epoch;
+mod vision_constants;
 mod wallet;
 
 // Prometheus helper functions
@@ -6887,12 +6892,27 @@ async fn wallet_sign_tx(
         }
     };
     
-    // ed25519-dalek v1.x requires Keypair (secret + public key)
-    // Keypair expects 64 bytes: [32 secret][32 public]
+    // ed25519-dalek v2.x requires SigningKey (secret + public key)
+    // SigningKey::from_keypair_bytes expects 64 bytes: [32 secret][32 public]
     let mut keypair_bytes = sk_bytes.to_vec();
     keypair_bytes.extend_from_slice(&pk_bytes);
     
-    let keypair = match ed25519_dalek::Keypair::from_bytes(&keypair_bytes) {
+    let keypair_array: [u8; 64] = match keypair_bytes.try_into() {
+        Ok(arr) => arr,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": {
+                        "code": "invalid_keypair",
+                        "message": "Failed to create 64-byte array"
+                    }
+                })),
+            );
+        }
+    };
+    
+    let signing_key = match ed25519_dalek::SigningKey::from_keypair_bytes(&keypair_array) {
         Ok(k) => k,
         Err(e) => {
             return (
@@ -6900,14 +6920,14 @@ async fn wallet_sign_tx(
                 Json(serde_json::json!({
                     "error": {
                         "code": "invalid_keypair",
-                        "message": format!("Failed to create keypair: {}", e)
+                        "message": format!("Failed to create signing key: {}", e)
                     }
                 })),
             );
         }
     };
     
-    let sig: ed25519_dalek::Signature = keypair.sign(&msg);
+    let sig: ed25519_dalek::Signature = signing_key.sign(&msg);
     let signature_hex = hex::encode(sig.to_bytes());
     
     // Calculate tx hash
@@ -7022,9 +7042,9 @@ fn verify_tx(tx: &Tx) -> Result<(), NodeError> {
         return Err(NodeError::TxTooBig);
     }
     let pubkey_bytes = decode_hex32(&tx.sender_pubkey).map_err(|_| NodeError::BadSig)?;
-    let vk = PublicKey::from_bytes(&pubkey_bytes).map_err(|_| NodeError::BadSig)?;
+    let vk = VerifyingKey::from_bytes(&pubkey_bytes).map_err(|_| NodeError::BadSig)?;
     let sig_bytes = decode_hex64(&tx.sig).map_err(|_| NodeError::BadSig)?;
-    let sig = Signature::from_bytes(&sig_bytes).map_err(|_| NodeError::BadSig)?;
+    let sig = Signature::from_bytes(&sig_bytes);
     vk.verify(&signable_tx_bytes(tx), &sig)
         .map_err(|_| NodeError::BadSig)?;
     Ok(())
@@ -28702,10 +28722,11 @@ mod extra_api_tests {
             .expect("public_key");
         let mut keypair_bytes: Vec<u8> = hex::decode(sk_hex).unwrap();
         keypair_bytes.extend_from_slice(&hex::decode(pk_hex).unwrap());
-        let keypair = ed25519_dalek::Keypair::from_bytes(&keypair_bytes).expect("keypair");
+        let keypair_array: [u8; 64] = keypair_bytes.try_into().expect("64 bytes");
+        let signing_key = ed25519_dalek::SigningKey::from_keypair_bytes(&keypair_array).expect("signing key");
         use ed25519_dalek::Signer;
         let msg = signable_tx_bytes(&incoming);
-        let sig = keypair.sign(&msg).to_bytes();
+        let sig = signing_key.sign(&msg).to_bytes();
         incoming.sig = hex::encode(sig);
         let submit = SubmitTx { tx: incoming };
         let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 0));

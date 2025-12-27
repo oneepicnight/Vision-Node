@@ -1,0 +1,4 @@
+{
+  "public_key": "REPLACE_WITH_RECIPIENT_PUBLIC_KEY_HEX",
+  "secret_key": "REPLACE_WITH_RECIPIENT_SECRET_KEY_HEX"
+}

@@ -1,0 +1,51 @@
+# Vision Node - ConfigMap for Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vision-node-config
+  namespace: vision-node
+  labels:
+    app: vision-node
+data:
+  # Node configuration
+  RUST_LOG: "info,vision_node=debug"
+  VISION_PORT: "7070"
+  VISION_DATA_DIR: "/app/data"
+  VISION_LOG_DIR: "/app/logs"
+  
+  # Network configuration
+  VISION_DEV: "0"
+  VISION_CORS_ORIGINS: ""
+  
+  # Database configuration
+  VISION_PRUNE_DEPTH: "10000"
+  VISION_PRUNE_SECS: "30"
+  VISION_SNAPSHOT_RETENTION: "20"
+  
+  # Mempool configuration
+  VISION_MEMPOOL_TTL_SECS: "300"
+  VISION_MEMPOOL_SWEEP_SECS: "60"
+  
+  # Performance tuning
+  VISION_MAX_BODY_BYTES: "262144"  # 256KB
+  VISION_READ_TIMEOUT_SECS: "10"
+  VISION_GOSSIP_PEER_MS: "50"
+  
+  # P2P configuration
+  VISION_DISCOVERY_SECS: "60"
+  
+  # Resource limits
+  VISION_IP_BUCKET_TTL_SECS: "300"
+
+---
+# Secrets - Admin Token (create separately with kubectl)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vision-node-secrets
+  namespace: vision-node
+  labels:
+    app: vision-node
+type: Opaque
+stringData:
+  VISION_ADMIN_TOKEN: "changeme-use-kubectl-to-set"

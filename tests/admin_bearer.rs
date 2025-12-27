@@ -1,10 +1,10 @@
 #[tokio::test]
 async fn admin_bearer() {
+    use reqwest::Client;
     use std::net::TcpListener;
     use std::process::Command;
     use std::time::Duration;
-    use std::{thread, env};
-    use reqwest::Client;
+    use std::{env, thread};
 
     // find free port
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
@@ -17,8 +17,11 @@ async fn admin_bearer() {
         Err(_) => {
             // fallback to target/debug/vision-node
             let mut path = env::current_exe().expect("cwd");
-            for _ in 0..3 { path.pop(); }
-            path.push("debug"); path.push("vision-node");
+            for _ in 0..3 {
+                path.pop();
+            }
+            path.push("debug");
+            path.push("vision-node");
             path.to_string_lossy().to_string()
         }
     };
@@ -36,22 +39,31 @@ async fn admin_bearer() {
     let mut ok = false;
     for _ in 0..40 {
         if let Ok(r) = client.get(format!("{}/livez", base)).send().await {
-            if r.status().is_success() { ok = true; break; }
+            if r.status().is_success() {
+                ok = true;
+                break;
+            }
         }
         thread::sleep(Duration::from_millis(100));
     }
     assert!(ok, "server did not start");
 
     // Bearer header with correct token
-    let r = client.get(format!("{}/admin/ping", base))
+    let r = client
+        .get(format!("{}/admin/ping", base))
         .header("Authorization", "Bearer testtoken")
-        .send().await.unwrap();
+        .send()
+        .await
+        .unwrap();
     assert!(r.status().is_success());
 
     // Bearer header with wrong token
-    let r = client.get(format!("{}/admin/ping", base))
+    let r = client
+        .get(format!("{}/admin/ping", base))
         .header("Authorization", "Bearer wrong")
-        .send().await.unwrap();
+        .send()
+        .await
+        .unwrap();
     assert_eq!(r.status(), reqwest::StatusCode::UNAUTHORIZED);
 
     // shutdown

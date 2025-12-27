@@ -1,7 +1,7 @@
 use std::{fs, io::Write, path::PathBuf, str::FromStr};
 
 use clap::{Parser, Subcommand};
-use ed25519_dalek::{Keypair, PublicKey, SecretKey, Signature, Signer};
+use ed25519_dalek::{SigningKey, VerifyingKey, Signature, Signer};
 use hex::FromHex;
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
@@ -54,17 +54,19 @@ struct KeyFile {
     secret_key: String,
 }
 
-fn load_keypair(keys_path: &PathBuf) -> Keypair {
+fn load_keypair(keys_path: &PathBuf) -> SigningKey {
     let raw = fs::read_to_string(keys_path).expect("read keys file");
     let kf: KeyFile = serde_json::from_str(&raw).expect("keys.json should have secret_key hex");
 
     let sk_bytes = <Vec<u8>>::from_hex(kf.secret_key.trim()).expect("bad secret_key hex");
-    let kp = match sk_bytes.len() {
-        64 => Keypair::from_bytes(&sk_bytes).expect("bad 64-byte keypair"),
+    let signing_key = match sk_bytes.len() {
+        64 => {
+            let keypair_array: [u8; 64] = sk_bytes.try_into().expect("64 bytes");
+            SigningKey::from_keypair_bytes(&keypair_array).expect("bad 64-byte keypair")
+        }
         32 => {
-            let secret = SecretKey::from_bytes(&sk_bytes).expect("bad 32-byte secret");
-            let public: PublicKey = (&secret).into();
-            Keypair { secret, public }
+            let secret_array: [u8; 32] = sk_bytes.try_into().expect("32 bytes");
+            SigningKey::from_bytes(&secret_array)
         }
         _ => panic!("secret_key must decode to 32 or 64 bytes, got {}", sk_bytes.len()),
     };
@@ -74,7 +76,7 @@ fn load_keypair(keys_path: &PathBuf) -> Keypair {
         if !pk_hex.is_empty() {
             match <Vec<u8>>::from_hex(pk_hex) {
                 Ok(want) if want.len() == 32 => {
-                    let got = kp.public.to_bytes();
+                    let got = signing_key.verifying_key().to_bytes();
                     if want[..] != got[..] {
                         eprintln!(
                             "⚠️  keys.json public_key doesn't match secret_key-derived public key.\n    Using derived: {}",
@@ -88,7 +90,7 @@ fn load_keypair(keys_path: &PathBuf) -> Keypair {
         }
     }
 
-    kp
+    signing_key
 }
 
 /// ========= CLI =========
@@ -189,10 +191,10 @@ fn main() {
     match cli.cmd {
         Commands::Keygen { out, print } => {
             let mut csprng = OsRng {};
-            let kp = Keypair::generate(&mut csprng);
+            let signing_key = SigningKey::generate(&mut csprng);
 
-            let public_hex = hex::encode(kp.public.to_bytes());
-            let secret_hex = hex::encode(kp.secret.to_bytes());
+            let public_hex = hex::encode(signing_key.verifying_key().to_bytes());
+            let secret_hex = hex::encode(signing_key.to_bytes());
 
             let obj = serde_json::json!({
                 "public_key": public_hex,

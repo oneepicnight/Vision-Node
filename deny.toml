@@ -1,0 +1,91 @@
+# cargo-deny configuration for Vision Node
+# See: https://embarkstudios.github.io/cargo-deny/
+
+[advisories]
+# The path where the advisory database is cloned/fetched into
+db-path = "~/.cargo/advisory-db"
+# The url(s) of the advisory databases to use
+db-urls = ["https://github.com/rustsec/advisory-db"]
+# Threshold for security vulnerabilities
+vulnerability = "deny"
+# Threshold for unmaintained crates
+unmaintained = "warn"
+# Threshold for yanked crates
+yanked = "deny"
+# Threshold for security notices
+notice = "warn"
+# Ignore advisories for specific crates
+ignore = [
+    # Add specific advisory IDs to ignore with justification
+    # Example: "RUSTSEC-2023-0001",
+]
+
+[licenses]
+# The confidence threshold for detecting a license from license text.
+confidence-threshold = 0.8
+# List of explicitly allowed licenses
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-3-Clause",
+    "BSD-2-Clause",
+    "ISC",
+    "Unlicense",
+    "CC0-1.0",
+]
+# List of explicitly disallowed licenses
+deny = [
+    "GPL-3.0",  # Copyleft - conflicts with MIT/Apache
+    "AGPL-3.0", # Strong copyleft
+]
+# Lint level for licenses considered copyleft
+copyleft = "deny"
+# Blanket approval or denial for OSI-approved licenses
+allow-osi-fsf-free = "either"
+# Lint level used when no detected license was found
+default = "deny"
+# List of crates that are allowed to have no license
+private = { ignore = false }
+
+[bans]
+# Lint level for when multiple versions of the same crate are detected
+multiple-versions = "warn"
+# Lint level for when a crate version requirement is `*`
+wildcards = "warn"
+# Highlight cases where a crate is included in multiple sections
+highlight = "all"
+
+# List of crates that are explicitly banned
+deny = [
+    # Add any crates that should never be used
+    # Example: { name = "openssl", reason = "Use rustls instead" },
+]
+
+# Certain crates/versions that will be skipped when doing duplicate detection
+skip = [
+    # Add exceptions for known duplicate dependencies that can't be easily resolved
+]
+
+# Similarly named crates that are not the same
+skip-tree = [
+    # Add crates to skip entire dependency trees
+]
+
+[sources]
+# Lint level for what to happen when a crate from a Git repository is encountered
+unknown-git = "warn"
+# Lint level for what to happen when a crate from a crate registry that is not crates.io is encountered
+unknown-registry = "warn"
+# List of URLs for allowed crate registries
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# List of URLs for allowed Git repositories
+allow-git = []
+
+[sources.allow-org]
+# GitHub organizations to allow Git sources from
+github = []
+# GitLab organizations to allow Git sources from  
+gitlab = []
+# Bitbucket organizations to allow Git sources from
+bitbucket = []

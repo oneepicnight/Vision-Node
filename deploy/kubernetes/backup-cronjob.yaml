@@ -1,0 +1,127 @@
+# Vision Node Backup CronJob for Kubernetes
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vision-node-backup
+  namespace: vision-node
+  labels:
+    app: vision-node-backup
+spec:
+  # Run daily at 2 AM UTC
+  schedule: "0 2 * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: vision-node-backup
+        spec:
+          restartPolicy: OnFailure
+          
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+          
+          containers:
+          - name: backup
+            image: visionnode/backup:latest
+            imagePullPolicy: Always
+            
+            env:
+            - name: DATA_DIR
+              value: "/data"
+            - name: BACKUP_TARGET
+              value: "/backups"
+            - name: BACKUP_RETENTION_DAYS
+              value: "7"
+            - name: S3_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: backup-config
+                  key: s3-bucket
+                  optional: true
+            - name: S3_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: backup-config
+                  key: s3-region
+                  optional: true
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: aws-access-key-id
+                  optional: true
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backup-secrets
+                  key: aws-secret-access-key
+                  optional: true
+            
+            volumeMounts:
+            - name: data
+              mountPath: /data
+              readOnly: true
+            - name: backups
+              mountPath: /backups
+            
+            resources:
+              requests:
+                cpu: "100m"
+                memory: "256Mi"
+              limits:
+                cpu: "500m"
+                memory: "512Mi"
+          
+          volumes:
+          - name: data
+            persistentVolumeClaim:
+              claimName: vision-node-data-vision-node-0
+          - name: backups
+            persistentVolumeClaim:
+              claimName: vision-node-backups
+
+---
+# PVC for backups
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vision-node-backups
+  namespace: vision-node
+  labels:
+    app: vision-node-backup
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+# ConfigMap for backup settings
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-config
+  namespace: vision-node
+data:
+  s3-bucket: ""  # Set via kubectl: kubectl create cm backup-config --from-literal=s3-bucket=my-bucket
+  s3-region: "us-east-1"
+
+---
+# Secret for S3 credentials (create separately)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: backup-secrets
+  namespace: vision-node
+type: Opaque
+stringData:
+  aws-access-key-id: ""  # Set via kubectl create secret
+  aws-secret-access-key: ""

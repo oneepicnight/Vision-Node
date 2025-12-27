@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { HashRouter as Router, Routes, Route, Link } from 'react-router-dom'
+import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useWalletStore } from './state/wallet'
 import { pingStatus } from './lib/api'
 import { requireWallet } from './lib/guards'
@@ -8,17 +8,23 @@ import Splash from './routes/Splash'
 import HandleClaim from './routes/HandleClaim'
 import ImportWallet from './routes/ImportWallet'
 import SecureKey from './routes/SecureKey'
-import Home from './routes/Home'
 import Settings from './routes/Settings'
 import DebugCrypto from './routes/DebugCrypto'
+import WalletHome from './routes/HomeNew'
+import Exchange from './pages/Exchange'
+import CommandCenter from './pages/CommandCenter'
+import MiniCommandCenter from './components/MiniCommandCenter'
+import MinerRedirect from './routes/MinerRedirect'
 import { Market, Orders } from './modules/market'
-import ExchangePage from './modules/exchange/Exchange'
-import { VaultCard } from './components/VaultCard'
 import { env } from './utils/env'
+import NavTabs from './components/NavTabs'
 
 // Protected components
-const ProtectedHome = requireWallet(Home)
+const ProtectedWalletHome = requireWallet(WalletHome)
+const ProtectedExchange = requireWallet(Exchange)
 const ProtectedSettings = requireWallet(Settings)
+const ProtectedCommandCenter = requireWallet(CommandCenter)
+const ProtectedMinerRedirect = requireWallet(MinerRedirect)
 
 // Status bar component
 function StatusBar() {
@@ -60,6 +66,20 @@ function StatusBar() {
       </div>
     </div>
   )
+}
+
+// Component to conditionally render MiniCommandCenter
+function MiniCommandCenterWrapper() {
+  const { profile } = useWalletStore()
+  const location = useLocation()
+  
+  // Don't show on splash/onboarding routes
+  const hideOnRoutes = ['/', '/import', '/handle', '/secure']
+  const shouldHide = hideOnRoutes.includes(location.pathname) || !profile
+  
+  if (shouldHide) return null
+  
+  return <MiniCommandCenter />
 }
 
 function App() {
@@ -113,28 +133,23 @@ function App() {
           Node offline ({env.NODE_URL}). {env.WALLET_DEV_BYPASS ? 'Running in DEV fallback — balances may be stale.' : 'Running in offline mode — balances may be stale.'}
         </div>
       )}
-      <nav className="top-nav">
-        <Link to="/home">Home</Link>
-        <Link to="/market">Market</Link>
-        <Link to="/exchange">Exchange</Link>
-        <Link to="/settings">Settings</Link>
-  {env.FEATURE_DEV_PANEL && <a href="/miner">Miner</a>}
-  {env.FEATURE_DEV_PANEL && <a href="/orders">Orders</a>}
-  {env.FEATURE_DEV_PANEL && <Link to="/debug/crypto">Debug Crypto</Link>}
-      </nav>
+      <MiniCommandCenterWrapper />
+      <NavTabs />
       <div className="main-content">
-        <div className="p-4">
-          <VaultCard />
-        </div>
         <Routes>
           <Route path="/" element={<Splash />} />
+          <Route path="/command-center" element={<ProtectedCommandCenter />} />
+          <Route path="/wallet" element={<ProtectedWalletHome />} />
+          <Route path="/home" element={<Navigate to="/wallet" replace />} />
+          <Route path="/panel" element={<Navigate to="/mining" replace />} />
+          <Route path="/miner" element={<Navigate to="/mining" replace />} />
+          <Route path="/mining" element={<ProtectedMinerRedirect />} />
+          <Route path="/exchange" element={<ProtectedExchange />} />
           <Route path="/market" element={<Market />} />
-          <Route path="/exchange" element={<ExchangePage />} />
           <Route path="/handle" element={<HandleClaim />} />
           <Route path="/import" element={<ImportWallet />} />
           <Route path="/secure" element={<SecureKey />} />
           {env.FEATURE_DEV_PANEL && <Route path="/debug/crypto" element={<DebugCrypto />} />}
-          <Route path="/home" element={<ProtectedHome />} />
           {env.FEATURE_DEV_PANEL && <Route path="/orders" element={<Orders />} />}
           <Route path="/settings" element={<ProtectedSettings />} />
         </Routes>

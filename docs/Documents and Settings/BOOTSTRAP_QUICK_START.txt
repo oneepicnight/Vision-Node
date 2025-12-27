@@ -1,0 +1,151 @@
+╔════════════════════════════════════════════════════════════╗
+║  VISION BLOCKCHAIN - Bootstrap Node Quick Start           ║
+╚════════════════════════════════════════════════════════════╝
+
+YOUR PUBLIC IP: 12.74.244.112
+YOUR LOCAL IP:  192.168.1.123
+REQUIRED PORT:  7070 (TCP)
+
+═══════════════════════════════════════════════════════════════
+
+✅ QUICK SETUP (3 Steps)
+
+1. RUN SETUP SCRIPT (as Administrator)
+   ────────────────────────────────────
+   Right-click PowerShell → "Run as Administrator"
+   
+   Then run:
+   cd C:\vision-node
+   .\setup-bootstrap-node.ps1
+   
+   This will:
+   • Configure Windows Firewall
+   • Create config.env file
+   • Disable sleep mode
+   • Show your IP addresses
+
+2. CONFIGURE ROUTER PORT FORWARDING
+   ────────────────────────────────────
+   Open router admin panel (usually http://192.168.1.1)
+   
+   Add port forwarding rule:
+   • External Port: 7070
+   • Internal Port: 7070
+   • Internal IP:   192.168.1.123  ← Your laptop's local IP
+   • Protocol:      TCP or TCP/UDP
+   • Name:          Vision Node
+   
+   Save and apply. Some routers need reboot.
+
+3. START YOUR NODE
+   ────────────────────────────────────
+   cd C:\vision-node
+   .\target\release\vision-node.exe
+   
+   Node will start on port 7070.
+
+═══════════════════════════════════════════════════════════════
+
+🧪 TEST YOUR SETUP
+
+From another network (use phone data, friend's WiFi, etc.):
+Open browser and go to:
+
+   http://12.74.244.112:7070/api/status
+
+If you see JSON data → ✅ Working!
+If it times out → ❌ Check port forwarding
+
+═══════════════════════════════════════════════════════════════
+
+📤 SHARE WITH TESTERS
+
+Tell your testers to add this line to their config.env:
+
+   VISION_BOOTSTRAP=http://12.74.244.112:7070
+
+Full tester instructions in: TESTER_NETWORK_MODE.md
+
+═══════════════════════════════════════════════════════════════
+
+🔧 TROUBLESHOOTING
+
+Problem: Can't access from internet
+─────────────────────────────────────
+✓ Check Windows Firewall (setup script should fix this)
+✓ Check router port forwarding is correct
+✓ Verify internal IP matches (run: ipconfig)
+✓ Try rebooting router
+✓ Test with: https://www.yougetsignal.com/tools/open-ports/
+✓ Some ISPs block incoming connections (contact ISP)
+
+Problem: Public IP changed
+─────────────────────────────────────
+✓ Check current IP: curl ifconfig.me
+✓ Update port forwarding if router reset
+✓ Tell testers new IP
+✓ Consider Dynamic DNS (No-IP, DuckDNS)
+
+Problem: Node crashes
+─────────────────────────────────────
+✓ Keep laptop plugged in
+✓ Sleep mode should be disabled (setup script does this)
+✓ Check logs in terminal
+
+═══════════════════════════════════════════════════════════════
+
+📊 MONITORING
+
+Check connected peers:
+   curl http://localhost:7070/api/status | ConvertFrom-Json
+
+View miner panel:
+   http://localhost:7070/panel.html
+
+Watch peer count:
+   while ($true) {
+       $s = curl http://localhost:7070/api/status | ConvertFrom-Json
+       Write-Host "Height: $($s.height) | Peers: $($s.peers.Count)"
+       Start-Sleep 10
+   }
+
+═══════════════════════════════════════════════════════════════
+
+🎯 SUCCESS CHECKLIST
+
+Before telling testers to connect:
+
+□ Setup script run successfully
+□ Windows Firewall allows port 7070
+□ Router port forwarding configured
+  (External 7070 → 192.168.1.123:7070)
+□ Node running without errors
+□ Can access http://12.74.244.112:7070/api/status from internet
+□ Laptop plugged in and won't sleep
+□ Testers have the bootstrap URL
+
+═══════════════════════════════════════════════════════════════
+
+📚 FULL DOCUMENTATION
+
+• BOOTSTRAP_NODE_SETUP.md    - Complete setup guide
+• TESTER_NETWORK_MODE.md     - Instructions for testers
+• config.env                 - Node configuration
+
+═══════════════════════════════════════════════════════════════
+
+🚀 QUICK REFERENCE
+
+Bootstrap URL:    http://12.74.244.112:7070
+Local IP:         192.168.1.123
+Port:             7070 (TCP)
+Firewall Rule:    Vision Blockchain Node
+Config File:      C:\vision-node\config.env
+
+Test Command:     curl http://12.74.244.112:7070/api/status
+Tester Config:    VISION_BOOTSTRAP=http://12.74.244.112:7070
+
+═══════════════════════════════════════════════════════════════
+
+Ready to launch your bootstrap node! 🎉
+

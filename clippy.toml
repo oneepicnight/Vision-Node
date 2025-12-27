@@ -1,0 +1,7 @@
+# Clippy configuration for Vision Node v0.8.9
+# Reduce noise from legitimate patterns in feature-gated code
+
+# Allow these patterns that are common in our codebase
+too-many-lines-threshold = 500
+cognitive-complexity-threshold = 50
+type-complexity-threshold = 500

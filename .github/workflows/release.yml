@@ -1,0 +1,148 @@
+name: Release
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: Build release
+        run: cargo build --release
+        
+      - name: Package Windows
+        run: |
+          $ver = (Get-Content VERSION).Trim()
+          mkdir -Force dist/VisionNode-$ver-WIN64
+          Copy-Item target/release/vision-node.exe dist/VisionNode-$ver-WIN64/
+          Copy-Item VERSION dist/VisionNode-$ver-WIN64/
+          "vision-node.exe --port 7070" | Out-File dist/VisionNode-$ver-WIN64/run.bat -Encoding ascii
+          Compress-Archive -Force -Path dist/VisionNode-$ver-WIN64/* -DestinationPath dist/VisionNode-$ver-WIN64.zip
+          
+      - name: Calculate checksum
+        run: |
+          $ver = (Get-Content VERSION).Trim()
+          $hash = (Get-FileHash dist/VisionNode-$ver-WIN64.zip -Algorithm SHA256).Hash
+          $hash | Out-File dist/VisionNode-$ver-WIN64.zip.sha256 -Encoding ascii
+          
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*.zip*
+
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: Build release
+        run: cargo build --release
+        
+      - name: Package Linux
+        run: |
+          ver=$(cat VERSION | tr -d '\r\n')
+          mkdir -p dist/VisionNode-$ver-Linux
+          cp target/release/vision-node dist/VisionNode-$ver-Linux/
+          cp VERSION dist/VisionNode-$ver-Linux/
+          echo "#!/bin/bash" > dist/VisionNode-$ver-Linux/run.sh
+          echo "./vision-node --port 7070" >> dist/VisionNode-$ver-Linux/run.sh
+          chmod +x dist/VisionNode-$ver-Linux/run.sh
+          chmod +x dist/VisionNode-$ver-Linux/vision-node
+          tar -C dist -czf dist/VisionNode-$ver-Linux.tar.gz VisionNode-$ver-Linux
+          
+      - name: Calculate checksum
+        run: |
+          ver=$(cat VERSION | tr -d '\r\n')
+          sha256sum dist/VisionNode-$ver-Linux.tar.gz | cut -d' ' -f1 > dist/VisionNode-$ver-Linux.tar.gz.sha256
+          
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/*.tar.gz*
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows
+          path: dist/
+          
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux
+          path: dist/
+          
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.zip
+            dist/*.zip.sha256
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+          body: |
+            ## Vision Node Testnet Release
+            
+            **Build**: FULL-only (single-world)
+            
+            This release includes:
+            - ✅ MVP endpoints only (~40 core routes)
+            - ✅ Vault + Market 50/30/20 settlement live
+            - ✅ Receipts + Prometheus metrics
+            - ✅ Windows & Linux binaries
+            
+            ### Quick Start
+            
+            **Windows:**
+            ```cmd
+            set VISION_ADMIN_TOKEN=your-secret-token
+            run.bat
+            ```
+            
+            **Linux:**
+            ```bash
+            export VISION_ADMIN_TOKEN=your-secret-token
+            ./run.sh
+            ```
+            
+            **Test it:**
+            ```bash
+            curl http://localhost:7070/status
+            curl http://localhost:7070/metrics
+            ```
+            
+            ### Documentation
+            - See `docs/MVP_ENDPOINTS.md` for available routes
+            - See `BUILD_VARIANTS.md` for build instructions
+            
+            ### Security Notes
+            - Seed endpoint disabled by default
+            - Set `VISION_ALLOW_SEED=1` for local testing only
+            - Use strong admin token in production
+            
+            **SHA256 checksums** are provided for verification.

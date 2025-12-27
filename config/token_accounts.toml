@@ -1,0 +1,16 @@
+# System accounts
+vault_address = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"   # staking vault
+fund_address  = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"   # ecosystem/fund
+
+# Founders (Treasury split)
+founder1_address = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" # Donnie
+founder2_address = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" # Travis
+
+# Split ratios (integers summing to 100)
+vault_pct = 50
+fund_pct  = 30
+treasury_pct = 20
+
+# Treasury sub-split between founders (sum to 100)
+founder1_pct = 50
+founder2_pct = 50

@@ -1,0 +1,348 @@
+/* Mini Command Center Visual Reference */
+
+/*
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│                           MINI COMMAND CENTER LAYOUT                                     │
+│  (Always visible on authenticated pages - positioned below StatusBar, above nav)        │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+
+╔═══════════════════════════════════════════════════════════════════════════════════════╗
+║  🟢 Node         ⚙️ Mining        💎 Wallet       🛡️ Guardian                         ║
+║  Online          SOLO             2.45 LAND       Connected               [Hint] →    ║
+║  • 12,345        • 4.2 MH/s       • 1,234 CASH                                         ║
+╚═══════════════════════════════════════════════════════════════════════════════════════╝
+     ↑                 ↑                 ↑               ↑                      ↑
+  Status Dot      Pulsing Dot        Balances      Status Dot           Hover Hint
+  (Green/Red)    (Blue when mining)                (Green/Red)       "Click for full..."
+
+
+CARD STRUCTURE:
+┌─────────────────┐
+│ [Icon] Label    │  ← 0.65rem uppercase (gray)
+│        Value    │  ← 0.875rem bold (white)
+│        • Sub    │  ← 0.75rem (gray) - hidden on mobile
+└─────────────────┘
+
+STATUS COLORS:
+• Online/Connected:  #10b981 (green glow)
+• Mining Active:     #3b82f6 (blue glow + pulse)
+• Offline:          #ef4444 (red glow)
+• Idle:             #94a3b8 (gray)
+
+ANIMATIONS:
+1. Pulse (Mining):
+   0%   → scale(1), opacity(1)
+   50%  → scale(2), opacity(0)
+   100% → scale(1), opacity(1)
+   Duration: 2s infinite
+
+2. Hover:
+   - Background brightens
+   - Border color intensifies
+   - "Click for full Command Center" fades in
+
+3. Click:
+   - Navigate to /command-center
+   - No page reload (React Router)
+
+RESPONSIVE BREAKPOINTS:
+┌──────────────┬──────────────────────────────────────────────┐
+│ Screen Size  │ Behavior                                     │
+├──────────────┼──────────────────────────────────────────────┤
+│ > 768px      │ Full layout with all sub-values              │
+│ 768px - 480px│ Horizontal scroll, hide sub-values           │
+│ < 480px      │ Compact, smaller icons, essential info only  │
+└──────────────┴──────────────────────────────────────────────┘
+
+CLICK TARGETS (Accessibility):
+Desktop: Entire mini-command-center div (full width)
+Mobile:  Individual cards (min 44x44px tap target)
+
+Z-INDEX LAYERS:
+StatusBar:           z-index: 110
+MiniCommandCenter:   z-index: 100  ← Just below status bar
+TopNav:              z-index: 90
+MainContent:         z-index: 1
+*/
+
+/* EXAMPLE USAGE IN APP.TSX */
+/*
+<Router>
+  <StatusBar />                    ← User handle, settings
+  <MiniCommandCenterWrapper />     ← THIS - Our new status HUD
+  <nav className="top-nav">        ← Wallet, Exchange, Market links
+    ...
+  </nav>
+  <Routes>
+    <Route path="/wallet" ... />
+    <Route path="/exchange" ... />
+    <Route path="/command-center" ... />
+  </Routes>
+</Router>
+*/
+
+/* INTEGRATION POINTS */
+/*
+1. App.tsx:
+   - Import MiniCommandCenter
+   - Create MiniCommandCenterWrapper (conditional render)
+   - Place between StatusBar and nav
+
+2. CommandCenter.tsx:
+   - Import useNodeStatus, useMiningStatus, useGuardianStatus
+   - Remove duplicate fetch logic
+   - Use shared hooks
+
+3. Exchange.tsx:
+   - Add context banner above trading interface
+   - Show wallet address + balances
+   - Link to Command Center
+   - Hint about mini HUD at top
+
+4. Hooks (src/hooks/):
+   - useNodeStatus.ts  → Shared node polling
+   - useMiningStatus.ts → Shared mining polling
+   - useGuardianStatus.ts → Shared guardian polling
+*/
+
+/* THEME INTEGRATION */
+/*
+Follows Vision Node AAA Design System:
+- Dark gradient backgrounds (rgba layers)
+- Neon accent colors (green, blue, red glows)
+- Subtle border highlights
+- Smooth transitions (0.2s-0.3s ease)
+- Backdrop blur for depth
+- Typography: Uppercase labels, bold values
+
+Matches:
+- command-center.css (full Command Center)
+- wallet.css (wallet screens)
+- Global theme variables
+*/
+
+/* API DATA FLOW */
+/*
+┌──────────────┐
+│ useNodeStatus│──► GET /api/status (5s poll)
+└──────────────┘        ↓
+                  { online, height, network }
+                        ↓
+                  MiniCommandCenter
+                        ↓
+                  Renders: 🟢 Node • Online • 12,345
+
+┌──────────────────┐
+│ useMiningStatus │──► GET /api/miner/status (3s poll)
+└──────────────────┘        ↓
+                  { active, mode, hashrate }
+                        ↓
+                  MiniCommandCenter
+                        ↓
+                  Renders: ⚙️ Mining • SOLO • 4.2 MH/s
+
+┌────────────────────┐
+│ useGuardianStatus │──► GET /api/mood (10s poll)
+└────────────────────┘        ↓
+                  { details.guardian_active }
+                        ↓
+                  MiniCommandCenter
+                        ↓
+                  Renders: 🛡️ Guardian • Connected
+
+┌──────────────┐
+│ useWalletStore│──► Zustand state (reactive)
+└──────────────┘        ↓
+                  { balances: { LAND, CASH } }
+                        ↓
+                  MiniCommandCenter
+                        ↓
+                  Renders: 💎 Wallet • 2.45 LAND • 1,234 CASH
+*/
+
+/* CONDITIONAL RENDERING LOGIC */
+/*
+MiniCommandCenterWrapper:
+  IF location.pathname in ['/', '/import', '/handle', '/secure']:
+    HIDE (onboarding routes)
+  ELSE IF profile exists:
+    SHOW MiniCommandCenter
+  ELSE:
+    HIDE (no wallet yet)
+
+Result:
+  ✅ New user: No clutter during onboarding
+  ✅ Existing user: Always visible status HUD
+  ✅ Clean UX: Appears exactly when needed
+*/
+
+/* MOBILE TOUCH OPTIMIZATION */
+/*
+Touch Targets:
+- Entire mini-command-center: 100% width × 50-70px height
+- Individual cards: ~120px × 50px (comfortable thumb reach)
+
+Gestures:
+- Tap anywhere → Navigate to /command-center
+- Horizontal swipe → Scroll through cards (< 768px)
+
+No Hover on Mobile:
+- Status dots always visible
+- No hover hint (replaced by tap target size)
+- Simplified layout focuses on essential data
+*/
+
+/* PERFORMANCE NOTES */
+/*
+Polling Intervals:
+- Node:     5 seconds  (low priority, rarely changes)
+- Mining:   3 seconds  (medium priority, hashrate fluctuates)
+- Guardian: 10 seconds (low priority, connection stable)
+
+Why Different Intervals?
+- Prevents API stampede (all requests at same time)
+- Balances real-time feel vs. server load
+- Mining needs fastest updates (user feedback)
+
+Optimization:
+- Shared hooks = single fetch per data source
+- React's useEffect cleanup prevents memory leaks
+- console.debug() instead of console.error() (non-blocking)
+*/
+
+/* ERROR HANDLING */
+/*
+All hooks use try-catch:
+  try {
+    const data = await fetch(...)
+    setState(data)
+  } catch (err) {
+    console.debug('Fetch failed:', err)  ← Non-blocking
+    // Component continues with stale data
+  }
+
+User Experience:
+- Mini HUD never crashes the page
+- Stale data shown if API down
+- Node offline? Shows "Offline" status gracefully
+*/
+
+/* TESTING SCENARIOS */
+/*
+1. New User Journey:
+   - Splash → No mini HUD ✓
+   - Import wallet → No mini HUD ✓
+   - Land in Command Center → Mini HUD appears ✓
+   - Navigate to Wallet → Mini HUD visible ✓
+   - Navigate to Exchange → Mini HUD + context banner ✓
+
+2. Existing User:
+   - Refresh page → Mini HUD loads immediately ✓
+   - Click mini HUD → Lands in Command Center ✓
+   - All routes show mini HUD (except onboarding) ✓
+
+3. Real-Time Updates:
+   - Start mining → Dot turns blue + pulse ✓
+   - Stop mining → Dot turns gray ✓
+   - Node goes offline → Dot turns red ✓
+   - Balance changes → Updates in mini HUD ✓
+
+4. Mobile:
+   - < 768px → Horizontal scroll works ✓
+   - Tap mini HUD → Navigate to Command Center ✓
+   - Sub-values hidden → Layout clean ✓
+
+5. Error States:
+   - API offline → Shows stale data, no crash ✓
+   - Invalid response → Graceful fallback ✓
+   - Network timeout → Component continues ✓
+*/
+
+/* FUTURE ENHANCEMENTS (Phase 2) */
+/*
+1. Right-Click Context Menu:
+   - Start/Stop Mining
+   - Copy Wallet Address
+   - View Recent Transactions
+   - Open Settings
+
+2. Notification Badges:
+   - Red dot on Guardian when intervention needed
+   - Green flash on mining reward
+   - Blue pulse on new transaction
+
+3. Mood Ring Integration:
+   - Show current mood emoji in mini HUD
+   - Color-code entire HUD based on network mood
+   - Tooltip: "Network is in Storm mode"
+
+4. Customization:
+   - User pref: Show/hide specific cards
+   - Rearrange card order
+   - Toggle compact/expanded view
+   - Pin to top or sidebar
+
+5. Quick Actions:
+   - Inline mini controls (no navigation)
+   - Start mining button in mini HUD
+   - Quick send from wallet card
+   - One-click Guardian check
+*/
+
+/* ACCESSIBILITY (WCAG 2.1 AA) */
+/*
+✓ Color Contrast: All text meets 4.5:1 ratio
+✓ Keyboard Navigation: Tab through cards, Enter to click
+✓ Screen Reader: aria-label="Node status: Online at height 12,345"
+✓ Touch Targets: Minimum 44x44px (mobile)
+✓ Focus Indicators: Visible outline on keyboard focus
+✓ Reduced Motion: Disable pulse animation if user prefers
+*/
+
+/* SECURITY CONSIDERATIONS */
+/*
+✓ No sensitive data exposed (wallet address truncated)
+✓ API calls use relative URLs (no CORS issues)
+✓ No localStorage access (uses Zustand state)
+✓ No inline event handlers (React onClick)
+✓ No eval() or dangerouslySetInnerHTML
+*/
+
+/* DEPLOYMENT CHECKLIST */
+/*
+Before merging to main:
+  [ ] TypeScript compiles with no errors
+  [ ] ESLint passes (no warnings)
+  [ ] All imports resolve correctly
+  [ ] CSS file imported in component
+  [ ] Mobile responsive tested (Chrome DevTools)
+  [ ] Real API endpoints return expected data
+  [ ] Navigation works on all routes
+  [ ] No console errors in browser
+  [ ] Git commit: "feat: Add Mini Command Center HUD"
+  [ ] Update CHANGELOG.md
+*/
+
+/* FILE STRUCTURE */
+/*
+wallet-marketplace-source/
+├── src/
+│   ├── components/
+│   │   ├── MiniCommandCenter.tsx      ← New component
+│   │   └── ...
+│   ├── hooks/
+│   │   ├── useNodeStatus.ts           ← New hook
+│   │   ├── useMiningStatus.ts         ← New hook
+│   │   ├── useGuardianStatus.ts       ← New hook
+│   │   └── ...
+│   ├── pages/
+│   │   ├── CommandCenter.tsx          ← Modified (uses hooks)
+│   │   ├── Exchange.tsx               ← Modified (context banner)
+│   │   └── ...
+│   ├── styles/
+│   │   ├── mini-command-center.css    ← New stylesheet
+│   │   └── ...
+│   ├── App.tsx                        ← Modified (renders MiniCommandCenter)
+│   └── ...
+└── MINI_COMMAND_CENTER_COMPLETE.md    ← Documentation
+*/

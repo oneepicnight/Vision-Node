@@ -1,0 +1,94 @@
+# Instructions for connecting to Vision node over internet
+# Give this to someone on another machine to test P2P
+
+Write-Host "`n" "=" * 70 -ForegroundColor Cyan
+Write-Host " VISION NODE - INTERNET P2P CONNECTION GUIDE" -ForegroundColor Green
+Write-Host " " "=" * 70 "`n" -ForegroundColor Cyan
+
+$targetIP = "143.105.111.206"
+
+Write-Host "TARGET NODE TO CONNECT TO:" -ForegroundColor Yellow
+Write-Host "  IP Address: $targetIP" -ForegroundColor Cyan
+Write-Host "  P2P Port: 7072" -ForegroundColor Cyan
+Write-Host "  HTTP API: http://$targetIP:7070" -ForegroundColor Gray
+Write-Host ""
+
+Write-Host "REQUIREMENTS:" -ForegroundColor Yellow
+Write-Host "  ✅ Vision Node binary (vision-node.exe)" -ForegroundColor White
+Write-Host "  ✅ Port 7070 available locally (or choose different)" -ForegroundColor White
+Write-Host "  ✅ Internet connection" -ForegroundColor White
+Write-Host "  ✅ Firewall allows outbound connections" -ForegroundColor White
+Write-Host ""
+
+Write-Host "QUICK START:" -ForegroundColor Yellow
+Write-Host "  1. Download VisionNode-Constellation-v1.1.1 package" -ForegroundColor White
+Write-Host "  2. Extract to any folder" -ForegroundColor White
+Write-Host "  3. Edit .env file to add target IP to seeds:" -ForegroundColor White
+Write-Host ""
+Write-Host "     In src/p2p/seed_peers.rs, add:" -ForegroundColor Gray
+Write-Host "     ('$targetIP', 7072)," -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  4. Run: START-PUBLIC-NODE.bat" -ForegroundColor White
+Write-Host ""
+
+Write-Host "CONFIGURATION (.env):" -ForegroundColor Yellow
+Write-Host "  VISION_GUARDIAN_MODE=false" -ForegroundColor White
+Write-Host "  VISION_PURE_SWARM_MODE=true" -ForegroundColor White
+Write-Host "  VISION_PORT=7070" -ForegroundColor White
+Write-Host "  RUST_LOG=info" -ForegroundColor White
+Write-Host ""
+
+Write-Host "EXPECTED LOGS (Success):" -ForegroundColor Yellow
+Write-Host "  [NETWORK] 🌌 Running in PURE SWARM MODE" -ForegroundColor Green
+Write-Host "  [P2P] Attempting connection to $targetIP:7072" -ForegroundColor White
+Write-Host "  [P2P] Handshake sent to $targetIP" -ForegroundColor White
+Write-Host "  [SWARM] Connected to verified peer" -ForegroundColor Green
+Write-Host "  [GOSSIP] 📡 Received peer candidates" -ForegroundColor Green
+Write-Host ""
+
+Write-Host "TROUBLESHOOTING:" -ForegroundColor Yellow
+Write-Host "  ❌ Connection timeout?" -ForegroundColor Red
+Write-Host "     - Check target node is running: http://$targetIP:7070" -ForegroundColor Gray
+Write-Host "     - Check your firewall allows port 7072 outbound" -ForegroundColor Gray
+Write-Host "     - Verify target's router has port 7072 forwarded" -ForegroundColor Gray
+Write-Host ""
+Write-Host "  ❌ Handshake failed?" -ForegroundColor Red
+Write-Host "     - Both nodes must be same version (v1.1.1)" -ForegroundColor Gray
+Write-Host "     - Check RUST_LOG=info is set for verbose logs" -ForegroundColor Gray
+Write-Host ""
+
+Write-Host "TEST CONNECTION (from your machine):" -ForegroundColor Yellow
+Write-Host "  Test if port 7072 is reachable:" -ForegroundColor White
+Write-Host "    Test-NetConnection -ComputerName $targetIP -Port 7072" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  Test if HTTP API responds:" -ForegroundColor White
+Write-Host "    curl http://$targetIP:7070" -ForegroundColor Cyan
+Write-Host ""
+
+Write-Host "NETWORK TOPOLOGY:" -ForegroundColor Yellow
+Write-Host "  Internet P2P connection:" -ForegroundColor White
+Write-Host ""
+Write-Host "  [Your Node] <---> Internet <---> [$targetIP:7072]" -ForegroundColor Cyan
+Write-Host "       |                                  |" -ForegroundColor Gray
+Write-Host "    Gossip shares                    Gossip shares" -ForegroundColor Gray
+Write-Host "    peer lists                       peer lists" -ForegroundColor Gray
+Write-Host "       |                                  |" -ForegroundColor Gray
+Write-Host "       +--------> Network grows <---------+" -ForegroundColor Green
+Write-Host ""
+
+Write-Host "WHAT HAPPENS AFTER CONNECTION:" -ForegroundColor Yellow
+Write-Host "  1️⃣  Your node connects to $targetIP:7072" -ForegroundColor White
+Write-Host "  2️⃣  P2P handshake exchanges node IDs and chain heights" -ForegroundColor White
+Write-Host "  3️⃣  Both nodes verify each other (reputation +10)" -ForegroundColor White
+Write-Host "  4️⃣  Gossip protocol shares peer lists (exponential discovery)" -ForegroundColor White
+Write-Host "  5️⃣  Your node discovers other peers in the network" -ForegroundColor White
+Write-Host "  6️⃣  Swarm intelligence maintains optimal connections" -ForegroundColor White
+Write-Host ""
+
+Write-Host "SUPPORT:" -ForegroundColor Yellow
+Write-Host "  Discord: https://discord.gg/visionworld" -ForegroundColor Cyan
+Write-Host "  Share your node logs if issues persist" -ForegroundColor Gray
+Write-Host ""
+
+Write-Host "Ready to connect? Make sure $targetIP:7072 is reachable!" -ForegroundColor Green
+Write-Host ""

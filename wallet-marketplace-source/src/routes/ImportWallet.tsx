@@ -4,6 +4,8 @@ import { useOnboardingStore } from '../state/onboarding'
 import { deriveKeys } from '../lib/keystore'
 import { useWalletStore } from '../state/wallet'
 import { isValidHandle } from '../lib/guards'
+import '../styles/wallet-aaa.css'
+import LinkDiscordStep from '../pages/LinkDiscordStep'
 
 export default function ImportWallet() {
   const navigate = useNavigate()
@@ -13,14 +15,16 @@ export default function ImportWallet() {
   const [seedPhrase, setSeedPhrase] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showDiscordStep, setShowDiscordStep] = useState(false)
+  const [importedAddress, setImportedAddress] = useState('')
 
   const handleImport = async () => {
     const cleanHandle = handle.trim().toLowerCase()
     const cleanSeed = seedPhrase.trim().toLowerCase()
     
-    // Validate handle
-    if (!cleanHandle || !isValidHandle(cleanHandle)) {
-      setError('Handles are 3–24 chars: a–z, 0–9, . _ -')
+    // Validate handle (optional field)
+    if (cleanHandle && !isValidHandle(cleanHandle)) {
+      setError('Handles are 3–24 chars: letters, numbers, underscores, dots, hyphens')
       return
     }
     
@@ -41,9 +45,9 @@ export default function ImportWallet() {
       const keys = await deriveKeys(words)
       console.log('Derived address:', keys.address)
       
-      // Create profile
+      // Create profile (use handle if provided, otherwise use address prefix)
       const profile = {
-        handle: cleanHandle,
+        handle: cleanHandle || keys.address.substring(0, 8),
         address: keys.address,
         createdAt: Date.now()
       }
@@ -51,13 +55,16 @@ export default function ImportWallet() {
       // Store in wallet state
       setProfile(profile)
       
+      // Store imported address for Discord linking
+      setImportedAddress(keys.address)
+      
       // Clear onboarding state
       resetOnboarding()
       
       console.log('Wallet imported successfully')
       
-      // Navigate to home
-      navigate('/home')
+      // Show Discord linking step
+      setShowDiscordStep(true)
     } catch (err) {
       console.error('Wallet import error:', err)
       setError(`Failed to import wallet: ${err instanceof Error ? err.message : 'Unknown error'}`)
@@ -66,65 +73,86 @@ export default function ImportWallet() {
     }
   }
 
+  const onBack = () => {
+    navigate('/')
+  }
+
+  // Show Discord linking step after successful import
+  if (showDiscordStep) {
+    return (
+      <LinkDiscordStep
+        walletAddress={importedAddress}
+        onSkip={() => {
+          console.log('Skipped Discord linking')
+          navigate('/wallet')
+        }}
+        onLinked={() => {
+          console.log('Discord linked successfully')
+          navigate('/wallet')
+        }}
+      />
+    )
+  }
+
   return (
     <div className="page-container">
       <div className="form-container">
         <div>
           <h2 className="form-title">
-            Import <span className="form-accent">Wallet</span>
+            Import your <span className="form-accent">wallet</span>
           </h2>
           <p className="form-subtitle">
             Restore your wallet using your seed phrase.
           </p>
         </div>
 
-        <div>
-          <div className="input-group">
-            <span className="input-prefix">@</span>
-            <input 
+        <div className="form-field">
+          <label className="field-label">Handle (optional)</label>
+          <div className="handle-input-wrapper">
+            <span className="handle-prefix">@</span>
+            <input
               type="text"
+              className="text-input handle-input"
               placeholder="your-handle"
               maxLength={24}
               value={handle}
               onChange={(e) => setHandleInput(e.target.value)}
-              className="text-input"
               disabled={loading}
             />
-          </div>
-          
-          <div style={{ marginTop: '1rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
-              Seed Phrase (12 or 24 words)
-            </label>
-            <textarea 
-              placeholder="word1 word2 word3 ..."
-              rows={4}
-              value={seedPhrase}
-              onChange={(e) => setSeedPhrase(e.target.value)}
-              className="text-input"
-              style={{ resize: 'vertical', fontFamily: 'monospace', fontSize: '0.875rem' }}
-              disabled={loading}
-            />
-          </div>
-          
-          <div className="error-message">
-            {error}
           </div>
         </div>
 
-        <div>
-          <button 
-            onClick={handleImport}
+        <div className="form-field">
+          <label className="field-label">Seed Phrase (12 or 24 words)</label>
+          <textarea
+            className="text-input textarea-input"
+            rows={4}
+            placeholder="word1 word2 word3 ..."
+            value={seedPhrase}
+            onChange={(e) => setSeedPhrase(e.target.value)}
             disabled={loading}
+          />
+        </div>
+
+        {error && (
+          <div className="error-message">
+            {error}
+          </div>
+        )}
+
+        <div>
+          <button
             className="primary-button"
+            onClick={handleImport}
+            disabled={!seedPhrase.trim() || loading}
           >
             {loading ? 'Importing...' : 'Import Wallet'}
           </button>
           
           <button 
-            onClick={() => navigate('/')}
+            className="secondary-button" 
+            onClick={onBack}
             disabled={loading}
-            className="secondary-button"
           >
             Back
           </button>

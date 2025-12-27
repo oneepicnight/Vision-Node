@@ -1,42 +1,74 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import '../styles/wallet-aaa.css'
+import CreateWalletFlow from '../components/CreateWalletFlow'
+import ImportWalletFlow from '../components/ImportWalletFlow'
+
+type WizardMode = 'welcome' | 'create' | 'import'
 
 export default function Splash() {
   const navigate = useNavigate()
+  const [mode, setMode] = useState<WizardMode>('welcome')
+
+  const handleBackToWelcome = () => {
+    setMode('welcome')
+  }
+
+  const handleCreateSuccess = () => {
+    // After create flow completes, navigate to secure key page, then command center
+    navigate('/secure')
+  }
+
+  const handleImportSuccess = () => {
+    // After import flow completes, navigate to command center
+    navigate('/command-center')
+  }
 
   return (
-    <div className="splash-container">
-      <div className="splash-content">
-        {/* Animated background grid */}
-        <div className="splash-bg">
-          <div className="splash-gradient"></div>
-        </div>
-        
-        <div>
-          <h1 className="splash-title">
-            Welcome, <span className="splash-accent">Dreamer</span>.
-          </h1>
-          <p className="splash-subtitle">
-            The world is yours to shape.
-          </p>
-        </div>
-        
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', maxWidth: '300px', alignItems: 'center' }}>
-          <button 
-            onClick={() => navigate('/handle')}
-            className="splash-button"
-            style={{ width: '100%' }}
-          >
-            Create New Wallet
-          </button>
-          
-          <button 
-            onClick={() => navigate('/import')}
-            className="splash-button"
-            style={{ width: '100%', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.5)' }}
-          >
-            Import Existing Wallet
-          </button>
-        </div>
+    <div className="vision-landing">
+      {/* CENTERED CARD - GLOBE IS CSS PSEUDO-ELEMENT BEHIND IT */}
+      <div className={`vision-panel vision-wizard-panel ${mode !== 'welcome' ? 'vision-panel-extended' : ''}`}>
+        {mode === 'welcome' && (
+          <div className="vision-wizard-content fade-in">
+            <h1 className="vision-title-main">Welcome,</h1>
+            <h2 className="vision-title-sub">Dreamer.</h2>
+            <p className="vision-subline">The Constellation Awaits You.</p>
+
+            <div className="wallet-actions">
+              <button 
+                onClick={() => setMode('create')}
+                className="btn-primary"
+              >
+                CREATE NEW WALLET
+              </button>
+              
+              <button 
+                onClick={() => setMode('import')}
+                className="btn-secondary"
+              >
+                IMPORT EXISTING WALLET
+              </button>
+            </div>
+          </div>
+        )}
+
+        {mode === 'create' && (
+          <div className="vision-wizard-content fade-in">
+            <CreateWalletFlow 
+              onBack={handleBackToWelcome}
+              onSuccess={handleCreateSuccess}
+            />
+          </div>
+        )}
+
+        {mode === 'import' && (
+          <div className="vision-wizard-content fade-in">
+            <ImportWalletFlow 
+              onBack={handleBackToWelcome}
+              onSuccess={handleImportSuccess}
+            />
+          </div>
+        )}
       </div>
     </div>
   )

@@ -1,0 +1,26 @@
+[2m2025-12-09T17:05:28.473686Z[0m [32m INFO[0m [2mvision_node::telemetry::swarm_telemetry[0m[2m:[0m 
+[2m2025-12-09T17:05:28.475444Z[0m [32m INFO[0m [2mvision_node::telemetry::swarm_telemetry[0m[2m:[0m    __      ___      _                 _   _           _      
+[2m2025-12-09T17:05:28.476954Z[0m [32m INFO[0m [2mvision_node::telemetry::swarm_telemetry[0m[2m:[0m    \ \    / (_)    (_)               | \ | |         | |     
+[2m2025-12-09T17:05:28.477405Z[0m [32m INFO[0m [2mvision_node::telemetry::swarm_telemetry[0m[2m:[0m     \ \  / / _ ___ _  ___  _ __      |  \| | ___   __| | ___ 
+[2m2025-12-09T17:05:28.478085Z[0m [32m INFO[0m [2mvision_node::telemetry::swarm_telemetry[0m[2m:[0m      \ \/ / | / __| |/ _ \| '_ \     | . ` |/ _ \ / _` |/ _ \
+[2m2025-12-09T17:05:28.478383Z[0m [32m INFO[0m [2mvision_node::telemetry::swarm_telemetry[0m[2m:[0m       \  /  | \__ \ | (_) | | | |    | |\  | (_) | (_| |  __/
+[2m2025-12-09T17:05:28.478685Z[0m [32m INFO[0m [2mvision_node::telemetry::swarm_telemetry[0m[2m:[0m        \/   |_|___/_|\___/|_| |_|    |_| \_|\___/ \__,_|\___|
+[2m2025-12-09T17:05:28.478949Z[0m [32m INFO[0m [2mvision_node::telemetry::swarm_telemetry[0m[2m:[0m 
+[2m2025-12-09T17:05:28.479372Z[0m [32m INFO[0m [2mvision_node::telemetry::swarm_telemetry[0m[2m:[0m 🌌 Vision Node starting up...
+[2m2025-12-09T17:05:28.479593Z[0m [32m INFO[0m [2mvision_node::telemetry::swarm_telemetry[0m[2m:[0m    Version : 2.1.0
+[2m2025-12-09T17:05:28.479760Z[0m [32m INFO[0m [2mvision_node::telemetry::swarm_telemetry[0m[2m:[0m    Network : testnet
+[2m2025-12-09T17:05:28.479968Z[0m [32m INFO[0m [2mvision_node::telemetry::swarm_telemetry[0m[2m:[0m    Mode    : Constellation
+[2m2025-12-09T17:05:28.480138Z[0m [32m INFO[0m [2mvision_node::telemetry::swarm_telemetry[0m[2m:[0m 
+[2m2025-12-09T17:05:28.786406Z[0m [32m INFO[0m [2mvision_node::telemetry::swarm_telemetry[0m[2m:[0m [HW] CPU: Intel(R) Core(TM) i5-9300H CPU @ 2.40GHz | physical cores: 4 | logical threads: 8
+[2m2025-12-09T17:05:28.789513Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m 🌌 Vision Constellation node starting up [3madmin_token[0m[2m=[0munset
+[2m2025-12-09T17:05:28.798837Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m [P2P REACHABILITY] Auto-detecting external IP...
+[2m2025-12-09T17:05:28.799250Z[0m [32m INFO[0m [2mp2p::external_ip[0m[2m:[0m Detecting external IP address...
+[2m2025-12-09T17:05:29.544567Z[0m [32m INFO[0m [2mp2p::external_ip[0m[2m:[0m ✓ Detected external IP via ipify: 207.105.4.175
+[2m2025-12-09T17:05:29.545827Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m [P2P REACHABILITY] ✅ Advertised P2P address: 207.105.4.175:7072
+[2m2025-12-09T17:05:29.546028Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m 🛡️  Shutdown coordinator initialized
+[2m2025-12-09T17:05:29.546231Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Initialized shard 0
+[2m2025-12-09T17:05:29.546450Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Initialized shard 1
+[2m2025-12-09T17:05:29.546689Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Initialized shard 2
+[2m2025-12-09T17:05:29.546853Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Initialized shard 3
+[2m2025-12-09T17:05:29.547103Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Sharding system initialized with 4 shards
+[2m2025-12-09T17:05:29.547301Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m mempool TTL sweeping configured [3mmempool_ttl_secs[0m[2m=[0m900 [3mmempool_sweep_secs[0m[2m=[0m60

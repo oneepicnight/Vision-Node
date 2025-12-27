@@ -1,1 +1,30 @@
 /target
+node_modules
+
+# Local chain data dirs (per-port)
+/vision_data_*/
+
+# Historical snapshot folders (not part of the build)
+/temp-*/
+/temp-linux-check/
+/temp-constellation-check/
+
+# Secrets / env / keys
+.env
+*.key
+*.pem
+keys.json
+seeds.json
+
+# Wallet build artifacts (built from wallet-marketplace-source)
+/wallet/dist/
+
+# Packaged/test folders (not part of source build)
+/VisionNode-Constellation-*/
+/TEST-CONSTELLATION-NODE/
+
+# Source backups / scratch files (not part of the build)
+/src/**/*.backup*
+/src/**/*_temp*.rs
+/src/main_append.txt
+

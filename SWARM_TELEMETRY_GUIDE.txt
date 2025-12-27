@@ -1,0 +1,191 @@
+===============================================================================
+VISION NODE v2.1.0 - SWARM TELEMETRY SYSTEM
+===============================================================================
+
+The swarm telemetry system provides visualization and monitoring of the
+Vision Network constellation through ASCII logs, GeoIP heatmaps, and real-time
+peer discovery animations.
+
+===============================================================================
+FEATURES
+===============================================================================
+
+1. STARTUP BANNER
+   - ASCII art logo with version and mode information
+   - CPU topology detection (physical cores, logical threads, model)
+   - Displayed on every node startup
+
+2. PEER DISCOVERY ANIMATION
+   - Real-time spinner showing peer discovery progress
+   - Updates every 5 seconds
+   - Shows: connected peers + known peers in peer store
+   - Example: [SWARM] ⠋ discovering peers... connected=7 known=23
+
+3. SWARM VISUALIZER (Optional)
+   - Periodic snapshots of swarm health every 30 seconds
+   - Shows: total peers, connected, trusted, seeds
+   - Example: [SWARM VIZ] peers=27 connected=19 trusted=12 seeds=7
+   - Enable with: VISION_SWARM_VIZ=true
+
+4. CONSTELLATION HEATMAP (Optional)
+   - Geographic distribution of peers by country
+   - Updates every 2 minutes
+   - Shows top 10 countries with bar chart
+   - Example:
+     [CONSTELLATION] Geo heatmap (top regions):
+       USA |  14 ██████████████
+       DEU |   5 █████
+       CAN |   3 ███
+   - Requires: VISION_GEOIP_DB=/path/to/GeoLite2-City.mmdb
+
+5. UPTIME BADGE
+   - Emotional status badges based on uptime and peer count
+   - ✨ NEW STAR      - Just started (< 5 min)
+   - ⚡ WARMING UP   - Running 5+ min
+   - 🔥 STEADY       - Running 15+ min with 5+ peers
+   - 🌌 IMMORTAL     - Running 1+ hour with 10+ peers
+
+===============================================================================
+CONFIGURATION
+===============================================================================
+
+Environment Variables:
+
+VISION_SWARM_VIZ=true
+  Enable swarm visualizer (logs peer stats every 30s)
+  Default: false (disabled to keep logs clean)
+
+VISION_GEOIP_DB=/path/to/GeoLite2-City.mmdb
+  Path to MaxMind GeoIP2 database for constellation heatmap
+  Download from: https://dev.maxmind.com/geoip/geolite2-free-geolocation-data
+  If not set, heatmap is disabled
+
+===============================================================================
+OBTAINING GEOIP DATABASE
+===============================================================================
+
+1. Go to: https://www.maxmind.com/en/accounts/current/geoip/downloads
+2. Sign up for free GeoLite2 account
+3. Download "GeoLite2 City" in MMDB format
+4. Extract GeoLite2-City.mmdb
+5. Set environment variable:
+   
+   Windows PowerShell:
+   $env:VISION_GEOIP_DB="C:\path\to\GeoLite2-City.mmdb"
+   
+   Linux/Mac:
+   export VISION_GEOIP_DB="/path/to/GeoLite2-City.mmdb"
+
+6. Restart node to load database
+
+===============================================================================
+EXAMPLE .ENV CONFIGURATION
+===============================================================================
+
+# Enable swarm visualizer
+VISION_SWARM_VIZ=true
+
+# GeoIP database for constellation heatmap
+VISION_GEOIP_DB=C:\vision-node\GeoLite2-City.mmdb
+
+# Optional: Adjust log level to see all telemetry
+VISION_LOG=info
+
+===============================================================================
+LOG OUTPUT EXAMPLES
+===============================================================================
+
+STARTUP:
+--------
+   __      ___      _                 _   _           _      
+   \ \    / (_)    (_)               | \ | |         | |     
+    \ \  / / _ ___ _  ___  _ __      |  \| | ___   __| | ___ 
+     \ \/ / | / __| |/ _ \| '_ \     | . ` |/ _ \ / _` |/ _ \
+      \  /  | \__ \ | (_) | | | |    | |\  | (_) | (_| |  __/
+       \/   |_|___/_|\___/|_| |_|    |_| \_|\___/ \__,_|\___|
+
+🌌 Vision Node starting up...
+   Version : 2.1.0
+   Network : vision-testnet
+   Mode    : Constellation
+
+[HW] CPU: Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz | physical cores: 6 | logical threads: 12
+
+PEER DISCOVERY:
+--------------
+[SWARM] ⠋ discovering peers... connected=3 known=15
+[SWARM] ⠙ discovering peers... connected=5 known=18
+[SWARM] ⠚ discovering peers... connected=7 known=23
+
+SWARM VISUALIZER:
+----------------
+[SWARM VIZ] peers=27 connected=19 trusted=12 seeds=7
+[SWARM VIZ] peers=31 connected=22 trusted=15 seeds=7
+
+CONSTELLATION HEATMAP:
+---------------------
+[CONSTELLATION] Geo heatmap (top regions):
+  USA |  14 ██████████████
+  DEU |   5 █████
+  CAN |   3 ███
+  GBR |   2 ██
+  FRA |   2 ██
+  AUS |   1 █
+  JPN |   1 █
+
+UPTIME BADGE (in mining logs):
+------------------------------
+[MINER] Mining enabled - peers=7 uptime_badge=⚡ WARMING UP
+[MINER] Mining enabled - peers=12 uptime_badge=🌌 IMMORTAL
+
+===============================================================================
+PERFORMANCE IMPACT
+===============================================================================
+
+- Startup banner: Negligible (one-time on startup)
+- CPU topology: Negligible (one-time on startup)
+- Peer discovery animation: Minimal (5 second interval)
+- Swarm visualizer: Minimal (30 second interval, opt-in)
+- Constellation heatmap: Minimal (2 minute interval, opt-in)
+
+The telemetry system is designed to be lightweight and non-intrusive.
+Most features are disabled by default and can be enabled selectively.
+
+===============================================================================
+TROUBLESHOOTING
+===============================================================================
+
+Q: Peer discovery animation not showing
+A: Check that P2P is enabled (not Guardian mode) and peers are connecting
+
+Q: Constellation heatmap not showing
+A: Verify VISION_GEOIP_DB is set and points to valid GeoLite2-City.mmdb file
+   Check logs for: "[GEOIP] Loaded GeoIP DB from: ..."
+
+Q: Swarm visualizer not showing
+A: Set VISION_SWARM_VIZ=true in environment or .env file
+
+Q: Too much telemetry output
+A: Disable swarm viz by removing VISION_SWARM_VIZ
+   Heatmap will only run if GeoIP DB is configured
+   Peer discovery animation runs only during active discovery
+
+Q: GeoIP database errors
+A: Ensure you downloaded GeoLite2-City (not Country or ASN)
+   Verify file path is correct and file is not corrupted
+   Download fresh copy from MaxMind if needed
+
+===============================================================================
+DEVELOPMENT NOTES
+===============================================================================
+
+The telemetry module is located in src/telemetry/swarm_telemetry.rs
+
+To add new telemetry features:
+1. Add function to swarm_telemetry.rs
+2. Call from main.rs after P2P initialization
+3. Use spawn for background tasks
+4. Keep intervals reasonable (30s+ for periodic tasks)
+5. Make features opt-in with environment variables
+
+===============================================================================

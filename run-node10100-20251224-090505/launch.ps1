@@ -1,0 +1,10 @@
+﻿$env:VISION_PEERBOOK_SCOPE = 'local-5nodes'
+$env:VISION_P2P_PORT = '10102'
+$env:VISION_ALLOW_PRIVATE_PEERS = 'true'
+$env:LOCAL_TEST_MODE = 'true'
+$env:VISION_PORT = '10100'
+$env:VISION_LOCAL_TEST = '1'
+$env:VISION_P2P_SEEDS = ''
+$env:VISION_HTTP_PORT = '10100'
+$env:VISION_DATA_DIR = 'C:\vision-node\run-node10100-20251224-090505\data'
+& '.\target\release\vision-node.exe' run

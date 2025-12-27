@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Believer Badge Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen p-8">
+    <div class="max-w-4xl mx-auto space-y-8">
+        <!-- Header -->
+        <div class="text-center space-y-2">
+            <h1 class="text-3xl font-bold text-emerald-400">🌟 Believer Badge System</h1>
+            <p class="text-sm text-slate-400">One-time tip → Permanent recognition</p>
+        </div>
+
+        <!-- Example: Before Tipping -->
+        <div class="rounded-2xl border border-slate-700 bg-slate-900 p-6 space-y-4">
+            <h2 class="text-lg font-semibold text-slate-200">Before Tipping</h2>
+            <div class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-700/50 bg-slate-900/50 p-4">
+                <div>
+                    <div class="text-xs uppercase tracking-wide text-slate-400 mb-1">Your Wallet</div>
+                    <div class="text-sm font-mono text-slate-100">0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7</div>
+                </div>
+                <div class="text-xs text-slate-500">No badge yet...</div>
+            </div>
+
+            <!-- Tip Button (would show here) -->
+            <div class="rounded-2xl border border-yellow-500/40 bg-yellow-900/20 p-4 text-sm text-yellow-100 shadow-[0_0_25px_rgba(253,224,71,0.3)]">
+                <div class="flex items-center justify-between gap-4">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="inline-flex h-3 w-3 animate-pulse rounded-full bg-yellow-400"></span>
+                            <span class="text-xs uppercase tracking-wide text-yellow-300 font-semibold">Buy the madman a drink</span>
+                        </div>
+                        <p class="mt-1 text-xs text-yellow-100/80 leading-relaxed">
+                            Toss me the equivalent of <strong>$3</strong> in your favorite coin... 💀
+                        </p>
+                    </div>
+                    <div class="flex flex-col items-end gap-2">
+                        <select class="rounded-lg border border-yellow-500/60 bg-black px-2 py-1 text-xs text-yellow-100">
+                            <option>BTC</option>
+                            <option>BCH</option>
+                            <option>DOGE</option>
+                        </select>
+                        <button class="relative overflow-hidden rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-wide bg-yellow-500 hover:bg-yellow-400">
+                            Tip $3
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Example: After Tipping -->
+        <div class="rounded-2xl border border-emerald-700 bg-slate-900 p-6 space-y-4">
+            <h2 class="text-lg font-semibold text-emerald-400">After Tipping ✨</h2>
+            <div class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-700/50 bg-slate-900/50 p-4">
+                <div>
+                    <div class="text-xs uppercase tracking-wide text-slate-400 mb-1">Your Wallet</div>
+                    <div class="text-sm font-mono text-slate-100">0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7</div>
+                </div>
+                
+                <!-- THE BADGE -->
+                <div class="group relative">
+                    <div class="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/60 bg-emerald-900/30 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.5)] transition-all hover:shadow-[0_0_25px_rgba(16,185,129,0.7)] hover:scale-105">
+                        <span class="text-xs animate-pulse">🌟</span>
+                        <span>Thank you for believing in my dream</span>
+                    </div>
+                    
+                    <!-- Tooltip on hover -->
+                    <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden w-64 rounded-lg border border-emerald-500/30 bg-emerald-950/95 px-3 py-2 text-[10px] normal-case tracking-normal text-emerald-100 shadow-xl group-hover:block">
+                        <div class="text-center leading-relaxed">
+                            This wallet helped buy the creator a drink while Vision was still being forged.
+                        </div>
+                        <div class="absolute top-full left-1/2 -translate-x-1/2 -mt-1 h-0 w-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-emerald-500/30"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tip button is GONE -->
+            <div class="text-center text-xs text-slate-500 italic">
+                (Tip button has disappeared forever for this wallet)
+            </div>
+
+            <!-- Optional: Believer Stats -->
+            <div class="rounded-lg border border-emerald-500/20 bg-emerald-950/30 p-4 text-xs text-emerald-200">
+                <div class="font-semibold mb-2">🌟 Believer Status</div>
+                <div class="space-y-1 text-emerald-300/80">
+                    <div>Tipped with: <span class="font-mono">BTC</span></div>
+                    <div>Amount: <span class="font-mono">3158</span> sats</div>
+                    <div>Date: December 1, 2025</div>
+                    <div class="mt-2 text-[10px] text-emerald-400/60">
+                        You were here early. You believed when it was still just stars and code.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Technical Details -->
+        <div class="rounded-xl border border-slate-700 bg-slate-900/50 p-6 space-y-3">
+            <h3 class="text-sm font-semibold text-slate-300">How It Works</h3>
+            <div class="space-y-2 text-xs text-slate-400">
+                <div class="flex gap-2">
+                    <span class="text-emerald-400">✓</span>
+                    <span>User tips → <code class="text-yellow-400">has_tipped = true</code> saved to database</span>
+                </div>
+                <div class="flex gap-2">
+                    <span class="text-emerald-400">✓</span>
+                    <span>Badge appears automatically on wallet dashboard</span>
+                </div>
+                <div class="flex gap-2">
+                    <span class="text-emerald-400">✓</span>
+                    <span>Badge stays forever for that wallet address</span>
+                </div>
+                <div class="flex gap-2">
+                    <span class="text-emerald-400">✓</span>
+                    <span>Tip button disappears permanently</span>
+                </div>
+                <div class="flex gap-2">
+                    <span class="text-emerald-400">✓</span>
+                    <span>Emotional connection = established 💚</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center text-xs text-slate-500 space-y-1">
+            <p>"You were here early. You believed."</p>
+            <p>🌟</p>
+        </div>
+    </div>
+</body>
+</html>

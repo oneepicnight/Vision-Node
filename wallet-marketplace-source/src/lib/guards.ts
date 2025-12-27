@@ -4,7 +4,8 @@ import { useWalletStore } from '../state/wallet'
 
 // Validation functions
 export function isValidHandle(handle: string): boolean {
-  return /^[a-z0-9._-]{3,24}$/.test(handle)
+  // Allow uppercase letters but handles are normalized to lowercase for storage
+  return /^[a-zA-Z0-9._-]{3,24}$/.test(handle)
 }
 
 export function isValidAddress(address: string): boolean {

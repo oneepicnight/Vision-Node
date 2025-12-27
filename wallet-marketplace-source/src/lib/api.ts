@@ -264,3 +264,279 @@ export async function submitTx(payload: SignedTransaction): Promise<{ ok: boolea
     }
   }
 }
+
+// Multi-currency deposit addresses
+export async function getDepositAddress(currency: string, userId: string): Promise<{ address: string; currency: string; message?: string }> {
+  if (env.MOCK_CHAIN) {
+    return {
+      currency,
+      address: `mock_${currency}_${userId.slice(0, 8)}_deposit`,
+      message: 'Mock deposit address for development'
+    }
+  }
+
+  try {
+    return await get(`/api/wallet/deposit/${currency}?user_id=${userId}`)
+  } catch (error) {
+    throw new Error(`Failed to get deposit address: ${error instanceof Error ? error.message : 'Network error'}`)
+  }
+}
+
+// Multi-currency wallet balances
+export async function getWalletBalances(userId: string): Promise<Record<string, { available: number; locked: number }>> {
+  if (env.MOCK_CHAIN) {
+    return {
+      LAND: { available: 1000, locked: 0 },
+      BTC: { available: 0.5, locked: 0 },
+      BCH: { available: 2.3, locked: 0 },
+      DOGE: { available: 1000, locked: 0 }
+    }
+  }
+
+  try {
+    return await get(`/api/wallet/balances?user_id=${userId}`)
+  } catch (error) {
+    console.warn('Wallet balances fetch failed:', error)
+    return {}
+  }
+}
+
+// Vault status
+export interface VaultStatus {
+  receipts: any[]
+  balances: {
+    LAND: { miners: number; dev: number; founders: number }
+    BTC: { miners: number; dev: number; founders: number }
+    BCH: { miners: number; dev: number; founders: number }
+    DOGE: { miners: number; dev: number; founders: number }
+  }
+  stats?: {
+    totalDeposits?: number
+    totalWithdrawals?: number
+  }
+}
+
+// Epoch status from node /vault/epoch
+export interface VaultEpochStatus {
+  epoch_index: number
+  last_payout_height: number
+  last_payout_at_ms: number
+  vault_balance: string
+  fund_balance: string
+  treasury_balance: string
+  total_weight: string
+  due: boolean
+  height: number
+}
+
+export async function getVaultEpochStatus(): Promise<VaultEpochStatus> {
+  if (env.MOCK_CHAIN) {
+    return {
+      epoch_index: 0,
+      last_payout_height: 0,
+      last_payout_at_ms: Date.now(),
+      vault_balance: '0',
+      fund_balance: '0',
+      treasury_balance: '0',
+      total_weight: '0',
+      due: false,
+      height: 0,
+    };
+  }
+
+  try {
+    return await get('/vault/epoch');
+  } catch (error) {
+    throw new Error(`Failed to get vault epoch: ${error instanceof Error ? error.message : 'Network error'}`);
+  }
+}
+
+export async function getVaultStatus(): Promise<VaultStatus> {
+  if (env.MOCK_CHAIN) {
+    return {
+      receipts: [],
+      balances: {
+        LAND: { miners: 500000, dev: 300000, founders: 200000 },
+        BTC: { miners: 0.5, dev: 0.3, founders: 0.2 },
+        BCH: { miners: 10, dev: 6, founders: 4 },
+        DOGE: { miners: 50000, dev: 30000, founders: 20000 }
+      },
+      stats: {
+        totalDeposits: 0,
+        totalWithdrawals: 0
+      }
+    }
+  }
+
+  try {
+    return await get('/api/wallet/info')
+  } catch (error) {
+    throw new Error(`Failed to get vault status: ${error instanceof Error ? error.message : 'Network error'}`)
+  }
+}
+
+// Exchange API
+export interface OrderBook {
+  bids: [number, number][]  // [price, size]
+  asks: [number, number][]
+  chain: string
+}
+
+export interface Ticker {
+  chain: string
+  last: number
+  change24h: number
+  vol24h: number
+  high24h: number
+  low24h: number
+}
+
+export interface Trade {
+  id: string
+  ts: number
+  price: number
+  size: number
+  side: 'buy' | 'sell'
+  chain: string
+}
+
+export interface UserOrder {
+  id: string
+  chain: string
+  side: 'buy' | 'sell'
+  price: number | null
+  size_total: number
+  size_filled: number
+  status: 'open' | 'filled' | 'cancelled' | 'partial'
+  tif: string
+  post_only: boolean
+}
+
+export interface OrderRequest {
+  owner: string
+  chain: string
+  side: 'buy' | 'sell'
+  price: number
+  size: number
+  post_only?: boolean
+  tif?: 'GTC' | 'IOC' | 'FOK' | 'GTT'
+}
+
+export interface OrderResponse {
+  ok: boolean
+  order_id: string
+  trades: Array<{
+    id: string
+    price: number
+    size: number
+    buyer: string
+    seller: string
+  }>
+  message: string
+}
+
+export async function getExchangeBook(chain: string = 'BTC', depth: number = 50): Promise<OrderBook> {
+  if (env.MOCK_CHAIN) {
+    return {
+      bids: [
+        [0.00000042, 1250.50],
+        [0.00000041, 2500.00],
+        [0.00000040, 5000.00],
+        [0.00000039, 10000.00],
+        [0.00000038, 7500.00]
+      ],
+      asks: [
+        [0.00000043, 2000.00],
+        [0.00000044, 3500.00],
+        [0.00000045, 5000.00],
+        [0.00000046, 8000.00],
+        [0.00000047, 12000.00]
+      ],
+      chain
+    }
+  }
+
+  try {
+    return await get(`/api/market/exchange/book?chain=${chain}&depth=${depth}`)
+  } catch (error) {
+    throw new Error(`Failed to get order book: ${error instanceof Error ? error.message : 'Network error'}`)
+  }
+}
+
+export async function getExchangeTicker(chain: string = 'BTC'): Promise<Ticker> {
+  if (env.MOCK_CHAIN) {
+    return {
+      chain,
+      last: 0.00000042,
+      change24h: 5.2,
+      vol24h: 125000,
+      high24h: 0.00000045,
+      low24h: 0.00000038
+    }
+  }
+
+  try {
+    return await get(`/api/market/exchange/ticker?chain=${chain}`)
+  } catch (error) {
+    throw new Error(`Failed to get ticker: ${error instanceof Error ? error.message : 'Network error'}`)
+  }
+}
+
+export async function getExchangeTrades(chain: string = 'BTC', limit: number = 50): Promise<Trade[]> {
+  if (env.MOCK_CHAIN) {
+    return [
+      { id: '1', ts: Date.now(), price: 0.00000042, size: 250.50, side: 'buy', chain },
+      { id: '2', ts: Date.now() - 17000, price: 0.00000042, size: 500.00, side: 'sell', chain },
+      { id: '3', ts: Date.now() - 33000, price: 0.00000043, size: 1000.00, side: 'buy', chain },
+      { id: '4', ts: Date.now() - 50000, price: 0.00000041, size: 750.00, side: 'sell', chain },
+      { id: '5', ts: Date.now() - 67000, price: 0.00000042, size: 2000.00, side: 'buy', chain }
+    ]
+  }
+
+  try {
+    return await get(`/api/market/exchange/trades?chain=${chain}&limit=${limit}`)
+  } catch (error) {
+    throw new Error(`Failed to get trades: ${error instanceof Error ? error.message : 'Network error'}`)
+  }
+}
+
+export async function getMyOrders(owner: string, chain: string = 'BTC'): Promise<UserOrder[]> {
+  if (env.MOCK_CHAIN) {
+    return [
+      {
+        id: '1',
+        chain,
+        side: 'buy',
+        price: 0.00000040,
+        size_total: 5000,
+        size_filled: 0,
+        status: 'open',
+        tif: 'GTC',
+        post_only: false
+      }
+    ]
+  }
+
+  try {
+    return await get(`/api/market/exchange/my/orders?owner=${encodeURIComponent(owner)}&chain=${chain}`)
+  } catch (error) {
+    throw new Error(`Failed to get orders: ${error instanceof Error ? error.message : 'Network error'}`)
+  }
+}
+
+export async function createOrder(request: OrderRequest): Promise<OrderResponse> {
+  if (env.MOCK_CHAIN) {
+    return {
+      ok: true,
+      order_id: `mock-order-${Date.now()}`,
+      trades: [],
+      message: 'Mock order placed on book'
+    }
+  }
+
+  try {
+    return await post('/api/market/exchange/order', request)
+  } catch (error) {
+    throw new Error(`Failed to create order: ${error instanceof Error ? error.message : 'Network error'}`)
+  }
+}

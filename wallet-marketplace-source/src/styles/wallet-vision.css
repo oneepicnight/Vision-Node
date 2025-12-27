@@ -1,0 +1,524 @@
+/* Vision Wallet - AAA Dashboard Styling */
+
+.vision-wallet-shell {
+  min-height: calc(100vh - var(--total-header-height));
+  background: linear-gradient(180deg, #0a0e27 0%, #1a1042 50%, #000408 100%) !important;
+  padding: 2rem;
+  overflow-y: auto;
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+}
+
+.vision-wallet-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Glass Card Base Style */
+.vw-card {
+  background: rgba(15, 20, 45, 0.7);
+  border: 1px solid rgba(100, 150, 255, 0.2);
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 60px rgba(80, 120, 255, 0.15);
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+}
+
+.vw-card:hover {
+  border-color: rgba(100, 150, 255, 0.4);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 80px rgba(80, 120, 255, 0.25);
+}
+
+/* Typography */
+.vw-label-sm {
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: rgba(180, 200, 255, 0.7);
+}
+
+/* SECTION 1: Portfolio Hero */
+.vw-hero-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 2rem;
+}
+
+.vw-hero-left {
+  flex: 1;
+}
+
+.vw-hero-amount {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0.5rem 0;
+  font-family: 'SF Mono', 'Monaco', monospace;
+}
+
+.vw-hero-usd {
+  font-size: 1.1rem;
+  color: rgba(180, 200, 255, 0.6);
+}
+
+.vw-hero-right {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.vw-hero-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.vw-pill {
+  padding: 0.4rem 1rem;
+  background: rgba(80, 120, 255, 0.2);
+  border: 1px solid rgba(100, 150, 255, 0.3);
+  border-radius: 20px;
+  font-size: 0.9rem;
+  color: #b4c8ff;
+  font-weight: 500;
+}
+
+.vw-pill-success {
+  background: rgba(40, 200, 120, 0.2);
+  border-color: rgba(40, 200, 120, 0.4);
+  color: #50e6a8;
+}
+
+/* SECTION 2: Asset Strip */
+.vw-asset-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.vw-asset-card {
+  background: rgba(15, 20, 45, 0.7);
+  border: 1px solid rgba(100, 150, 255, 0.2);
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.3s ease;
+}
+
+.vw-asset-card:hover {
+  border-color: rgba(100, 150, 255, 0.4);
+  transform: translateY(-2px);
+}
+
+.vw-asset-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.vw-asset-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(80, 120, 255, 0.3), rgba(150, 80, 255, 0.3));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #fff;
+  font-size: 0.9rem;
+}
+
+.vw-asset-symbol {
+  font-weight: 600;
+  color: #fff;
+  font-size: 1rem;
+}
+
+.vw-asset-desc {
+  font-size: 0.75rem;
+  color: rgba(180, 200, 255, 0.6);
+}
+
+.vw-asset-right {
+  text-align: right;
+}
+
+.vw-asset-balance {
+  font-family: 'SF Mono', 'Monaco', monospace;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.vw-asset-subtext {
+  font-size: 0.75rem;
+  color: rgba(180, 200, 255, 0.5);
+  margin-top: 0.25rem;
+}
+
+/* SECTION 3: Portal Charge */
+.vw-portal-card {
+  padding: 1.5rem 2rem;
+}
+
+.vw-portal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.vw-portal-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.vw-portal-subtitle {
+  font-size: 0.85rem;
+  color: rgba(180, 200, 255, 0.6);
+  margin-top: 0.25rem;
+}
+
+.vw-portal-percent {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #50e6a8;
+}
+
+.vw-portal-bar-container {
+  width: 100%;
+  height: 12px;
+  background: rgba(20, 30, 60, 0.6);
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 1rem 0;
+}
+
+.vw-portal-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6, #50e6a8);
+  border-radius: 6px;
+  transition: width 0.5s ease;
+  box-shadow: 0 0 20px rgba(80, 230, 168, 0.6);
+}
+
+.vw-portal-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: rgba(180, 200, 255, 0.5);
+}
+
+/* SECTION 4 & 5: Action Cards */
+.vw-actions-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.5rem;
+}
+
+.vw-action-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.vw-action-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #fff;
+  margin: 0;
+}
+
+.vw-action-subtitle {
+  font-size: 0.9rem;
+  color: rgba(180, 200, 255, 0.7);
+  margin: 0;
+}
+
+.vw-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.vw-input, .vw-input select {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: rgba(10, 15, 35, 0.6);
+  border: 1px solid rgba(100, 150, 255, 0.3);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.95rem;
+  font-family: 'SF Mono', 'Monaco', monospace;
+  transition: all 0.3s ease;
+}
+
+.vw-input:focus {
+  outline: none;
+  border-color: rgba(100, 150, 255, 0.6);
+  box-shadow: 0 0 20px rgba(80, 120, 255, 0.3);
+}
+
+.vw-address-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: rgba(10, 15, 35, 0.6);
+  border: 1px solid rgba(100, 150, 255, 0.3);
+  border-radius: 8px;
+}
+
+.vw-address-mono {
+  flex: 1;
+  font-family: 'SF Mono', 'Monaco', monospace;
+  font-size: 0.85rem;
+  color: #b4c8ff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vw-btn-copy {
+  padding: 0.4rem 1rem;
+  background: rgba(80, 120, 255, 0.3);
+  border: 1px solid rgba(100, 150, 255, 0.4);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.vw-btn-copy:hover {
+  background: rgba(80, 120, 255, 0.5);
+  box-shadow: 0 0 15px rgba(80, 120, 255, 0.5);
+}
+
+.vw-btn-primary {
+  width: 100%;
+  padding: 0.875rem;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4);
+}
+
+.vw-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 30px rgba(59, 130, 246, 0.6);
+}
+
+.vw-btn-secondary {
+  width: 100%;
+  padding: 0.75rem;
+  background: rgba(80, 120, 255, 0.2);
+  border: 1px solid rgba(100, 150, 255, 0.4);
+  border-radius: 10px;
+  color: #b4c8ff;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.vw-btn-secondary:hover {
+  background: rgba(80, 120, 255, 0.3);
+  border-color: rgba(100, 150, 255, 0.6);
+  transform: translateY(-1px);
+}
+
+.vw-error-msg {
+  padding: 0.75rem;
+  background: rgba(255, 80, 80, 0.2);
+  border: 1px solid rgba(255, 80, 80, 0.4);
+  border-radius: 8px;
+  color: #ff6b6b;
+  font-size: 0.9rem;
+}
+
+.vw-success-msg {
+  padding: 0.75rem;
+  background: rgba(40, 200, 120, 0.2);
+  border: 1px solid rgba(40, 200, 120, 0.4);
+  border-radius: 8px;
+  color: #50e6a8;
+  font-size: 0.9rem;
+}
+
+.vw-enter-desc {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: rgba(180, 200, 255, 0.7);
+  flex: 1;
+}
+
+/* Secondary Action Cards */
+.vw-action-card-secondary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  justify-content: space-between;
+  min-height: 160px;
+}
+
+.vw-secondary-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #fff;
+  margin: 0;
+}
+
+.vw-secondary-desc {
+  font-size: 0.9rem;
+  color: rgba(180, 200, 255, 0.7);
+  flex: 1;
+}
+
+/* SECTION 6: Bottom Row */
+.vw-bottom-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 1.5rem;
+}
+
+.vw-deposit-card, .vw-vault-card-new {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.vw-toggle-group {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.vw-toggle-btn {
+  flex: 1;
+  padding: 0.625rem;
+  background: rgba(20, 30, 60, 0.6);
+  border: 1px solid rgba(100, 150, 255, 0.3);
+  border-radius: 8px;
+  color: rgba(180, 200, 255, 0.7);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.vw-toggle-btn.active {
+  background: rgba(80, 120, 255, 0.3);
+  border-color: rgba(100, 150, 255, 0.6);
+  color: #fff;
+  box-shadow: 0 0 15px rgba(80, 120, 255, 0.4);
+}
+
+.vw-warning-box {
+  padding: 0.875rem;
+  background: rgba(255, 160, 50, 0.15);
+  border: 1px solid rgba(255, 160, 50, 0.3);
+  border-radius: 8px;
+  color: #ffb366;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.vw-deposit-footer {
+  font-size: 0.8rem;
+  color: rgba(180, 200, 255, 0.6);
+  text-align: center;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(100, 150, 255, 0.2);
+}
+
+/* Vision Vault Card */
+.vw-vault-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.vw-vault-badge {
+  padding: 0.4rem 0.875rem;
+  background: rgba(40, 200, 120, 0.2);
+  border: 1px solid rgba(40, 200, 120, 0.3);
+  border-radius: 20px;
+  font-size: 0.75rem;
+  color: #50e6a8;
+  font-weight: 500;
+}
+
+.vw-vault-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  padding: 1rem 0;
+}
+
+.vw-vault-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.vw-vault-value {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.vw-vault-footer {
+  font-size: 0.75rem;
+  color: rgba(180, 200, 255, 0.5);
+  text-align: center;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(100, 150, 255, 0.2);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .vw-bottom-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .vw-hero-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 768px) {
+  .vision-wallet-shell {
+    padding: 1rem;
+  }
+  
+  .vision-wallet-container {
+    gap: 1rem;
+  }
+  
+  .vw-actions-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .vw-asset-strip {
+    grid-template-columns: 1fr;
+  }
+}

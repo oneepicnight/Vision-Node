@@ -1,0 +1,700 @@
+openapi: 3.0.3
+info:
+  title: Vision Node API
+  description: Minimal OpenAPI spec for the Vision node HTTP API.
+  version: 1.0.0
+servers:
+  - url: /
+    description: Local server
+paths:
+  /health:
+    get:
+      summary: Liveness probe
+      tags: [health]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+
+  /status:
+    get:
+      summary: Node status
+      tags: [status]
+      responses:
+        '200':
+          description: Node status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+
+  /panel_status:
+    get:
+      summary: Panel status
+      tags: [panel]
+      responses:
+        '200':
+          description: Panel status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PanelStatus'
+
+  /panel_config:
+    get:
+      summary: Panel configuration
+      tags: [panel]
+      responses:
+        '200':
+          description: Panel configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PanelConfig'
+
+  /height:
+    get:
+      summary: Current chain height
+      tags: [chain]
+      responses:
+        '200':
+          description: Height
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+                  height:
+                    type: integer
+                    example: 12345
+
+  /head:
+    get:
+      summary: Current chain head (block hash)
+      tags: [chain]
+      responses:
+        '200':
+          description: Head block hash
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+                  head:
+                    type: string
+                    example: "0xabc123..."
+
+  /block/latest:
+    get:
+      summary: Latest block
+      tags: [block]
+      responses:
+        '200':
+          description: Latest block
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Block'
+
+  /block/{height}:
+    get:
+      summary: Block by height
+      tags: [block]
+      parameters:
+        - name: height
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Block
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Block'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /block/{height}/tx_hashes:
+    get:
+      summary: Transaction hashes for a block
+      tags: [block]
+      parameters:
+        - name: height
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Array of transaction hashes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+                  tx_hashes:
+                    type: array
+                    items:
+                      type: string
+
+  /tx/{hash}:
+    get:
+      summary: Transaction by hash
+      tags: [tx]
+      parameters:
+        - name: hash
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /receipt/{hash}:
+    get:
+      summary: Receipt by transaction hash
+      tags: [tx]
+      parameters:
+        - name: hash
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Receipt'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /receipts:
+    get:
+      summary: List receipts (paged)
+      tags: [tx]
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+      responses:
+        '200':
+          description: Receipts page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+                  receipts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Receipt'
+                  next_cursor:
+                    type: string
+
+  /balance/{addr}:
+    get:
+      summary: Balance for an address
+      tags: [account]
+      parameters:
+        - name: addr
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Balance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+                  balance:
+                    type: string
+                    description: Decimal or integer balance expressed as string
+
+  /get_nonce/{addr}:
+    get:
+      summary: Get account nonce
+      tags: [account]
+      parameters:
+        - name: addr
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Nonce
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+                  nonce:
+                    type: integer
+
+  /submit_tx:
+    post:
+      summary: Submit a transaction
+      tags: [tx]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Raw transaction payload
+      responses:
+        '200':
+          description: Transaction accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+                  tx_hash:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /mine_block:
+    post:
+      summary: Trigger mining/produce a block
+      tags: [admin, chain]
+      responses:
+        '200':
+          description: New block produced
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Block'
+
+  /peers/list:
+    get:
+      summary: List peers
+      tags: [peers]
+      responses:
+        '200':
+          description: Peer list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+                  peers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Peer'
+
+  /peers/stats:
+    get:
+      summary: Peer statistics
+      tags: [peers]
+      responses:
+        '200':
+          description: Peer stats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+                  total_peers:
+                    type: integer
+
+  /peer/add:
+    post:
+      summary: Add a peer (admin)
+      tags: [peers, admin]
+      security:
+        - XAdminToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                addr:
+                  type: string
+      responses:
+        '200':
+          description: Peer added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /gossip/tx:
+    post:
+      summary: Gossip a transaction to network
+      tags: [gossip]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+
+  /gossip/block:
+    post:
+      summary: Gossip a block to network
+      tags: [gossip]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Block'
+      responses:
+        '200':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+
+  /sync/pull:
+    post:
+      summary: Pull sync from a peer
+      tags: [sync]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Optional sync parameters (e.g., from_height)
+      responses:
+        '200':
+          description: Blocks pulled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+                  blocks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Block'
+
+  /snapshot/save:
+    post:
+      summary: Save a snapshot (admin)
+      tags: [snapshot, admin]
+      security:
+        - XAdminToken: []
+      responses:
+        '200':
+          description: Snapshot saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+                  snapshot_id:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /snapshot/latest:
+    get:
+      summary: Latest snapshot metadata
+      tags: [snapshot]
+      responses:
+        '200':
+          description: Latest snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Snapshot'
+
+  /snapshot/download:
+    get:
+      summary: Download snapshot file
+      tags: [snapshot]
+      responses:
+        '200':
+          description: Snapshot file stream
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /metrics.prom:
+    get:
+      summary: Prometheus metrics
+      tags: [metrics]
+      responses:
+        '200':
+          description: Prometheus plain-text metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  securitySchemes:
+    XAdminToken:
+      type: apiKey
+      in: header
+      name: X-Admin-Token
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: false
+        code:
+          type: string
+          description: Short machine-readable error code
+        reason:
+          type: string
+          nullable: true
+          description: Human readable reason (optional)
+
+    Health:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        status:
+          type: string
+          example: "healthy"
+
+    Status:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        synced:
+          type: boolean
+        peers:
+          type: integer
+
+    PanelStatus:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        mode:
+          type: string
+
+    PanelConfig:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+        config:
+          type: object
+
+    Block:
+      type: object
+      properties:
+        hash:
+          type: string
+        height:
+          type: integer
+        parent:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        tx_count:
+          type: integer
+
+    Transaction:
+      type: object
+      properties:
+        hash:
+          type: string
+        from:
+          type: string
+        to:
+          type: string
+        value:
+          type: string
+        data:
+          type: string
+
+    Receipt:
+      type: object
+      properties:
+        tx_hash:
+          type: string
+        status:
+          type: string
+        gas_used:
+          type: integer
+
+    Peer:
+      type: object
+      properties:
+        id:
+          type: string
+        addr:
+          type: string
+
+    Snapshot:
+      type: object
+      properties:
+        id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        size_bytes:
+          type: integer
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            notFound:
+              value:
+                ok: false
+                code: "not_found"
+                reason: "resource not found"
+
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            badRequest:
+              value:
+                ok: false
+                code: "bad_request"
+                reason: "invalid payload"
+
+    Conflict:
+      description: Conflict (e.g., duplicate)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            conflict:
+              value:
+                ok: false
+                code: "conflict"
+                reason: "resource already exists"
+
+    TooManyRequests:
+      description: Rate limited
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            tooMany:
+              value:
+                ok: false
+                code: "rate_limited"
+                reason: "too many requests"
+
+    Unauthorized:
+      description: Unauthorized - missing or invalid admin token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            unauthorized:
+              value:
+                ok: false
+                code: "unauthorized"
+                reason: "missing or invalid admin token"

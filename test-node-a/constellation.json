@@ -1,0 +1,4 @@
+{
+  "guardian_base_url": "http://localhost:7070",
+  "bootstrap_mode": "manual"
+}

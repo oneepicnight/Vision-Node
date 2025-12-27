@@ -1,0 +1,40 @@
+# Seed Peers Configuration
+# 
+# IMPORTANT: Seed peers are BOOTSTRAP nodes only, not authorities!
+# - Seeds help new nodes discover the network initially
+# - Once connected, nodes exchange peer lists and persist discovered peers
+# - The network does NOT depend on any specific seed node
+# - Consensus rules and chain validation are independent of seeds
+# - You can add any working node with --peer flag to bootstrap
+#
+# Format: array of peer addresses in host:port format (P2P port, not HTTP)
+
+seed_peers = [
+    # Example seed peers - replace with actual public node addresses
+    # "public-node-1.example.com:7071",
+    # "public-node-2.example.com:7071",
+    # "192.168.1.100:7071",
+    
+    # For local development/testing (commented out by default)
+    # "localhost:7071",
+]
+
+# Minimum number of outbound connections to maintain
+min_outbound_connections = 8
+
+# Maximum number of outbound connections
+max_outbound_connections = 16
+
+# Connection timeout in seconds
+connection_timeout_seconds = 10
+
+# Peer reconnection interval in seconds
+reconnection_interval_seconds = 30
+
+# Bootstrap URL for dynamic peer discovery
+# This endpoint provides:
+# - Welcome message displayed on startup
+# - Recommended node version info
+# - Dynamic list of active seed peers
+# Note: Bootstrap is used ONLY for initial peer discovery, not consensus
+bootstrap_url = "https://visionworld.tech/api/bootstrap"

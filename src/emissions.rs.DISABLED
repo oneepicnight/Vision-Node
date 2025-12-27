@@ -1,0 +1,172 @@
+// LAND Emissions - 2-Year Schedule with 6-month halvings
+// 2-second blocks, 32 → 16 → 8 → 4 LAND, then PoW stops
+
+// ===== Constants =====
+pub const LAND_DECIMALS: u32 = 8;
+pub const fn land(units: u64) -> u64 { 
+    units * 10u64.pow(LAND_DECIMALS) 
+}
+
+// 2-second blocks
+pub const BLOCK_TIME_SECS: u64 = 2;
+pub const BLOCKS_PER_DAY: u64 = (60 * 60 * 24) / BLOCK_TIME_SECS;        // 43_200
+pub const DAYS_PER_HALVING: u64 = 180;                                    // 6 months
+pub const HALVING_INTERVAL_BLOCKS: u64 = BLOCKS_PER_DAY * DAYS_PER_HALVING; // 7_776_000
+
+// Four eras in 24 months: 32 → 16 → 8 → 4 LAND, then PoW stops
+pub const INITIAL_BLOCK_REWARD_LAND: u64 = land(32);
+pub const MAX_ERAS: u64 = 4;
+
+// After 24 months, PoW reward goes to 0
+pub const POST_2Y_MINING_REWARD: Option<u64> = None;
+
+// Default addresses (can be overridden by env vars)
+pub const DEFAULT_VAULT_ADDR: &str = "0xb977c16e539670ddfecc0ac902fcb916ec4b944e";
+pub const DEFAULT_FOUNDERS_ADDR: &str = "0xdf7a79291bb96e9dd1c77da089933767999eabf0";
+pub const DEFAULT_OPS_ADDR: &str = "0x8bb8edcd4cdbcb132cc5e88ff90ba48cebf11cbd";
+
+#[derive(Clone, Copy, Debug)]
+pub struct Split { 
+    pub vault_bp: u16, 
+    pub ops_bp: u16, 
+    pub founders_bp: u16 
+}
+
+pub const ERA_SPLITS: [Split; 4] = [
+    // Era 0: months 0-6
+    Split { vault_bp: 5000, ops_bp: 3000, founders_bp: 2000 }, // 50/30/20
+    // Era 1: months 7-12
+    Split { vault_bp: 4000, ops_bp: 4000, founders_bp: 2000 }, // 40/40/20
+    // Era 2: months 13-18
+    Split { vault_bp: 2500, ops_bp: 6000, founders_bp: 1500 }, // 25/60/15
+    // Era 3: months 19-24
+    Split { vault_bp: 1000, ops_bp: 8000, founders_bp: 1000 }, // 10/80/10
+];
+
+#[inline]
+pub fn current_era(block_height: u64) -> u64 {
+    let era = block_height / HALVING_INTERVAL_BLOCKS;
+    if era >= MAX_ERAS { MAX_ERAS } else { era }
+}
+
+#[inline]
+pub fn block_reward_land(block_height: u64) -> u64 {
+    let era = current_era(block_height);
+    if era < MAX_ERAS {
+        INITIAL_BLOCK_REWARD_LAND >> era
+    } else {
+        POST_2Y_MINING_REWARD.unwrap_or(0)
+    }
+}
+
+#[inline]
+pub fn era_split(block_height: u64) -> Split {
+    let era = current_era(block_height);
+    if era < MAX_ERAS { 
+        ERA_SPLITS[era as usize] 
+    } else { 
+        ERA_SPLITS[(MAX_ERAS - 1) as usize]
+    }
+}
+
+pub struct EmissionAddrs {
+    pub vault: String,
+    pub founders: String,
+    pub ops: String,
+}
+
+pub fn load_emission_addrs() -> EmissionAddrs {
+    use std::env;
+    EmissionAddrs {
+        vault: env::var("VISION_VAULT_ADDR")
+            .unwrap_or_else(|_| DEFAULT_VAULT_ADDR.to_string()),
+        founders: env::var("VISION_FOUNDERS_ADDR")
+            .unwrap_or_else(|_| DEFAULT_FOUNDERS_ADDR.to_string()),
+        ops: env::var("VISION_OPS_ADDR")
+            .unwrap_or_else(|_| DEFAULT_OPS_ADDR.to_string()),
+    }
+}
+
+/// Returns the block reward for the miner (coinbase)
+/// This is the full 32 → 16 → 8 → 4 LAND that goes to whoever mines the block
+pub fn miner_block_reward(block_height: u64) -> u128 {
+    block_reward_land(block_height) as u128
+}
+
+/// Splits transaction fees among vault/ops/founders based on era
+/// Returns (vault_amount, ops_amount, founders_amount)
+pub fn split_fees(total_fees: u128, block_height: u64) -> (u128, u128, u128) {
+    if total_fees == 0 {
+        return (0, 0, 0);
+    }
+
+    let split = era_split(block_height);
+    let to_vault    = total_fees.saturating_mul(split.vault_bp as u128) / 10_000;
+    let to_ops      = total_fees.saturating_mul(split.ops_bp as u128) / 10_000;
+    let to_founders = total_fees.saturating_mul(split.founders_bp as u128) / 10_000;
+
+    // Rounding residue goes to vault
+    let distributed = to_vault + to_ops + to_founders;
+    let residue = total_fees.saturating_sub(distributed);
+    let to_vault_corrected = to_vault + residue;
+
+    (to_vault_corrected, to_ops, to_founders)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_reward_halves_every_interval() {
+        // Block 1 - Era 0: 32 LAND
+        assert_eq!(block_reward_land(1), INITIAL_BLOCK_REWARD_LAND);
+        
+        // First block of Era 1: 16 LAND
+        let era1_start = HALVING_INTERVAL_BLOCKS;
+        assert_eq!(block_reward_land(era1_start), INITIAL_BLOCK_REWARD_LAND >> 1);
+        
+        // First block of Era 2: 8 LAND
+        let era2_start = era1_start + HALVING_INTERVAL_BLOCKS;
+        assert_eq!(block_reward_land(era2_start), INITIAL_BLOCK_REWARD_LAND >> 2);
+        
+        // First block of Era 3: 4 LAND
+        let era3_start = era2_start + HALVING_INTERVAL_BLOCKS;
+        assert_eq!(block_reward_land(era3_start), INITIAL_BLOCK_REWARD_LAND >> 3);
+        
+        // After 24 months: 0 LAND
+        let era4_start = era3_start + HALVING_INTERVAL_BLOCKS;
+        assert_eq!(block_reward_land(era4_start), 0);
+    }
+
+    #[test]
+    fn test_fee_splits_sum_correctly() {
+        let test_fee = land(100); // 100 LAND in fees
+        for height in [1u64, 100, 1000, HALVING_INTERVAL_BLOCKS, HALVING_INTERVAL_BLOCKS * 2] {
+            let (vault, ops, founders) = split_fees(test_fee as u128, height);
+            // Due to rounding residue going to vault, sum should equal or exceed original
+            let total = vault + ops + founders;
+            assert_eq!(total, test_fee as u128, "Fee split sum doesn't match at height {}", height);
+        }
+    }
+
+    #[test]
+    fn test_miner_gets_full_reward() {
+        assert_eq!(miner_block_reward(1), land(32) as u128);
+        assert_eq!(miner_block_reward(HALVING_INTERVAL_BLOCKS), land(16) as u128);
+        assert_eq!(miner_block_reward(HALVING_INTERVAL_BLOCKS * 2), land(8) as u128);
+        assert_eq!(miner_block_reward(HALVING_INTERVAL_BLOCKS * 3), land(4) as u128);
+        assert_eq!(miner_block_reward(HALVING_INTERVAL_BLOCKS * 4), 0);
+    }
+
+    #[test]
+    fn test_era_transitions() {
+        assert_eq!(current_era(0), 0);
+        assert_eq!(current_era(1), 0);
+        assert_eq!(current_era(HALVING_INTERVAL_BLOCKS - 1), 0);
+        assert_eq!(current_era(HALVING_INTERVAL_BLOCKS), 1);
+        assert_eq!(current_era(HALVING_INTERVAL_BLOCKS * 2), 2);
+        assert_eq!(current_era(HALVING_INTERVAL_BLOCKS * 3), 3);
+        assert_eq!(current_era(HALVING_INTERVAL_BLOCKS * 4), 4);
+    }
+}

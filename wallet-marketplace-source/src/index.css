@@ -9,6 +9,9 @@
     --muted: #9aa3c7;
     --glass: rgba(255,255,255,0.06);
     --glass-2: rgba(255,255,255,0.12);
+    --status-bar-height: 48px;
+    --nav-tabs-height: 56px;
+    --total-header-height: 104px; /* status-bar + nav-tabs */
   }
 
   * {

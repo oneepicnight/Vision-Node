@@ -1,0 +1,1303 @@
+/* ====================================
+   VISION WALLET - AAA CYBERPUNK THEME
+   Inspired by Vision World Homepage
+   ==================================== */
+
+:root {
+  /* Core Colors */
+  --space-black: #0a0a0f;
+  --deep-space: #0f0f1a;
+  --card-bg: rgba(15, 15, 26, 0.85);
+  
+  /* Neon Accents */
+  --neon-blue: #32b4ff;
+  --neon-purple: #7850ff;
+  --neon-cyan: #00d9ff;
+  --soft-purple: rgba(120, 80, 255, 0.4);
+  --soft-blue: rgba(50, 180, 255, 0.3);
+  
+  /* Glass Effect */
+  --glass-bg: rgba(255, 255, 255, 0.03);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-glow: rgba(120, 80, 255, 0.2);
+  
+  /* Text */
+  --text-primary: #ffffff;
+  --text-secondary: #a0a8c0;
+  --text-muted: #6b7280;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--space-black);
+  color: var(--text-primary);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* ========================
+   WELCOME SCREEN - VISION EMPIRE
+   Centered card with globe behind it (CSS pseudo-element)
+   ======================== */
+
+/* Fullscreen landing */
+.vision-landing {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: radial-gradient(circle at center, #071529 0, #020611 55%, #000109 100%);
+}
+
+/* GLOBE BEHIND – uses pseudo-element, centered */
+.vision-landing::before {
+  content: "";
+  position: absolute;
+  width: 900px;
+  height: 900px;
+  border-radius: 50%;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: url("/assets/earthlights1k.jpg");
+  background-size: 200% 100%;
+  background-position: 0% center;
+  box-shadow:
+    0 0 80px rgba(0, 150, 255, 0.5),
+    inset 0 0 60px rgba(0, 0, 0, 0.7);
+  animation: globe-spin 90s linear infinite;
+  opacity: 1;
+  z-index: 0;
+}
+
+/* No more black hole – kill any old globe styles */
+.vision-globe {
+  display: none;
+}
+
+/* Card on top of globe */
+.vision-panel {
+  position: relative;
+  z-index: 2;
+  width: 480px;
+  max-width: 90vw;
+  padding: 40px 48px 44px;
+  border-radius: 24px;
+  background: rgba(10, 22, 48, 0.72);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(130, 185, 255, 0.55);
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.85),
+    0 0 40px rgba(64, 160, 255, 0.45);
+  text-align: center;
+  animation: fadeInUp 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Titles */
+.vision-title-main {
+  margin: 0;
+  font-size: 40px;
+  font-weight: 600;
+  color: #f3f6ff;
+  animation: fadeIn 1.5s ease-out 0.3s backwards;
+}
+
+.vision-title-sub {
+  margin: 6px 0 0;
+  font-size: 64px;
+  font-weight: 800;
+  background: linear-gradient(90deg, #58ddff, #78a8ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 0 30px rgba(90, 190, 255, 0.75);
+  line-height: 1;
+  animation: fadeIn 1.5s ease-out 0.5s backwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.vision-subline {
+  margin-top: 14px;
+  margin-bottom: 32px;
+  font-size: 16px;
+  color: #c5d6ff;
+  animation: fadeIn 1.5s ease-out 0.7s backwards;
+}
+
+/* Buttons */
+.wallet-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: fadeIn 1.5s ease-out 0.9s backwards;
+}
+
+.btn-primary,
+.btn-secondary {
+  height: 52px;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  font-family: inherit;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #41c8ff, #5f84ff);
+  color: #03101f;
+  box-shadow: 0 12px 28px rgba(74, 152, 255, 0.6);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 40px rgba(74, 152, 255, 0.85);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: #d0e1ff;
+  border: 1px solid rgba(132, 178, 255, 0.6);
+}
+
+.btn-secondary:hover {
+  background: rgba(40, 70, 140, 0.4);
+}
+
+/* Globe spin - horizontal axis (like Earth) */
+@keyframes globe-spin {
+  from {
+    background-position: 0% center;
+  }
+  to {
+    background-position: 100% center;
+  }
+}
+
+/* Small screens */
+@media (max-width: 768px) {
+  .vision-landing::before {
+    width: 600px;
+    height: 600px;
+  }
+  .vision-panel {
+    padding: 32px 24px 36px;
+  }
+  .vision-title-main {
+    font-size: 32px;
+  }
+  .vision-title-sub {
+    font-size: 48px;
+  }
+}
+
+/* OLD BUTTONS - Keep for other pages */
+.vw-primary-btn,
+.vw-secondary-btn {
+  padding: 1rem 2.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 2px solid transparent;
+  position: relative;
+  overflow: hidden;
+  font-family: inherit;
+}
+
+.vw-primary-btn::before,
+.vw-secondary-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s;
+}
+
+.vw-primary-btn:hover::before,
+.vw-secondary-btn:hover::before {
+  width: 300px;
+  height: 300px;
+}
+
+.vw-primary-btn {
+  background: linear-gradient(135deg, var(--neon-purple), var(--neon-blue));
+  color: white;
+  box-shadow: 
+    0 0 30px rgba(120, 80, 255, 0.4),
+    0 4px 20px rgba(0, 0, 0, 0.3);
+  position: relative;
+  z-index: 1;
+}
+
+.vw-primary-btn:hover {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 
+    0 0 50px rgba(120, 80, 255, 0.7),
+    0 8px 40px rgba(0, 0, 0, 0.5);
+}
+
+.vw-primary-btn:active {
+  transform: translateY(-1px) scale(0.98);
+}
+
+.vw-secondary-btn {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  border-color: var(--glass-border);
+  backdrop-filter: blur(10px);
+  position: relative;
+  z-index: 1;
+}
+
+.vw-secondary-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--neon-purple);
+  box-shadow: 0 0 30px rgba(120, 80, 255, 0.4);
+  transform: translateY(-2px);
+}
+
+/* ========================
+   WALLET DASHBOARD - GAME HUD
+   ======================== */
+
+.vw-shell {
+  min-height: 100vh;
+  background: 
+    radial-gradient(ellipse at top right, rgba(120, 80, 255, 0.05), transparent 50%),
+    radial-gradient(ellipse at bottom left, rgba(50, 180, 255, 0.05), transparent 50%),
+    var(--space-black);
+  padding: 2rem;
+}
+
+/* Header */
+.vw-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem 2rem;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  backdrop-filter: blur(20px);
+  margin-bottom: 2rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.vw-logo-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--neon-purple), var(--neon-cyan));
+  box-shadow: 0 0 20px var(--neon-purple);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.8; }
+}
+
+.vw-header-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.vw-header-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.vw-header-subtitle {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+/* Main Grid */
+.vw-main {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.vw-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 2rem;
+}
+
+@media (max-width: 1024px) {
+  .vw-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.vw-column {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* Glass Cards */
+.vw-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  padding: 2rem;
+  backdrop-filter: blur(20px);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.vw-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--neon-purple),
+    var(--neon-cyan),
+    transparent
+  );
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.vw-card:hover::before {
+  opacity: 1;
+}
+
+.vw-card:hover {
+  border-color: rgba(120, 80, 255, 0.3);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    0 0 40px rgba(120, 80, 255, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+}
+
+.vw-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.vw-card-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.vw-card-chip {
+  padding: 0.5rem 1rem;
+  background: rgba(120, 80, 255, 0.15);
+  border: 1px solid rgba(120, 80, 255, 0.3);
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--neon-purple);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.vw-card-chip.subtle {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--glass-border);
+  color: var(--text-secondary);
+}
+
+/* Balance Table */
+.vw-balance-table {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.vw-balance-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+.vw-balance-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--neon-purple);
+  box-shadow: 0 0 20px rgba(120, 80, 255, 0.15);
+}
+
+.vw-balance-coin {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.vw-coin-pill {
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.vw-coin-pill.land {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.3);
+}
+
+.vw-coin-pill.btc {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: white;
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.3);
+}
+
+.vw-coin-pill.bch {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+}
+
+.vw-coin-name {
+  font-size: 1rem;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.vw-balance-values {
+  display: flex;
+  gap: 2rem;
+  align-items: center;
+}
+
+.vw-balance-values > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.vw-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+}
+
+.vw-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Deposit Box */
+.vw-deposit-box {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.vw-address-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.vw-address {
+  flex: 1;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.875rem;
+  color: var(--neon-cyan);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vw-copy-btn {
+  padding: 1rem 1.5rem;
+  background: rgba(120, 80, 255, 0.2);
+  border: 1px solid var(--neon-purple);
+  border-radius: 10px;
+  color: var(--neon-purple);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.vw-copy-btn:hover {
+  background: rgba(120, 80, 255, 0.3);
+  box-shadow: 0 0 20px rgba(120, 80, 255, 0.4);
+}
+
+.vw-copy-btn:active {
+  transform: scale(0.95);
+}
+
+.vw-helper {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* Vault Card */
+.vw-vault-card {
+  background: linear-gradient(
+    135deg,
+    rgba(120, 80, 255, 0.1),
+    rgba(50, 180, 255, 0.05)
+  );
+  border-color: rgba(120, 80, 255, 0.3);
+}
+
+.vw-live-pill {
+  padding: 0.5rem 1rem;
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #10b981;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.vw-live-pill::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background: #10b981;
+  border-radius: 50%;
+  animation: blink 2s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.vw-subtitle {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 1.5rem;
+}
+
+.vw-vault-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.vw-vault-stats > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.vw-supply {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--neon-purple);
+  font-variant-numeric: tabular-nums;
+}
+
+.vw-vault-footer {
+  padding-top: 1rem;
+  border-top: 1px solid var(--glass-border);
+}
+
+.vw-foot-note {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* ========================
+   HANDLE CLAIM PAGE
+   ======================== */
+
+.vw-handle-hero {
+  position: relative;
+  z-index: 10;
+  max-width: 540px;
+  width: 100%;
+  background: var(--card-bg);
+  border-radius: 28px;
+  padding: 3rem 2.5rem;
+  border: 1px solid rgba(120, 80, 255, 0.4);
+  box-shadow: 
+    0 32px 64px rgba(0, 0, 0, 0.7), 
+    0 4px 16px var(--glass-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(24px);
+  margin: 0 auto;
+  animation: handleHeroFloat 6s ease-in-out infinite;
+}
+
+@keyframes handleHeroFloat {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+.vw-handle-header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+.vw-handle-title {
+  font-size: 2.75rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin: 0 0 1rem 0;
+  line-height: 1.2;
+}
+
+.vw-handle-accent {
+  background: linear-gradient(135deg, var(--neon-purple) 0%, var(--neon-cyan) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 900;
+}
+
+.vw-handle-subtitle {
+  font-size: 1.05rem;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.vw-handle-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.vw-handle-input-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.vw-handle-input-wrapper {
+  display: flex;
+  align-items: center;
+  background: rgba(20, 16, 36, 0.8);
+  border: 2px solid rgba(120, 80, 255, 0.3);
+  border-radius: 16px;
+  padding: 0 1.25rem;
+  transition: all 0.3s ease;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.vw-handle-input-wrapper:focus-within {
+  border-color: var(--neon-cyan);
+  background: rgba(20, 16, 36, 0.95);
+  box-shadow: 
+    inset 0 2px 8px rgba(0, 0, 0, 0.3),
+    0 0 0 4px rgba(0, 217, 255, 0.15),
+    0 0 32px rgba(0, 217, 255, 0.3);
+}
+
+.vw-handle-prefix {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--neon-purple);
+  margin-right: 0.5rem;
+  user-select: none;
+}
+
+.vw-handle-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 1.1rem 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: inherit;
+  letter-spacing: 0.02em;
+}
+
+.vw-handle-input::placeholder {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.vw-handle-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.vw-validation-error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  color: #fca5a5;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  animation: errorShake 0.4s ease;
+}
+
+.vw-validation-error::before {
+  content: '⚠';
+  font-size: 1.1rem;
+}
+
+.vw-error-message {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  border-radius: 12px;
+  padding: 0.85rem 1.1rem;
+  font-size: 0.95rem;
+  color: #fee;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  animation: errorShake 0.4s ease;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.2);
+}
+
+.vw-error-message::before {
+  content: '✕';
+  font-size: 1.2rem;
+  color: #fca5a5;
+}
+
+@keyframes errorShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-8px); }
+  75% { transform: translateX(8px); }
+}
+
+.vw-handle-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: center;
+}
+
+.vw-btn-full {
+  width: 100%;
+  justify-content: center;
+  font-size: 1.05rem;
+  padding: 1rem 2rem;
+  transition: all 0.3s ease;
+}
+
+.vw-primary-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 0 4px 12px rgba(50, 180, 255, 0.2);
+}
+
+.vw-primary-btn:disabled:hover {
+  transform: none;
+  box-shadow: 0 4px 12px rgba(50, 180, 255, 0.2);
+}
+
+.vw-text-link {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.2s ease;
+  padding: 0.5rem 1rem;
+  text-decoration: none;
+}
+
+.vw-text-link:hover {
+  color: var(--text-primary);
+}
+
+.vw-text-link:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Success State */
+.vw-handle-success {
+  text-align: center;
+  padding: 2rem 0;
+  animation: successFadeIn 0.5s ease;
+}
+
+@keyframes successFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.vw-success-icon {
+  width: 88px;
+  height: 88px;
+  margin: 0 auto 1.5rem;
+  background: linear-gradient(135deg, #22c55e 0%, #10b981 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3.5rem;
+  color: white;
+  box-shadow: 
+    0 8px 32px rgba(34, 197, 94, 0.5),
+    0 0 64px rgba(34, 197, 94, 0.3);
+  animation: successPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes successPulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 
+      0 8px 32px rgba(34, 197, 94, 0.5),
+      0 0 64px rgba(34, 197, 94, 0.3);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 
+      0 12px 40px rgba(34, 197, 94, 0.6),
+      0 0 80px rgba(34, 197, 94, 0.4);
+  }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .vw-shell {
+    padding: 1rem;
+  }
+  
+  .vw-header {
+    padding: 1rem;
+  }
+  
+  .vw-card {
+    padding: 1.5rem;
+  }
+  
+  .vw-balance-values {
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: flex-end;
+  }
+  
+  .vw-welcome-buttons {
+    flex-direction: column;
+  }
+  
+  .vw-primary-btn,
+  .vw-secondary-btn {
+    width: 100%;
+  }
+
+  .vw-handle-hero {
+    padding: 2rem 1.75rem;
+    max-width: 90%;
+  }
+
+  .vw-handle-title {
+    font-size: 2.2rem;
+  }
+}
+
+/* ========================
+   IMPORT WALLET SCREEN
+   ======================== */
+
+/* Inner screens reuse the same background but can be a bit darker / no giant globe */
+.vision-landing--inner::before {
+  /* smaller, softer globe behind card */
+  width: 720px;
+  height: 720px;
+  opacity: 0.45;
+}
+
+/* Import panel tweaks */
+.import-panel {
+  max-width: 520px;
+  text-align: left;
+}
+
+.vision-title-sub-small {
+  margin: 4px 0 0;
+  font-size: 40px;
+  font-weight: 800;
+  background: linear-gradient(90deg, #58ddff, #78a8ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 0 22px rgba(90, 190, 255, 0.7);
+}
+
+/* Form layout */
+.import-form {
+  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #93a7ff;
+}
+
+/* Handle row */
+.handle-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(7, 13, 32, 0.95);
+  border-radius: 12px;
+  border: 1px solid rgba(125, 159, 245, 0.7);
+  padding: 6px 10px;
+}
+
+.handle-prefix {
+  font-size: 0.9rem;
+  color: #7fa5ff;
+}
+
+.text-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #f4f7ff;
+  font-size: 0.9rem;
+}
+
+/* Seed textarea */
+.text-area {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(125, 159, 245, 0.7);
+  background: rgba(7, 13, 32, 0.95);
+  color: #f4f7ff;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+  resize: vertical;
+  font-family: "SF Mono", ui-monospace, Menlo, Monaco, Consolas, "Roboto Mono",
+    monospace;
+}
+
+.text-area:focus,
+.handle-row:focus-within {
+  border-color: #66ffe1;
+  box-shadow: 0 0 0 1px rgba(102, 255, 225, 0.4);
+}
+
+/* Buttons row */
+.import-buttons {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+/* Keep using the same .btn-primary / .btn-secondary from the welcome screen */
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+  box-shadow: none;
+  transform: none;
+}
+
+/* ========================
+   WIZARD MODE - MULTI-STEP FLOWS INSIDE HERO CARD
+   ======================== */
+
+/* Extended panel for create/import flows */
+.vision-panel-extended {
+  width: 560px;
+  max-width: 92vw;
+  padding: 36px 44px 40px;
+}
+
+/* Smooth fade transitions between modes */
+.vision-wizard-content {
+  animation: wizardFadeIn 0.4s ease-out;
+}
+
+@keyframes wizardFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Wizard flow layout */
+.wizard-flow {
+  width: 100%;
+}
+
+.wizard-header {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.wizard-title {
+  font-size: 32px;
+  font-weight: 700;
+  color: #f3f6ff;
+  margin-bottom: 8px;
+}
+
+.wizard-accent {
+  background: linear-gradient(90deg, #58ddff, #78a8ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.wizard-subtitle {
+  font-size: 15px;
+  color: #c5d6ff;
+  line-height: 1.5;
+}
+
+.wizard-body {
+  width: 100%;
+}
+
+/* Form fields */
+.wizard-field {
+  margin-bottom: 24px;
+}
+
+.wizard-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #d0e1ff;
+  margin-bottom: 10px;
+}
+
+.wizard-handle-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  border: 1px solid rgba(125, 159, 245, 0.5);
+  background: rgba(7, 13, 32, 0.85);
+  transition: all 0.2s ease;
+}
+
+.wizard-handle-input-wrapper:focus-within {
+  border-color: #66ffe1;
+  box-shadow: 0 0 0 1px rgba(102, 255, 225, 0.3);
+}
+
+.wizard-handle-prefix {
+  font-size: 16px;
+  font-weight: 600;
+  color: #7fa5ff;
+}
+
+.wizard-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #f4f7ff;
+  font-size: 16px;
+  font-family: inherit;
+}
+
+.wizard-textarea {
+  width: 100%;
+  padding: 14px 18px;
+  border-radius: 12px;
+  border: 1px solid rgba(125, 159, 245, 0.5);
+  background: rgba(7, 13, 32, 0.85);
+  color: #f4f7ff;
+  font-size: 14px;
+  resize: vertical;
+  font-family: 'SF Mono', ui-monospace, Menlo, Monaco, Consolas, 'Roboto Mono', monospace;
+  transition: all 0.2s ease;
+}
+
+.wizard-textarea:focus {
+  border-color: #66ffe1;
+  box-shadow: 0 0 0 1px rgba(102, 255, 225, 0.3);
+  outline: none;
+}
+
+.wizard-helper {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #8da5cf;
+}
+
+.wizard-validation-error,
+.wizard-error {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(255, 80, 80, 0.15);
+  border: 1px solid rgba(255, 100, 100, 0.4);
+  color: #ffb3b3;
+  font-size: 14px;
+}
+
+/* Action buttons */
+.wizard-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.wizard-actions .btn-primary,
+.wizard-actions .btn-secondary {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Success state */
+.wizard-success {
+  text-align: center;
+  padding: 40px 0;
+}
+
+.wizard-success-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 24px;
+  background: linear-gradient(135deg, #41c8ff, #5f84ff);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48px;
+  color: #03101f;
+  font-weight: bold;
+  animation: successPop 0.5s ease-out;
+}
+
+@keyframes successPop {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.wizard-success .wizard-title {
+  margin-bottom: 12px;
+}
+
+.wizard-success .wizard-subtitle {
+  font-size: 15px;
+  color: #c5d6ff;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .vision-panel-extended {
+    width: 90vw;
+    padding: 28px 20px 32px;
+  }
+  
+  .wizard-title {
+    font-size: 26px;
+  }
+  
+  .wizard-subtitle {
+    font-size: 14px;
+  }
+  
+  .wizard-actions {
+    flex-direction: column;
+  }
+  
+  .wizard-actions .btn-primary,
+  .wizard-actions .btn-secondary {
+    width: 100%;
+  }
+}

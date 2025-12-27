@@ -1,0 +1,57 @@
+pub async fn get_beacon_state() -> Json<BeaconStateResponse> {
+    use crate::mood;
+    
+    // Gather metrics from chain
+    let chain = CHAIN.lock();
+    let height = chain.best_height();
+    let peer_count = chain.peers.len();
+    let mempool_size = chain.mempool_critical.len() + chain.mempool_bulk.len();
+    
+    // Get testnet phase
+    let testnet_phase = if chain.testnet_48h_checkpoint.is_some() {
+        let checkpoint_time = chain.testnet_48h_checkpoint.unwrap_or(0);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let elapsed_hours = (now.saturating_sub(checkpoint_time)) / 3600;
+        
+        if elapsed_hours < 24 {
+            Some("mining".to_string())
+        } else if elapsed_hours < 48 {
+            Some("hybrid".to_string())
+        } else {
+            Some("staking-only".to_string())
+        }
+    } else {
+        None
+    };
+    
+    drop(chain);
+    
+    let guardian_active = GUARDIAN_MODE.load(std::sync::atomic::Ordering::Relaxed);
+    let (pending_anomalies, recent_traumas) = get_health_summaries();
+    
+    // Compute mood snapshot
+    let snapshot = mood::compute_mood(
+        height as u64,
+        peer_count,
+        mempool_size,
+        pending_anomalies,
+        recent_traumas,
+        guardian_active,
+        testnet_phase,
+    );
+    
+    let chaos_intensity = 1.0 - snapshot.score;
+    
+    // TODO: Implement last_trauma_timestamp() when trauma DB is ready
+    let last_trauma_at = None;
+    
+    Json(BeaconStateResponse {
+        mood: format!("{:?}", snapshot.mood).to_lowercase(),
+        chaos_intensity,
+        active_traumas: snapshot.details.recent_trauma_count,
+        last_trauma_at,
+    })
+}

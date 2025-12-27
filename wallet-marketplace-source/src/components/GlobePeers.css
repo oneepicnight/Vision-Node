@@ -1,0 +1,114 @@
+/* Globe Peers - 3D Spinning Globe with Starfield */
+/* Exact styling from panel.html with wallet's globe size (900px) */
+
+.geo-map {
+  background: #000;
+  border: 1px solid rgba(162, 145, 255, 0.3);
+  border-radius: 1rem;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  position: relative;
+  width: 900px;
+  height: 900px;
+}
+
+#peer-map {
+  height: 900px;
+  width: 900px;
+  background: 
+    radial-gradient(2px 2px at 20% 30%, white, transparent),
+    radial-gradient(2px 2px at 60% 70%, white, transparent),
+    radial-gradient(1px 1px at 50% 50%, white, transparent),
+    radial-gradient(1px 1px at 80% 10%, white, transparent),
+    radial-gradient(2px 2px at 90% 60%, white, transparent),
+    radial-gradient(1px 1px at 33% 80%, white, transparent),
+    radial-gradient(2px 2px at 75% 25%, white, transparent),
+    radial-gradient(1px 1px at 15% 60%, white, transparent),
+    radial-gradient(2px 2px at 45% 15%, white, transparent),
+    radial-gradient(1px 1px at 70% 85%, white, transparent),
+    radial-gradient(ellipse at bottom, #1B2735 0%, #090A0F 100%);
+  background-size: 
+    200px 200px,
+    300px 300px,
+    250px 250px,
+    150px 150px,
+    280px 280px,
+    220px 220px,
+    180px 180px,
+    240px 240px,
+    320px 320px,
+    190px 190px,
+    100% 100%;
+  background-position: 0 0;
+  position: relative;
+}
+
+/* Subtle shooting stars */
+.shooting-star {
+  position: absolute;
+  width: 1px;
+  height: 80px;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.9), transparent);
+  animation: shoot 4s ease-in infinite;
+  opacity: 0;
+  z-index: 1;
+}
+
+@keyframes shoot {
+  0% {
+    transform: translateX(0) translateY(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 0.3;
+  }
+  100% {
+    transform: translateX(-200px) translateY(200px);
+    opacity: 0;
+  }
+}
+
+/* Slow rotating Milky Way cloud */
+.milky-way {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  background: radial-gradient(ellipse at 30% 50%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+  animation: milkyway 180s linear infinite;
+  opacity: 0.4;
+  z-index: 1;
+  pointer-events: none;
+}
+
+@keyframes milkyway {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.globe-title {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  color: #fff;
+  font-size: 1.2rem;
+  font-weight: 600;
+  z-index: 100;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+}
+
+.globe-stats {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  color: #ef4444;
+  font-size: 1.5rem;
+  font-weight: 700;
+  z-index: 100;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+}

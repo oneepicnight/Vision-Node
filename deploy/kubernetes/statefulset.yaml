@@ -1,0 +1,188 @@
+# Vision Node - StatefulSet with Persistent Storage
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vision-node
+  namespace: vision-node
+  labels:
+    app: vision-node
+    version: v0.1.0
+spec:
+  serviceName: vision-node
+  replicas: 1  # Single instance for now (increase for multi-node cluster)
+  selector:
+    matchLabels:
+      app: vision-node
+  template:
+    metadata:
+      labels:
+        app: vision-node
+        version: v0.1.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "7070"
+        prometheus.io/path: "/metrics"
+    spec:
+      terminationGracePeriodSeconds: 30
+      
+      # Security context
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: "OnRootMismatch"
+      
+      containers:
+      - name: vision-node
+        image: visionnode/vision-node:latest  # Replace with your registry
+        imagePullPolicy: Always
+        
+        ports:
+        - name: api
+          containerPort: 7070
+          protocol: TCP
+        - name: p2p
+          containerPort: 9090
+          protocol: TCP
+        
+        # Environment variables from ConfigMap and Secrets
+        envFrom:
+        - configMapRef:
+            name: vision-node-config
+        - secretRef:
+            name: vision-node-secrets
+        
+        # Resource limits and requests
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "2000m"
+            memory: "2Gi"
+        
+        # Liveness probe - is the container alive?
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 7070
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        # Readiness probe - can it serve traffic?
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 7070
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        # Startup probe - initial startup check
+        startupProbe:
+          httpGet:
+            path: /health/live
+            port: 7070
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 30  # 150 seconds max startup time
+        
+        # Volume mounts
+        volumeMounts:
+        - name: data
+          mountPath: /app/data
+        - name: logs
+          mountPath: /app/logs
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+        
+        # Lifecycle hooks
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 15"]  # Allow graceful shutdown
+      
+      # Additional volumes
+      volumes:
+      - name: config
+        configMap:
+          name: vision-node-config
+  
+  # Persistent volume claim templates
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      labels:
+        app: vision-node
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: "standard"  # Change to your storage class
+      resources:
+        requests:
+          storage: 100Gi  # Adjust based on needs
+  
+  - metadata:
+      name: logs
+      labels:
+        app: vision-node
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: "standard"
+      resources:
+        requests:
+          storage: 10Gi
+
+---
+# Headless Service for StatefulSet
+apiVersion: v1
+kind: Service
+metadata:
+  name: vision-node
+  namespace: vision-node
+  labels:
+    app: vision-node
+spec:
+  clusterIP: None
+  selector:
+    app: vision-node
+  ports:
+  - name: api
+    port: 7070
+    targetPort: 7070
+  - name: p2p
+    port: 9090
+    targetPort: 9090
+
+---
+# LoadBalancer Service for external access
+apiVersion: v1
+kind: Service
+metadata:
+  name: vision-node-lb
+  namespace: vision-node
+  labels:
+    app: vision-node
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"  # AWS NLB
+spec:
+  type: LoadBalancer
+  selector:
+    app: vision-node
+  ports:
+  - name: api
+    port: 7070
+    targetPort: 7070
+    protocol: TCP
+  - name: p2p
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800  # 3 hours

@@ -1,0 +1,44 @@
+pub async fn get_health_public() -> Json<HealthPublicResponse> {
+    use crate::mood;
+    
+    // If in Guardian mode, try to fetch from upstream first
+    let guardian_mode = GUARDIAN_MODE.load(std::sync::atomic::Ordering::Relaxed);
+    if guardian_mode {
+        if let Some(upstream_health) = upstream::upstream_health_public().await {
+            return Json(upstream_health);
+        }
+    }
+
+    // Gather real metrics from chain
+    let chain = CHAIN.lock();
+    let height = chain.blocks.len().saturating_sub(1);
+    let peer_count = chain.peers.len();
+    let mempool_size = chain.mempool_critical.len() + chain.mempool_bulk.len();
+    drop(chain);
+    
+    // Get health summaries
+    let (pending_anomalies, recent_traumas) = get_health_summaries();
+    
+    // Compute mood using the mood engine
+    let snapshot = mood::compute_mood(
+        height as u64,
+        peer_count,
+        mempool_size,
+        pending_anomalies,
+        recent_traumas,
+        guardian_mode,
+        None, // testnet_phase - not implemented yet
+    );
+    
+    let chaos_intensity = 1.0 - snapshot.score;
+    
+    Json(HealthPublicResponse {
+        network_mood: format!("{:?}", snapshot.mood).to_lowercase(),
+        mood_score: snapshot.score,
+        chaos_intensity,
+        peer_count,
+        anomalies_last_24h: pending_anomalies,
+        traumas_last_24h: recent_traumas,
+        details: snapshot.details,
+    })
+}

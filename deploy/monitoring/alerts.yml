@@ -1,0 +1,147 @@
+# Prometheus Alert Rules for Vision Node
+groups:
+  - name: vision_node_alerts
+    interval: 30s
+    rules:
+      # Node is down
+      - alert: VisionNodeDown
+        expr: up{job="vision-node"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: vision-node
+        annotations:
+          summary: "Vision Node is down"
+          description: "Vision Node has been down for more than 2 minutes."
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes{job="vision-node"} > 1.8e+9
+        for: 5m
+        labels:
+          severity: warning
+          component: vision-node
+        annotations:
+          summary: "High memory usage on Vision Node"
+          description: "Vision Node is using more than 1.8GB of memory."
+
+      # Block height not increasing
+      - alert: BlockHeightStalled
+        expr: rate(vision_blocks_mined_total[10m]) == 0
+        for: 15m
+        labels:
+          severity: warning
+          component: consensus
+        annotations:
+          summary: "Block height is not increasing"
+          description: "No new blocks mined in the last 15 minutes."
+
+      # Mempool filling up
+      - alert: MempoolSizeHigh
+        expr: mempool_len > 10000
+        for: 10m
+        labels:
+          severity: warning
+          component: mempool
+        annotations:
+          summary: "Mempool size is high"
+          description: "Mempool has more than 10k transactions for 10+ minutes."
+
+      # Too many peers disconnected
+      - alert: LowPeerCount
+        expr: vision_p2p_peers < 3
+        for: 5m
+        labels:
+          severity: warning
+          component: p2p
+        annotations:
+          summary: "Low peer count"
+          description: "Node has fewer than 3 peers connected."
+
+      # Reorg detected
+      - alert: ChainReorganization
+        expr: rate(vision_reorgs_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: info
+          component: consensus
+        annotations:
+          summary: "Chain reorganization detected"
+          description: "A chain reorg has occurred."
+
+      # High atomic transaction failure rate
+      - alert: HighAtomicTxFailureRate
+        expr: rate(vision_atomic_failures_total[5m]) / rate(vision_atomic_txs_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "High atomic transaction failure rate"
+          description: "More than 10% of atomic transactions are failing."
+
+      # Cache performance degraded
+      - alert: LowCacheHitRate
+        expr: rate(vision_cache_hits_total[5m]) / (rate(vision_cache_hits_total[5m]) + rate(vision_cache_misses_total[5m])) < 0.5
+        for: 10m
+        labels:
+          severity: info
+          component: performance
+        annotations:
+          summary: "Mining template cache hit rate is low"
+          description: "Cache hit rate is below 50% for 10+ minutes."
+
+      # Database issues
+      - alert: DatabaseFlushFailing
+        expr: rate(vision_db_flush_errors_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "Database flush operations are failing"
+          description: "Database flush errors detected."
+
+      # High orphan block rate
+      - alert: HighOrphanRate
+        expr: vision_p2p_orphans > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: p2p
+        annotations:
+          summary: "High number of orphan blocks"
+          description: "More than 100 orphan blocks in P2P pool."
+
+      # Difficulty adjustment anomaly
+      - alert: DifficultyAnomalyDetected
+        expr: abs(diff_current - diff_avg_block_time_ms) > 100
+        for: 30m
+        labels:
+          severity: info
+          component: consensus
+        annotations:
+          summary: "Mining difficulty shows unusual values"
+          description: "Difficulty metrics deviate significantly from expected values."
+
+      # Mempool sweeper not running
+      - alert: MempoolSweeperStalled
+        expr: rate(vision_mempool_sweeps_total[10m]) == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: mempool
+        annotations:
+          summary: "Mempool sweeper appears to be stalled"
+          description: "No mempool sweep operations detected."
+
+      # Side blocks accumulating
+      - alert: SideBlocksAccumulating
+        expr: vision_side_blocks > 50
+        for: 10m
+        labels:
+          severity: warning
+          component: consensus
+        annotations:
+          summary: "Side blocks are accumulating"
+          description: "More than 50 side blocks present."

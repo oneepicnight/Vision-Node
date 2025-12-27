@@ -1,156 +1,131 @@
-param(
-  [int[]]$Ports = @(7070,7071,7072),
-  [string]$Token = "letmein",
-  [string]$Base  = "http://127.0.0.1",
-  [switch]$PeerOnly = $false,
-  [switch]$SkipAirdrop = $false
+﻿Write-Host "=== Vision Node 3-Node Local Test (HTTP+P2P) ===" -ForegroundColor Cyan
+
+function Write-Step($m) { Write-Host "[STEP] $m" -ForegroundColor Cyan }
+function Write-Info($m) { Write-Host "[INFO] $m" -ForegroundColor DarkCyan }
+function Write-Ok($m)   { Write-Host "[ OK ] $m" -ForegroundColor Green }
+function Write-Err($m)  { Write-Host "[ERR ] $m" -ForegroundColor Red }
+
+$root = "C:\vision-node"
+$exe  = Join-Path $root "target\release\vision-node.exe"
+if (!(Test-Path $exe)) {
+    throw "vision-node.exe not found at $exe (build first: cargo build --release)"
+}
+
+$nodes = @(
+    @{ Name = "node7070"; HttpPort = 7070; P2pPort = 17070; RunDir = (Join-Path $root "run-node7070") },
+    @{ Name = "node7071"; HttpPort = 7071; P2pPort = 17071; RunDir = (Join-Path $root "run-node7071") },
+    @{ Name = "node7072"; HttpPort = 7072; P2pPort = 17072; RunDir = (Join-Path $root "run-node7072") }
 )
 
-# -------- helpers --------
-function Write-Step([string]$msg)  { Write-Host "[STEP] $msg" -ForegroundColor Cyan }
-function Write-OK([string]$msg)    { Write-Host "[ OK ] $msg" -ForegroundColor Green }
-function Write-ERR([string]$msg)   { Write-Host "[ERR ] $msg" -ForegroundColor Red }
+Write-Step "Stopping any running vision-node processes"
+Get-Process vision-node -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 2
 
-function Url([int]$port, [string]$path) {
-  return "$($Base):$port$path"
+Write-Step "Preparing per-node run directories + local seed_peers.json"
+foreach ($n in $nodes) {
+    New-Item -ItemType Directory -Force -Path $n.RunDir | Out-Null
+
+    $visionData = Join-Path $n.RunDir "vision_data"
+    New-Item -ItemType Directory -Force -Path $visionData | Out-Null
+
+    # Ensure relative config paths work when we run from RunDir
+    $cfgLink = Join-Path $n.RunDir "config"
+    if (!(Test-Path $cfgLink)) {
+        cmd /c "mklink /J \"$cfgLink\" \"$root\config\"" | Out-Null
+    }
+    $pubLink = Join-Path $n.RunDir "public"
+    if (!(Test-Path $pubLink)) {
+        cmd /c "mklink /J \"$pubLink\" \"$root\public\"" | Out-Null
+    }
+
+    $peerSeeds = @($nodes | Where-Object { $_.Name -ne $n.Name } | ForEach-Object { "127.0.0.1:$($_.P2pPort)" })
+    $seedCfg = @{
+        version      = 1
+        generated_at = (Get-Date).ToString("o")
+        description  = "Local 3-node test seed list"
+        peers        = $peerSeeds
+    }
+    $seedPath = Join-Path $visionData "seed_peers.json"
+    $seedCfg | ConvertTo-Json -Depth 5 | Set-Content -Path $seedPath -Encoding UTF8
 }
 
-function Get-Height([int]$port) {
-  try { return [int](Invoke-RestMethod (Url $port "/height")) } catch { return -1 }
+function Wait-Health($port) {
+    for ($i = 0; $i -lt 60; $i++) {
+        try {
+            $null = Invoke-RestMethod "http://127.0.0.1:$port/health" -TimeoutSec 2
+            return
+        } catch {
+            Start-Sleep -Milliseconds 300
+        }
+    }
+    throw "Port $port did not become healthy in time"
 }
 
-function Add-Peer([int]$from, [int]$to) {
-  $url  = (Url $from "/peer/add?token=$Token")
-  $body = @{ url = "$($Base):$to" } | ConvertTo-Json -Compress
-  try {
-    $resp = Invoke-RestMethod -Method Post -ContentType "application/json" -Body $body -Uri $url
-    return $true
-  } catch {
-    Write-ERR "peer add $from -> $to failed: $($_.Exception.Message)"
-    return $false
-  }
-}
-
-function Force-Catchup([int]$src, [int]$dst) {
-  $srcH = Get-Height $src
-  $dstH = Get-Height $dst
-  if ($srcH -lt 0 -or $dstH -lt 0) { Write-ERR "cannot fetch heights"; return }
-  if ($dstH -ge $srcH) { return }
-  Write-Step ("Force catch-up {0} from {1} (dst={2} to src={3})" -f $dst,$src,$dstH,$srcH)
-  for ($i = $dstH + 1; $i -le $srcH; $i++) {
+function Get-Status($port) {
     try {
-      $bObj = Invoke-RestMethod (Url $src "/block/$i")
-      $env  = @{ block = $bObj } | ConvertTo-Json -Depth 100 -Compress
-      $resp = Invoke-RestMethod -Method Post -ContentType "application/json" -Body $env -Uri (Url $dst "/gossip/block")
-      Start-Sleep -Milliseconds 50
+        return Invoke-RestMethod "http://127.0.0.1:$port/api/status" -TimeoutSec 2
     } catch {
-      Write-ERR "push block $i to $dst failed: $($_.Exception.Message)"
+        return $null
     }
-  }
 }
 
-function Wait-Heights([int[]]$ports, [int]$target, [int]$timeoutSec=15) {
-  $deadline = (Get-Date).AddSeconds($timeoutSec)
-  while ((Get-Date) -lt $deadline) {
-    $all = $true
-    foreach ($p in $ports) {
-      $h = Get-Height $p
-      if ($h -lt $target) { $all = $false; break }
+Write-Step "Starting node7070 first (becomes local HTTP anchor)"
+$n0 = $nodes[0]
+$env:RUST_LOG = "info"
+$env:VISION_ALLOW_PRIVATE_PEERS = "true"
+$env:VISION_ANCHOR_SEEDS = "127.0.0.1"
+$env:VISION_PUBLIC_IP = "127.0.0.1"
+$env:VISION_PORT = "$($n0.HttpPort)"
+$env:VISION_P2P_PORT = "$($n0.P2pPort)"
+$env:VISION_PUBLIC_PORT = "$($n0.P2pPort)"
+$env:VISION_DATA_DIR = "vision_data"
+Start-Process -WorkingDirectory $n0.RunDir -FilePath $exe -RedirectStandardOutput (Join-Path $n0.RunDir "stdout.log") -RedirectStandardError (Join-Path $n0.RunDir "stderr.log") -WindowStyle Hidden | Out-Null
+Wait-Health $n0.HttpPort
+Write-Ok "node7070 is healthy on :$($n0.HttpPort)"
+
+Write-Step "Starting node7071 + node7072"
+foreach ($n in $nodes | Select-Object -Skip 1) {
+    $env:RUST_LOG = "info"
+    $env:VISION_ALLOW_PRIVATE_PEERS = "true"
+    $env:VISION_ANCHOR_SEEDS = "127.0.0.1"
+    $env:VISION_PUBLIC_IP = "127.0.0.1"
+    $env:VISION_PORT = "$($n.HttpPort)"
+    $env:VISION_P2P_PORT = "$($n.P2pPort)"
+    $env:VISION_PUBLIC_PORT = "$($n.P2pPort)"
+    $env:VISION_DATA_DIR = "vision_data"
+    Start-Process -WorkingDirectory $n.RunDir -FilePath $exe -RedirectStandardOutput (Join-Path $n.RunDir "stdout.log") -RedirectStandardError (Join-Path $n.RunDir "stderr.log") -WindowStyle Hidden | Out-Null
+    Wait-Health $n.HttpPort
+    Write-Ok "$($n.Name) is healthy on :$($n.HttpPort)"
+}
+
+Write-Step "Checking /api/status on all nodes (repeat twice)"
+1..2 | ForEach-Object {
+    foreach ($n in $nodes) {
+        $st = Get-Status $n.HttpPort
+        if ($null -eq $st) {
+            Write-Err "$($n.Name) :$($n.HttpPort) /api/status not available"
+        } else {
+            $peerCount = $st.peer_count
+            $p2pHealth = $st.p2p_health
+            $warmup    = $st.warmup_active
+            Write-Info "$($n.Name) http=$($n.HttpPort) p2p=$($n.P2pPort) peers=$peerCount p2p_health=$p2pHealth warmup_active=$warmup"
+        }
     }
-    if ($all) { return $true }
-    Start-Sleep -Milliseconds 200
-  }
-  return $false
+    if ($_ -eq 1) { Start-Sleep -Seconds 8 }
 }
 
-function Mine-One([int]$port) {
-  $url = Url $port "/mine_block"
-  $body = @{} | ConvertTo-Json -Compress
-  try {
-    $r = Invoke-RestMethod -Method Post -ContentType "application/json" -Body $body -Uri $url
-    return $r.height
-  } catch {
-    Write-ERR "mine on $port failed: $($_.Exception.Message)"
-    return -1
-  }
+Write-Host ""
+Write-Host "Logs:" -ForegroundColor Yellow
+foreach ($n in $nodes) {
+    Write-Host "  $($n.RunDir)\\stdout.log" -ForegroundColor Gray
+    Write-Host "  $($n.RunDir)\\stderr.log" -ForegroundColor Gray
 }
 
-function Set-GM([int]$port, [string]$addr) {
-  $url  = Url $port "/set_gamemaster?token=$Token"
-  $body = @{ addr = $addr } | ConvertTo-Json -Compress
-  try { Invoke-RestMethod -Method Post -ContentType "application/json" -Body $body -Uri $url | Out-Null; return $true }
-  catch { Write-ERR "set_gamemaster failed: $($_.Exception.Message)"; return $false }
+$response = Read-Host "Stop nodes now? (Y/N)"
+if ($response -eq "Y" -or $response -eq "y") {
+    Get-Process vision-node -ErrorAction SilentlyContinue | Stop-Process -Force
+    Write-Ok "Nodes stopped"
+} else {
+    Write-Info "Nodes still running (stop via Task Manager or: Get-Process vision-node | Stop-Process -Force)"
 }
 
-function Airdrop([int]$port, [string]$from, [string]$csv, [int]$tip=2) {
-  $url  = Url $port "/airdrop?token=$Token"
-  $body = @{
-    from = $from
-    tip  = $tip
-    payments_csv = $csv
-  } | ConvertTo-Json -Compress
-  try { Invoke-RestMethod -Method Post -ContentType "application/json" -Body $body -Uri $url | Out-Null; return $true }
-  catch { Write-ERR "airdrop failed: $($_.Exception.Message)"; return $false }
-}
-
-function Get-Bal([int]$port, [string]$addr) {
-  try { return [int64](Invoke-RestMethod (Url $port "/balance/$addr")) } catch { return -1 }
-}
-
-# -------- run --------
-Write-Step "Mesh peers"
-$N = $Ports.Count
-for ($i=0; $i -lt $N; $i++) {
-  for ($j=0; $j -lt $N; $j++) {
-    if ($i -eq $j) { continue }
-    $null = Add-Peer $Ports[$i] $Ports[$j]
-  }
-}
-
-if (-not $PeerOnly) {
-  Write-Step "Mine one block on $($Ports[0])"
-  $h = Mine-One $Ports[0]
-  if ($h -gt 0) {
-    if (-not (Wait-Heights $Ports $h 20)) {
-      # last resort, force catch-up to the highest
-      $maxH = -1; $src = $Ports[0]
-      foreach ($p in $Ports) { $hh = Get-Height $p; if ($hh -gt $maxH) { $maxH = $hh; $src = $p } }
-      foreach ($p in $Ports) { if ($p -ne $src) { Force-Catchup $src $p } }
-    }
-  }
-
-  Write-Step "Set gamemaster = alice on $($Ports[0])"
-  $ok = Set-GM $Ports[0] "alice"
-  if (-not $ok) { Write-ERR "failed to set gamemaster"; }
-
-  if (-not $SkipAirdrop) {
-    Write-Step "Airdrop bob=25, charlie=40 via $($Ports[0])"
-    $csv = "bob,25`ncharlie,40"
-    $ok = Airdrop $Ports[0] "alice" $csv 2
-    if (-not $ok) { Write-ERR "airdrop call failed" }
-  }
-}
-
-# Verify balances everywhere (allow catch-up)
-Write-Step "Verify balances on all nodes"
-$expected = @{ bob = 25; charlie = 40 }
-foreach ($p in $Ports) {
-  $b = Get-Bal $p "bob"
-  $c = Get-Bal $p "charlie"
-  if ($b -ne $expected.bob -or $c -ne $expected.charlie) {
-    Write-Host "[INFO] Port $p needs catch-up (bob=$b, charlie=$c)"
-    # Find best source (highest height)
-    $maxH = -1; $src = $Ports[0]
-    foreach ($q in $Ports) { $hh = Get-Height $q; if ($hh -gt $maxH) { $maxH = $hh; $src = $q } }
-    if ($src -ne $p) { Force-Catchup $src $p }
-    # re-check
-    $b = Get-Bal $p "bob"; $c = Get-Bal $p "charlie"
-  }
-  if ($b -eq $expected.bob -and $c -eq $expected.charlie) {
-    Write-OK ("Port {0} balances OK (bob={1}, charlie={2})" -f $p,$b,$c)
-  } else {
-    Write-ERR ("Port {0} balances WRONG (bob={1}, charlie={2})" -f $p,$b,$c)
-  }
-}
-
-Write-OK "3-node test completed"

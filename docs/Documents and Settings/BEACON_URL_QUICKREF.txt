@@ -1,0 +1,181 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║   🌟 GUARDIAN BEACON URL - QUICK REFERENCE                                   ║
+║   Production-Ready Network Discovery                                         ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ GUARDIAN BEACON URL (Hard-Wired in All Packages)                            │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+   https://visionworld.tech
+
+   ✅ All v0.8.0 and v0.8.1 packages automatically configured
+   ✅ No manual setup required
+   ✅ Constellation nodes connect immediately on first launch
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ CONSTELLATION NODE STARTUP                                                   │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Windows:
+   .\START-VISION-NODE.bat
+
+Linux:
+   ./START-VISION-NODE.sh
+
+Expected Logs:
+   [NETWORK] Connecting to beacon at: https://visionworld.tech
+   [P2P] Connecting to peers...
+   [SYNC] Syncing blockchain...
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ GUARDIAN NODE STARTUP                                                        │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Windows:
+   .\START-GUARDIAN-NODE.bat
+
+Linux:
+   ./START-VISION-NODE.sh (with VISION_GUARDIAN_MODE=true)
+
+Expected Logs:
+   [BEACON] Initialized | Mode: active
+   [BEACON] Guardian beacon started - broadcasting network heartbeats
+   [BEACON] Broadcasting active | Heartbeat #1 | Height: 12345 | Peers: 5
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ API ENDPOINTS                                                                │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Beacon Ping (Quick Test):
+   curl https://visionworld.tech/beacon/ping
+   Response: {"ok":true,"message":"Beacon online","timestamp":"..."}
+
+Beacon Status (Detailed Info):
+   curl https://visionworld.tech/beacon/status
+   Response: {"enabled":true,"mode":"active","running":true,"uptime":3600,...}
+
+Bootstrap Peers:
+   curl https://visionworld.tech/api/bootstrap
+   Response: {"welcome":"Vision Network Bootstrap","peers":[...],...}
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ ENVIRONMENT VARIABLES (Auto-Set by Startup Scripts)                         │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Windows:
+   set BEACON_ENDPOINT=https://visionworld.tech
+   set VISION_PUBLIC_DIR=%CD%\public
+   set VISION_WALLET_DIR=%CD%\wallet\dist
+
+Linux:
+   export BEACON_ENDPOINT="https://visionworld.tech"
+   export VISION_PUBLIC_DIR="$SCRIPT_DIR/public"
+   export VISION_WALLET_DIR="$SCRIPT_DIR/wallet/dist"
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ VALIDATION TEST                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Run Automated Test:
+   .\test-beacon-config.ps1
+
+Expected Result:
+   ✅ ALL TESTS PASSED (14/14)
+   Guardian Beacon URL successfully hard-wired in all packages!
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ TROUBLESHOOTING                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Problem: "No beacon configured — node running blind"
+Solution:
+   1. Check startup script includes BEACON_ENDPOINT line
+   2. Run: .\test-beacon-config.ps1
+   3. Verify: curl https://visionworld.tech/beacon/ping
+
+Problem: Can't reach Guardian
+Solution:
+   1. Test DNS: nslookup visionworld.tech
+   2. Test HTTPS: curl https://visionworld.tech/beacon/ping
+   3. Check firewall allows outbound HTTPS (port 443)
+
+Problem: Guardian not broadcasting
+Solution:
+   1. Verify Guardian mode: echo %VISION_GUARDIAN_MODE% (should be "true")
+   2. Check port 7071: netstat -an | findstr 7071
+   3. Open UDP port 7071 in firewall
+   4. Restart Guardian node
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ NETWORK PORTS                                                                │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+7070/TCP  - HTTP/HTTPS API (wallet, dashboard, beacon status)
+7071/UDP  - Beacon UDP broadcast (local network discovery)
+7071/TCP  - P2P connections (peer synchronization)
+
+Guardian Firewall Rules:
+   Windows: New-NetFirewallRule -DisplayName "Vision Beacon" -Direction Inbound
+              -Protocol UDP -LocalPort 7071 -Action Allow
+   Linux:   sudo ufw allow 7071/udp
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ FILES UPDATED                                                                │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Windows Packages (3):
+   ✅ VisionNode-v0.8.1-constellation-testnet-WIN64\START-VISION-NODE.bat
+   ✅ VisionNode-v0.8.1-guardian-WIN64\START-GUARDIAN-NODE.bat
+   ✅ VisionNode-v0.8.0-guardian-WIN64\START-GUARDIAN-NODE.bat
+
+Linux Packages (4):
+   ✅ VisionNode-Constellation-v0.8.1-LINUX64\START-VISION-NODE.sh
+   ✅ VisionNode-Constellation-v0.8.1-LINUX64\install.sh
+   ✅ VisionNode-Constellation-v0.8.0-LINUX64\START-VISION-NODE.sh
+   ✅ VisionNode-Constellation-v0.8.0-LINUX64\install.sh
+
+Development Scripts (2):
+   ✅ START-VISION-NODE.sh (root)
+   ✅ START-GUARDIAN-NODE.bat (root)
+
+Bootstrap Config (Already Correct):
+   ✅ All seed_peers.toml files point to https://visionworld.tech/api/bootstrap
+
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ OVERRIDE (For Testing/Private Networks)                                     │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+To use a custom Guardian beacon:
+
+Windows:
+   set BEACON_ENDPOINT=http://custom-guardian.local:7070
+   .\START-VISION-NODE.bat
+
+Linux:
+   export BEACON_ENDPOINT="http://custom-guardian.local:7070"
+   ./START-VISION-NODE.sh
+
+Note: Only needed for private testnets. Production uses https://visionworld.tech
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║   ✅ PRODUCTION READY                                                        ║
+║   All packages ship with Guardian Beacon URL pre-configured                 ║
+║   Zero configuration required for constellation nodes                       ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+For complete details, see: BEACON_URL_HARDWIRED.md

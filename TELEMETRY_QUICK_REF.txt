@@ -1,0 +1,97 @@
+===============================================================================
+SWARM TELEMETRY QUICK REFERENCE
+===============================================================================
+
+🌌 VISION NODE v2.1.0 - Constellation Monitoring at a Glance
+
+===============================================================================
+ALWAYS-ON FEATURES (No configuration needed)
+===============================================================================
+
+✅ Startup Banner        - ASCII logo with version/network/mode
+✅ CPU Topology         - Physical cores, threads, CPU model
+✅ Peer Discovery       - Animated spinner showing peer counts (5s interval)
+
+Example:
+[SWARM] ⠋ discovering peers... connected=7 known=23
+
+===============================================================================
+OPTIONAL FEATURES (Enable via .env)
+===============================================================================
+
+📊 SWARM VISUALIZER
+Enable:  VISION_SWARM_VIZ=true
+Output:  Every 30 seconds
+Shows:   Total peers, connected, trusted, seeds
+Example: [SWARM VIZ] peers=27 connected=19 trusted=12 seeds=7
+
+🌍 CONSTELLATION HEATMAP  
+Enable:  VISION_GEOIP_DB=C:\path\to\GeoLite2-City.mmdb
+Output:  Every 2 minutes
+Shows:   Geographic distribution by country (top 10)
+Example:
+  [CONSTELLATION] Geo heatmap (top regions):
+    USA |  14 ██████████████
+    DEU |   5 █████
+    CAN |   3 ███
+
+===============================================================================
+UPTIME BADGES
+===============================================================================
+
+✨ NEW STAR       < 5 minutes uptime
+⚡ WARMING UP     5+ minutes uptime
+🔥 STEADY         15+ min uptime + 5+ peers
+🌌 IMMORTAL       1+ hour uptime + 10+ peers
+
+===============================================================================
+GEOIP DATABASE SETUP
+===============================================================================
+
+1. Visit: https://www.maxmind.com/en/accounts/current/geoip/downloads
+2. Sign up (free)
+3. Download: GeoLite2 City (MMDB format)
+4. Set in .env: VISION_GEOIP_DB=C:\path\to\GeoLite2-City.mmdb
+5. Restart node
+
+===============================================================================
+COMMON CONFIGURATIONS
+===============================================================================
+
+Minimal (Default):
+  # Only startup banner + CPU info + discovery animation
+  (No additional config needed)
+
+Standard:
+  VISION_SWARM_VIZ=true
+  # Adds periodic peer stats
+
+Full:
+  VISION_SWARM_VIZ=true
+  VISION_GEOIP_DB=C:\vision-node\GeoLite2-City.mmdb
+  # Adds peer stats + geographic heatmap
+
+===============================================================================
+TROUBLESHOOTING
+===============================================================================
+
+Issue: Heatmap not showing
+Fix:   Check VISION_GEOIP_DB path is correct
+       Look for: "[GEOIP] Loaded GeoIP DB" in logs
+
+Issue: Swarm viz not showing
+Fix:   Set VISION_SWARM_VIZ=true in .env
+
+Issue: Too many logs
+Fix:   Remove VISION_SWARM_VIZ to disable
+       Remove VISION_GEOIP_DB to disable heatmap
+
+===============================================================================
+LOG VOLUME ESTIMATE
+===============================================================================
+
+Default:         ~1 line per 5 seconds (discovery)
++ Swarm Viz:     +1 line per 30 seconds
++ Heatmap:       +10 lines per 2 minutes
+
+===============================================================================

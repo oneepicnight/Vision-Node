@@ -1,0 +1,36 @@
+pub async fn get_beacon_state() -> Json<BeaconStateResponse> {
+    use crate::mood;
+    
+    // Gather metrics from chain
+    let chain = CHAIN.lock();
+    let height = chain.blocks.len().saturating_sub(1);
+    let peer_count = chain.peers.len();
+    let mempool_size = chain.mempool_critical.len() + chain.mempool_bulk.len();
+    drop(chain);
+    
+    let guardian_active = GUARDIAN_MODE.load(std::sync::atomic::Ordering::Relaxed);
+    let (pending_anomalies, recent_traumas) = get_health_summaries();
+    
+    // Compute mood snapshot
+    let snapshot = mood::compute_mood(
+        height as u64,
+        peer_count,
+        mempool_size,
+        pending_anomalies,
+        recent_traumas,
+        guardian_active,
+        None, // testnet_phase - not implemented yet
+    );
+    
+    let chaos_intensity = 1.0 - snapshot.score;
+    
+    // TODO: Implement last_trauma_timestamp() when trauma DB is ready
+    let last_trauma_at = None;
+    
+    Json(BeaconStateResponse {
+        mood: format!("{:?}", snapshot.mood).to_lowercase(),
+        chaos_intensity,
+        active_traumas: snapshot.details.recent_trauma_count,
+        last_trauma_at,
+    })
+}

@@ -1,0 +1,13 @@
+# Grafana Dashboard Provisioning Configuration
+apiVersion: 1
+
+providers:
+  - name: 'Vision Node'
+    orgId: 1
+    folder: 'Vision Node'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/vision-node-dashboard.json

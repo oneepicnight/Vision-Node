@@ -1,0 +1,13 @@
+[2m2025-11-16T16:23:53.898597Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Vision node starting up [3madmin_token[0m[2m=[0munset
+[2m2025-11-16T16:23:53.899799Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Initialized shard 0
+[2m2025-11-16T16:23:53.900250Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Initialized shard 1
+[2m2025-11-16T16:23:53.900654Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Initialized shard 2
+[2m2025-11-16T16:23:53.901107Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Initialized shard 3
+[2m2025-11-16T16:23:53.902054Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Sharding system initialized with 4 shards
+[2m2025-11-16T16:23:53.924257Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m loading mempool from disk [3mcritical_count[0m[2m=[0m0 [3mbulk_count[0m[2m=[0m0 [3mlast_save[0m[2m=[0m1763309948
+[2m2025-11-16T16:23:53.928107Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m mempool loaded from disk [3mrecovered[0m[2m=[0m0 [3mcritical[0m[2m=[0m0 [3mbulk[0m[2m=[0m0 [3mduration_ms[0m[2m=[0m3
+[2m2025-11-16T16:23:53.928679Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m mempool TTL sweeping configured [3mmempool_ttl_secs[0m[2m=[0m900 [3mmempool_sweep_secs[0m[2m=[0m60
+[2m2025-11-16T16:23:53.929313Z[0m [32m INFO[0m [2mvision_node::p2p::connection[0m[2m:[0m P2P listener started on 0.0.0.0:7071
+[2m2025-11-16T16:23:54.000589Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m serving static files from [3mpublic_dir[0m[2m=[0mC:\vision-node\target\release\public
+[2m2025-11-16T16:23:54.001180Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m serving wallet from [3mwallet_dir[0m[2m=[0mC:\vision-node\target\release\wallet\dist
+[2m2025-11-16T16:23:54.002225Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Vision node listening [3mlisten[0m[2m=[0m0.0.0.0:7070

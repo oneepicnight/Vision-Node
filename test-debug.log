@@ -1,0 +1,26 @@
+╔══════════════════════════════════════════════════════════════╗
+║           Vision Node v2.0 - Testnet Reset               ║
+║           Protocol Version: 2                            ║
+╚══════════════════════════════════════════════════════════════╝
+🌐 Network: testnet
+⚠️  Testnet Mode: Only protocol v2 nodes accepted
+🚀 Build Variant: LITE (MVP)
+[VISION] Build: v1.1.0-CONSTELLATION
+[VISION] Timestamp: 2025-12-01T00:00:00Z
+📡 Phase 2 Router: LITE build (MVP endpoints only)
+   ✅ Core: health, metrics, config
+   ✅ Wallet: balance, transfer, deposit
+   ✅ Market: exchange, orders, trades
+   ✅ Mining: control, status, rewards
+   ✅ Network: peers, snapshots, sync
+   ⏭️  Advanced features: disabled (enable with --features full)
+🎯 Runtime modes - solo: true, pool: false, farm: false
+🏠 Local node URL: http://127.0.0.1:7070
+⛏️  Miner ready (use /api/miner/start or miner panel to begin)
+⛏️  Block integrator started
+[DEBUG] Testnet bootstrap check starting...
+[DEBUG] Network: testnet, is_testnet_seed: true, auto_stamp: true
+
+thread 'main' panicked at src\p2p\peer_manager.rs:354:24:
+Cannot start a runtime from within a runtime. This happens because a function (like `block_on`) attempted to block the current thread while the thread is being used to drive asynchronous tasks.
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

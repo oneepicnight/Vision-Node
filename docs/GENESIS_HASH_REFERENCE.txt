@@ -1,0 +1,50 @@
+===============================================================================
+VISION NODE v2.1.0 - GENESIS HASH QUICK REFERENCE
+===============================================================================
+
+CANONICAL GENESIS HASH:
+af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262
+
+VALIDATION ON STARTUP:
+----------------------
+✅ CORRECT: "Genesis hash validation PASSED: af1349b9..."
+❌ ERROR:   "GENESIS VALIDATION FAILED" → Delete chain.db and restart
+
+GENESIS BLOCK PARAMETERS:
+-------------------------
+Version:     1
+Height:      0  
+Prev Hash:   0000000000000000000000000000000000000000000000000000000000000000
+Timestamp:   0
+Difficulty:  1
+Nonce:       0
+TX Root:     0000000000000000000000000000000000000000000000000000000000000000
+
+HASH COMPUTATION:
+-----------------
+Blake3(version || height || prev_hash || timestamp || difficulty || nonce || tx_root)
+= af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262
+
+VERIFICATION:
+-------------
+All nodes MUST create this exact genesis block.
+Any deviation indicates:
+  1. Code version mismatch
+  2. Database corruption  
+  3. Manual tampering
+  4. Network split/fork
+
+ACTION ON MISMATCH:
+-------------------
+1. Stop node immediately
+2. Delete chain.db
+3. Restart with v2.1.0+ code
+4. Verify "validation PASSED" message
+5. Confirm hash: af1349b9f5...
+
+NETWORK REQUIREMENT:
+--------------------
+ALL nodes must have this genesis hash to participate in network consensus.
+Nodes with different genesis hashes cannot sync or build compatible chains.
+
+===============================================================================

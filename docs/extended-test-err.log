@@ -1,0 +1,10 @@
+╔══════════════════════════════════════════════════════════════╗
+║           Vision Node v2.0 - Testnet Reset               ║
+║           Protocol Version: 2                            ║
+╚══════════════════════════════════════════════════════════════╝
+🌐 Network: testnet
+⚠️  Testnet Mode: Only protocol v2 nodes accepted
+🚀 Build Variant: LITE (MVP)
+[VISION] Build: v1.1.0-CONSTELLATION
+[VISION] Timestamp: 2025-12-01T00:00:00Z
+[TESTNET_STAMP] 🌱 This is a testnet seed node with auto-stamp enabled

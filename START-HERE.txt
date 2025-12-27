@@ -1,0 +1,51 @@
+╔════════════════════════════════════════╗
+║   VISION NODE v1.0 - QUICK START       ║
+╚════════════════════════════════════════╝
+
+👉 INSTALLATION (3 STEPS):
+
+1. Extract ALL files to a folder
+   (Keep them all together!)
+
+2. Double-click: INSTALL-VISION-NODE.bat
+   (This creates a desktop shortcut)
+
+3. Double-click "Vision Node" on desktop
+   (Or use START-VISION-NODE.bat)
+
+Done! Server runs on http://127.0.0.1:7070
+
+════════════════════════════════════════
+
+📋 WHAT'S INCLUDED:
+
+✓ vision-node.exe - Main server
+✓ INSTALL-VISION-NODE.bat - Setup installer
+✓ START-VISION-NODE.bat - Launcher
+✓ README-INSTALLER.txt - Full guide
+
+════════════════════════════════════════
+
+⚡ FOR END USERS:
+
+Just run INSTALL-VISION-NODE.bat once,
+then use the desktop shortcut forever!
+
+No configuration needed!
+No technical knowledge required!
+
+════════════════════════════════════════
+
+🎯 WHAT IT DOES:
+
+✓ Exchange trading (BTC/BCH/DOGE to LAND)
+✓ Blockchain operations
+✓ Wallet & Vault services
+
+Required by Vision Wallet Marketplace
+
+════════════════════════════════════════
+
+Need help? Read README-INSTALLER.txt
+
+Version 1.0 | November 7, 2025

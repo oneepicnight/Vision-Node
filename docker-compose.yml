@@ -1,0 +1,120 @@
+# Docker Compose - Local Development & Testing
+# Full stack with monitoring and backups
+
+version: '3.8'
+
+services:
+  # Vision Node
+  vision-node:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vision-node
+    ports:
+      - "7070:7070"  # API port
+      - "9090:9090"  # P2P port
+    environment:
+      - RUST_LOG=info,vision_node=debug
+      - VISION_PORT=7070
+      - VISION_DATA_DIR=/app/data
+      - VISION_ADMIN_TOKEN=${VISION_ADMIN_TOKEN:-changeme}
+      - VISION_DEV=0
+      - VISION_PRUNE_DEPTH=10000
+      - VISION_SNAPSHOT_RETENTION=20
+      - VISION_MEMPOOL_TTL_SECS=300
+    volumes:
+      - vision-data:/app/data
+      - vision-logs:/app/logs
+      - vision-backups:/app/backups
+      - ./config:/app/config:ro
+    restart: unless-stopped
+    networks:
+      - vision-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7070/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  # Prometheus - Metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: vision-prometheus
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    restart: unless-stopped
+    networks:
+      - vision-network
+    depends_on:
+      - vision-node
+
+  # Grafana - Visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: vision-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./deploy/monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./deploy/monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    restart: unless-stopped
+    networks:
+      - vision-network
+    depends_on:
+      - prometheus
+
+  # Backup Service (runs daily snapshots)
+  backup:
+    build:
+      context: ./deploy/backup
+      dockerfile: Dockerfile
+    container_name: vision-backup
+    environment:
+      - BACKUP_INTERVAL=86400  # 24 hours
+      - BACKUP_RETENTION_DAYS=7
+      - BACKUP_TARGET=/backups
+      - S3_BUCKET=${S3_BUCKET:-}
+      - S3_REGION=${S3_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+    volumes:
+      - vision-data:/data:ro
+      - vision-backups:/backups
+    restart: unless-stopped
+    networks:
+      - vision-network
+    depends_on:
+      - vision-node
+
+volumes:
+  vision-data:
+    driver: local
+  vision-logs:
+    driver: local
+  vision-backups:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+networks:
+  vision-network:
+    driver: bridge

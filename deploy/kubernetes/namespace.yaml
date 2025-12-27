@@ -1,0 +1,8 @@
+# Vision Node - Kubernetes Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vision-node
+  labels:
+    name: vision-node
+    environment: production

@@ -1,7 +1,7 @@
 {
   "name": "vision-wallet",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.1.0",
   "type": "module",
   "description": "Vision Wallet - Modern cryptocurrency wallet built with React + TypeScript + Vite",
   "scripts": {

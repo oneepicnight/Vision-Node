@@ -54,8 +54,8 @@ export default function SecureKey() {
     setLoading(true)
     
     try {
-      console.log('Starting wallet creation...')
-      console.log('Mnemonic:', mnemonic)
+      console.log('=== WALLET CREATION STARTED ===')
+      console.log('Mnemonic length:', mnemonic.length)
       console.log('Handle:', handle)
       
       // Derive keys from mnemonic
@@ -89,26 +89,18 @@ export default function SecureKey() {
       setBalances({ LAND: 1, GAME: 250, CASH: 500 })
       console.log('Balances set')
       
-      // Clear onboarding state
-      reset()
-      console.log('Onboarding reset')
+      // Navigate to Command Center after wallet creation
+      navigate('/command-center')
+      setTimeout(() => reset(), 100) // Delay reset to ensure navigation completes
       
-      // Navigate to home with a small delay to ensure state updates
-      console.log('Navigating to home...')
-      // If dev bypass is enabled we skip any node probes and continue
-      if (env.WALLET_DEV_BYPASS) {
-        setTimeout(() => navigate('/home'), 50)
-        return
-      }
-
-      // Otherwise, probe the node briefly: try /keys then /vault and show a friendly warning if both fail
-      try {
-        await tryKeysThenVault()
-      } catch (probeErr) {
-        console.warn('Node probe failed after wallet creation:', probeErr)
-  window.pushToast?.('Node appears offline — running in DEV fallback. Balances/receipts may be stale.', 'info')
-      } finally {
-        setTimeout(() => navigate('/home'), 100)
+      // Probe node in background
+      if (!env.WALLET_DEV_BYPASS) {
+        try {
+          await tryKeysThenVault()
+        } catch (probeErr) {
+          console.warn('Node probe failed after wallet creation:', probeErr)
+          window.pushToast?.('Node appears offline — running in DEV fallback. Balances/receipts may be stale.', 'info')
+        }
       }
     } catch (error) {
       console.error('Wallet creation failed:', error)
@@ -134,11 +126,10 @@ export default function SecureKey() {
           </p>
         </div>
 
-        <div className="mnemonic-grid">
+        <div className="seed-grid">
           {mnemonic.map((word, index) => (
-            <div key={index} className="mnemonic-word">
-              <span className="word-number">{index + 1}.</span>
-              <span className="word-text">{word}</span>
+            <div key={index} className="seed-word">
+              {index + 1}. {word}
             </div>
           ))}
         </div>

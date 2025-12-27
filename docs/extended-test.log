@@ -1,0 +1,14 @@
+[2m2025-12-05T21:51:51.642763Z[0m [32m INFO[0m [2mvision_node::chain_era[0m[2m:[0m [CHAIN_ERA] Initialized - Current era: MINING (Block emissions active)
+[2m2025-12-05T21:51:51.644429Z[0m [32m INFO[0m [2mvision_node::legacy[0m[2m:[0m [LEGACY] Legacy routing system initialized
+[2m2025-12-05T21:51:51.645746Z[0m [32m INFO[0m [2mvision_node::governance[0m[2m:[0m [GOVERNANCE] System initialized
+[2m2025-12-05T21:51:51.646202Z[0m [32m INFO[0m [2mvision_node::governance[0m[2m:[0m [GOVERNANCE] Proposal fee: 10000 LAND
+[2m2025-12-05T21:51:51.646620Z[0m [32m INFO[0m [2mvision_node::governance[0m[2m:[0m [GOVERNANCE] Voting duration: 48 hours
+[2m2025-12-05T21:51:51.646876Z[0m [32m INFO[0m [2mvision_node::governance[0m[2m:[0m [GOVERNANCE] Required majority: 51%
+[2m2025-12-05T21:51:51.647501Z[0m [32m INFO[0m [2mvision_node::governance::dev_payouts[0m[2m:[0m [DEV_PAYOUT] Manager initialized
+[2m2025-12-05T21:51:51.647671Z[0m [32m INFO[0m [2mvision_node::governance::dev_payouts[0m[2m:[0m [DEV_PAYOUT] Board slots: 0/6
+[2m2025-12-05T21:51:51.647844Z[0m [32m INFO[0m [2mvision_node::governance::dev_payouts[0m[2m:[0m [DEV_PAYOUT] Employee slots: 0/9
+[2m2025-12-05T21:51:51.648018Z[0m [32m INFO[0m [2mvision_node::governance::dev_payouts[0m[2m:[0m [DEV_PAYOUT] Total allocated: 0%
+[2m2025-12-05T21:51:51.649051Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m mempool loaded from disk [3mrecovered[0m[2m=[0m0 [3mcritical[0m[2m=[0m0 [3mbulk[0m[2m=[0m0 [3mduration_ms[0m[2m=[0m0
+[2m2025-12-05T21:51:51.649827Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m [TESTNET_STAMP] 🌱 Auto-stamping 3 blocks for v2.0 Testnet on seed node...
+[2m2025-12-05T21:51:51.649991Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m [TESTNET_STAMP] 🔨 Stamping block 1 of 3...
+[2m2025-12-05T21:51:51.650650Z[0m [32m INFO[0m [1mtx_execution[0m[1m{[0m[3mtx_count[0m[2m=[0m0 [3mparallel[0m[2m=[0mfalse[1m}[0m[2m:[0m [2mvision_node[0m[2m:[0m transaction execution complete [3mduration_ms[0m[2m=[0m0 [3mtx_count[0m[2m=[0m0 [3mparallel[0m[2m=[0mfalse

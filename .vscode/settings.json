@@ -1,0 +1,19 @@
+{
+    "git.ignoreLimitWarning": true,
+    "search.exclude": {
+        "**/target": true,
+        "**/node_modules": true,
+        "**/temp-*": true,
+        "**/vision_data_*": true,
+        "src/**/*.backup*": true,
+        "src/**/*_temp*.rs": true,
+        "src/main_append.txt": true
+    },
+    "files.exclude": {
+        "**/temp-*": true,
+        "**/vision_data_*": true,
+        "src/**/*.backup*": true,
+        "src/**/*_temp*.rs": true,
+        "src/main_append.txt": true
+    }
+}

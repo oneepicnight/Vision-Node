@@ -1,0 +1,170 @@
+name: Security Checks
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  format-check:
+    name: Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  clippy:
+    name: Clippy Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Run Clippy
+        run: cargo clippy --all-features --all-targets -- -D warnings
+        continue-on-error: true
+
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Run tests
+        run: cargo test --all-features
+        continue-on-error: true
+
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      
+      - name: Run cargo audit
+        run: cargo audit
+        continue-on-error: true
+
+  secret-scan:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --debug --only-verified
+        continue-on-error: true
+      
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+  placeholder-key-check:
+    name: Placeholder Key Detection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check for placeholder keys
+        run: |
+          echo "Scanning for placeholder/test keys..."
+          
+          # Check for common test key patterns
+          if grep -r "placeholder" keys*.json 2>/dev/null; then
+            echo "❌ Found 'placeholder' in key files"
+            exit 1
+          fi
+          
+          if grep -r "test-key" keys*.json 2>/dev/null; then
+            echo "❌ Found 'test-key' in key files"
+            exit 1
+          fi
+          
+          if grep -r "example" keys*.json 2>/dev/null; then
+            echo "❌ Found 'example' in key files"
+            exit 1
+          fi
+          
+          # Check for suspiciously short keys (< 32 bytes hex = 64 chars)
+          if [ -f "keys.json" ]; then
+            KEY_LENGTHS=$(grep -oP '"(secret|private|seed|key|mnemonic)":\s*"\K[^"]+' keys.json | awk '{print length}')
+            for len in $KEY_LENGTHS; do
+              if [ "$len" -lt 64 ]; then
+                echo "❌ Found suspiciously short key (length: $len) in keys.json"
+                exit 1
+              fi
+            done
+          fi
+          
+          echo "✅ No obvious placeholder keys detected"
+        continue-on-error: true

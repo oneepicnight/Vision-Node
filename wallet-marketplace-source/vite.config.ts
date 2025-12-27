@@ -65,6 +65,12 @@ export default defineConfig(({ command, mode }) => {
       'globalThis.Headers': 'globalThis.Headers || class Headers {}'
     },
     build: {
+      outDir: 'dist',
+      emptyOutDir: true,  // Clean dist folder before building
+      assetsDir: 'assets',  // Assets go in /app/assets/
+      rollupOptions: {
+        external: ['three', 'globe.gl'],  // Use CDN versions, don't bundle
+      },
       commonjsOptions: {
         transformMixedEsModules: true
       }
@@ -117,6 +123,14 @@ export default defineConfig(({ command, mode }) => {
           changeOrigin: true
         },
         '/balance': {
+          target: 'http://127.0.0.1:7070',
+          changeOrigin: true
+        },
+        '/admin': {
+          target: 'http://127.0.0.1:7070',
+          changeOrigin: true
+        },
+        '/mining': {
           target: 'http://127.0.0.1:7070',
           changeOrigin: true
         }

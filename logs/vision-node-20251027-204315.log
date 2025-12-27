@@ -1,3 +1,0 @@
-﻿[2m2025-10-28T00:33:16.689282Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Vision node starting up [3madmin_token[0m[2m=[0munset
-[2m2025-10-28T00:33:16.693881Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m serving static files from [3mpublic_dir[0m[2m=[0mC:\vision-node\target\debug\public
-[2m2025-10-28T00:33:16.696047Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Vision node listening [3mlisten[0m[2m=[0m127.0.0.1:7070
