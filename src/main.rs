@@ -57,39 +57,160 @@ use prometheus::{
 };
 use tracing::{debug, info};
 use tracing_subscriber::EnvFilter;
+// ============================================================================
+// v1.0 CORE MODULES (ALWAYS COMPILED)
+// ============================================================================
 mod mempool;
 mod miner;
 mod p2p;
 mod pow;
 mod types;
 mod version;
-
-// Vision Vault modules - Core (always compiled)
 mod accounts;
 mod api;
 mod auto_sync;
 mod bank;
+mod chain;           // Core blockchain module
 mod config;
 mod consensus;
 mod consensus_pow;
-// REMOVED: mod emissions; - now using official Tokenomics module only
 mod fees;
 mod identity;
-mod land_deeds;
-mod land_stake;
-mod market;
+mod market;          // Core vault fee routing
 mod metrics;
 mod miner_manager;
-mod mood;
-mod node_approval;
+mod mining_readiness;  // Core mining status
 mod tokenomics;
 mod receipts;
 mod routes;
-mod sig_agg; // Keep for now - used in block structure
+mod sig_agg;     // Block structure
 mod treasury;
 mod vault_epoch;
 mod vision_constants;
 mod wallet;
+
+// v1.0 MOOD STUB (feature-gate actual mood, always provide stub interface)
+#[cfg(not(feature = "staging"))]
+mod mood {
+    #[derive(Clone, Debug)]
+    pub struct Mood;
+    
+    #[derive(Clone, Debug)]
+    pub struct MoodSnapshot {
+        pub mood: Mood,
+        pub score: u32,
+    }
+    
+    pub fn compute_mood(
+        _height: u64,
+        _peer_count: usize,
+        _mempool_size: usize,
+        _anomalies: u32,
+        _traumas: u32,
+        _guardian_active: bool,
+        _testnet_phase: u32,
+    ) -> MoodSnapshot {
+        MoodSnapshot {
+            mood: Mood,
+            score: 50,
+        }
+    }
+}
+
+// ============================================================================
+// STAGED FEATURES (compile only if enabled)
+// ============================================================================
+// v1.0 STUBS for staged modules (provide interface when feature disabled)
+#[cfg(not(feature = "staging"))]
+mod airdrop {
+    pub mod cash {}
+}
+
+#[cfg(not(feature = "staging"))]
+mod foundation_config {}
+
+#[cfg(not(feature = "staging"))]
+mod governance {}
+
+#[cfg(not(feature = "staging"))]
+mod governance_democracy {}
+
+#[cfg(not(feature = "staging"))]
+mod guardian {
+    pub mod consciousness {}
+    pub mod integrity {}
+    pub mod events {}
+}
+
+#[cfg(not(feature = "staging"))]
+mod land_deeds {}
+
+#[cfg(not(feature = "staging"))]
+mod land_stake {}
+
+#[cfg(not(feature = "staging"))]
+mod legacy {}
+
+#[cfg(not(feature = "staging"))]
+mod node_approval {}
+
+#[cfg(not(feature = "staging"))]
+mod runtime_mode {}
+
+#[cfg(not(feature = "staging"))]
+mod tip {}
+
+// Full feature stubs (compiled only when feature enabled)
+#[cfg(feature = "staging")]
+mod airdrop;
+
+#[cfg(feature = "staging")]
+mod foundation_config;
+
+#[cfg(feature = "guardian")]
+mod guardian;
+
+#[cfg(feature = "guardian")]
+mod guardian_consciousness;
+
+#[cfg(any(feature = "staging", feature = "guardian"))]
+mod governance;
+
+#[cfg(any(feature = "staging", feature = "guardian"))]
+mod governance_democracy;
+
+#[cfg(feature = "staging")]
+mod land_deeds;
+
+#[cfg(feature = "staging")]
+mod land_stake;
+
+#[cfg(feature = "staging")]
+mod mood;
+
+#[cfg(feature = "staging")]
+mod mood_router;
+
+#[cfg(feature = "staging")]
+mod node_approval;
+
+#[cfg(feature = "staging")]
+mod runtime_mode;
+
+#[cfg(feature = "staging")]
+mod tip;
+
+#[cfg(feature = "staging")]
+mod legacy;
+
+#[cfg(feature = "staging")]
+mod ebid;
+
+#[cfg(feature = "staging")]
+mod pending_rewards;
+
+#[cfg(feature = "staging")]
+mod oracle;
 
 // Prometheus helper functions
 #[allow(dead_code)]
@@ -198,6 +319,82 @@ pub static PROM_P2P_DUPES_DROPPED: Lazy<IntCounter> =
     Lazy::new(|| mk_int_counter("vision_p2p_dupes_dropped_total", "Duplicate blocks/headers dropped"));
 pub static PROM_P2P_INFLIGHT_BLOCKS: Lazy<IntGauge> =
     Lazy::new(|| mk_int_gauge("vision_p2p_inflight_blocks", "Blocks currently being fetched"));
+
+// ============================================================================
+// v1.0 GLOBAL STATICS - REQUIRED ACROSS MODULES
+// ============================================================================
+
+/// Stub for P2P message broadcasting (staged/optional in v1.0)
+#[allow(dead_code)]
+pub struct P2PManager;
+
+#[allow(dead_code)]
+impl P2PManager {
+    pub async fn broadcast_message(&self, _msg: Vec<u8>) -> Result<(), String> {
+        // Stub implementation - actual P2P routing in p2p module
+        Ok(())
+    }
+}
+
+/// Global P2P manager instance (optional in v1.0 - may be removed)
+pub static P2P_MANAGER: once_cell::sync::Lazy<P2PManager> =
+    once_cell::sync::Lazy::new(|| P2PManager);
+
+/// Stub for Peer Manager (legacy - being phased out)
+#[allow(dead_code)]
+pub static PEER_MANAGER: once_cell::sync::Lazy<P2PManager> =
+    once_cell::sync::Lazy::new(|| P2PManager);
+
+/// Placeholder for constellation memory (optional)
+#[allow(dead_code)]
+pub static CONSTELLATION_MEMORY: once_cell::sync::Lazy<std::sync::Arc<tokio::sync::Mutex<Vec<u8>>>> =
+    once_cell::sync::Lazy::new(|| std::sync::Arc::new(tokio::sync::Mutex::new(Vec::new())));
+
+/// Placeholder for EBID manager (optional)
+#[allow(dead_code)]
+pub static EBID_MANAGER: once_cell::sync::Lazy<P2PManager> =
+    once_cell::sync::Lazy::new(|| P2PManager);
+
+/// Advertised P2P address (optional - may be configured dynamically)
+#[allow(dead_code)]
+pub static ADVERTISED_P2P_ADDRESS: once_cell::sync::Lazy<Option<String>> =
+    once_cell::sync::Lazy::new(|| std::env::var("VISION_P2P_ADDR").ok());
+
+/// Placeholder for Peer Store DB (optional)
+#[allow(dead_code)]
+pub static PEER_STORE_DB: once_cell::sync::Lazy<P2PManager> =
+    once_cell::sync::Lazy::new(|| P2PManager);
+
+// ============================================================================
+// STAGED FEATURE STATICS (compiled only when features enabled)
+// ============================================================================
+
+// ============================================================================
+// STAGED FEATURE STATICS (always defined, but values vary by features)
+// ============================================================================
+
+/// Guardian consciousness state (stub in v1.0, real in guardian feature)
+#[cfg(not(feature = "guardian"))]
+pub static GUARDIAN_CONSCIOUSNESS: once_cell::sync::Lazy<String> =
+    once_cell::sync::Lazy::new(|| "inactive".to_string());
+
+#[cfg(feature = "guardian")]
+pub static GUARDIAN_CONSCIOUSNESS: once_cell::sync::Lazy<String> =
+    once_cell::sync::Lazy::new(|| "active".to_string());
+
+/// Health database stubs (v1.0 placeholder)
+pub struct HealthDB;
+impl HealthDB {
+    pub fn lock(&self) -> std::sync::Arc<tokio::sync::Mutex<HealthDB>> {
+        std::sync::Arc::new(tokio::sync::Mutex::new(HealthDB))
+    }
+    pub fn get_summaries_for_mood(&self) -> (u32, u32) {
+        (0, 0)
+    }
+}
+
+pub static HEALTH_DB: once_cell::sync::Lazy<HealthDB> =
+    once_cell::sync::Lazy::new(|| HealthDB);
 pub static PROM_P2P_PEERS: Lazy<IntGauge> =
     Lazy::new(|| mk_int_gauge("vision_p2p_peers", "Connected peers count"));
 pub static PROM_P2P_HEADERS_PER_SEC: Lazy<IntGauge> =

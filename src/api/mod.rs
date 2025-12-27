@@ -1,7 +1,10 @@
 #![allow(dead_code)]
 
 pub mod discord_oauth;
+
+#[cfg(feature = "staging")]
 pub mod node_approval_api;
+
 pub mod peers_api;
 pub mod routing_api;
 pub mod security;
