@@ -28,3 +28,56 @@ seeds.json
 /src/**/*_temp*.rs
 /src/main_append.txt
 
+# =========================
+# Build outputs / Rust
+# =========================
+/target/
+**/*.pdb
+**/*.exe
+
+# =========================
+# Logs
+# =========================
+*.log
+*.out
+*.err
+build.log
+build-output.txt
+build_output.txt
+build_final.txt
+stdout.log
+stderr.log
+
+# =========================
+# Runtime / chain data
+# =========================
+vision_data*/
+**/db/
+**/*.db
+vision_discord_links.db
+
+# =========================
+# Archives
+# =========================
+*.zip
+*.7z
+*.tar
+*.gz
+
+# =========================
+# Node/Frontend
+# =========================
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+build/
+**/build/
+
+# =========================
+# Local run folders
+# =========================
+run-node*/
+test-node-*/
+localhost/
+public.bak.*
