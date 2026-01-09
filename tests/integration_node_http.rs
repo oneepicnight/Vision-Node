@@ -3,7 +3,7 @@ use std::time::Duration;
 use tempfile::TempDir;
 #[path = "harness.rs"]
 mod harness;
-use ed25519_dalek::{Keypair, Signer};
+use ed25519_dalek::{Signer, SigningKey};
 use rand::rngs::OsRng;
 use serde_json::json;
 
@@ -54,8 +54,8 @@ async fn run_node_and_transfer_over_http() {
 
     // Create a new keypair and mint funds to it via dev faucet
     let mut rng = OsRng;
-    let kp = Keypair::generate(&mut rng);
-    let sender = hex::encode(kp.public.as_bytes());
+    let kp = SigningKey::generate(&mut rng);
+    let sender = hex::encode(kp.verifying_key().to_bytes());
     let recipient = hex::encode([0x02u8; 32]);
 
     // Call dev faucet mint
@@ -95,7 +95,7 @@ async fn run_node_and_transfer_over_http() {
         "amount": 50000u128.to_string(),
         "fee": 100u128.to_string(),
         "nonce": 1u64,
-        "public_key": hex::encode(kp.public.as_bytes()),
+        "public_key": hex::encode(kp.verifying_key().to_bytes()),
         "signature": hex::encode(sig.to_bytes()),
     });
 
@@ -138,7 +138,7 @@ async fn run_node_and_transfer_over_http() {
     assert!(receipts_json.is_array());
     let mut found = false;
     for rec in receipts_json.as_array().unwrap() {
-        if rec["from"].as_str() == Some(&sender) && rec["to"].as_str() == Some(&recipient) {
+        if rec["from"].as_str() == Some(sender.as_str()) && rec["to"].as_str() == Some(recipient.as_str()) {
             found = true;
             break;
         }

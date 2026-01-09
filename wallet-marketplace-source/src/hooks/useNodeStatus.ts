@@ -12,7 +12,7 @@ export interface NodeStatus {
 export function useNodeStatus(pollInterval = 5000) {
   const [nodeStatus, setNodeStatus] = useState<NodeStatus>({
     online: false,
-    network: 'Constellation Testnet',
+    network: 'Mainnet',
     height: 0,
     guardianMode: false,
     peerCount: 0,
@@ -25,14 +25,14 @@ export function useNodeStatus(pollInterval = 5000) {
         // Fetch both status and constellation status
         const [statusRes, constellationRes] = await Promise.all([
           fetch('http://127.0.0.1:7070/api/status'),
-          fetch('http://127.0.0.1:7070/constellation/status').catch(() => null)
+          fetch('http://127.0.0.1:7070/api/constellation/status').catch(() => null)
         ])
         const data = await statusRes.json()
         const constellationData = constellationRes ? await constellationRes.json() : null
         
         setNodeStatus({
           online: data.live,
-          network: data.guardian_mode ? 'Guardian Mode' : 'Constellation Testnet',
+          network: data.guardian_mode ? 'Guardian Mode' : 'Mainnet',
           height: data.chain_height,
           guardianMode: data.guardian_mode || false,
           peerCount: data.peers ? data.peers.length : 0,

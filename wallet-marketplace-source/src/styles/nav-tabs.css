@@ -101,6 +101,35 @@
 }
 
 /* ===================================
+   LOCKED STATE - Disabled Tabs
+   =================================== */
+
+.nav-tab-locked {
+  position: relative;
+  padding: 0.625rem 1.25rem;
+  border-radius: 12px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: not-allowed;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid transparent;
+  white-space: nowrap;
+  
+  /* Locked state - very dimmed */
+  background: linear-gradient(135deg, rgba(20, 25, 40, 0.2), rgba(15, 20, 35, 0.15));
+  color: rgba(120, 130, 150, 0.4);
+  border-color: rgba(80, 90, 110, 0.15);
+  box-shadow: none;
+  opacity: 0.5;
+}
+
+.nav-tab-locked:hover {
+  opacity: 0.65;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* ===================================
    DEV TABS - Distinct Styling
    =================================== */
 

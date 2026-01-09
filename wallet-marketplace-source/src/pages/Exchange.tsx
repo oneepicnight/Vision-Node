@@ -234,13 +234,13 @@ export default function Exchange() {
                 <div>
                   <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>LAND:</span>
                   <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#10b981', marginLeft: '0.5rem' }}>
-                    {balances.LAND.toFixed(2)}
+                    {(balances?.LAND || 0).toFixed(2)}
                   </span>
                 </div>
                 <div>
                   <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>CASH:</span>
                   <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#3b82f6', marginLeft: '0.5rem' }}>
-                    {balances.CASH.toFixed(0)}
+                    {(balances?.CASH || 0).toFixed(0)}
                   </span>
                 </div>
               </div>

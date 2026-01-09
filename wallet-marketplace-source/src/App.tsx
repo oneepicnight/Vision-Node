@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { useWalletStore } from './state/wallet'
 import { pingStatus } from './lib/api'
 import { requireWallet } from './lib/guards'
@@ -13,7 +13,6 @@ import DebugCrypto from './routes/DebugCrypto'
 import WalletHome from './routes/HomeNew'
 import Exchange from './pages/Exchange'
 import CommandCenter from './pages/CommandCenter'
-import MiniCommandCenter from './components/MiniCommandCenter'
 import MinerRedirect from './routes/MinerRedirect'
 import { Market, Orders } from './modules/market'
 import { env } from './utils/env'
@@ -25,62 +24,6 @@ const ProtectedExchange = requireWallet(Exchange)
 const ProtectedSettings = requireWallet(Settings)
 const ProtectedCommandCenter = requireWallet(CommandCenter)
 const ProtectedMinerRedirect = requireWallet(MinerRedirect)
-
-// Status bar component
-function StatusBar() {
-  const { profile, node } = useWalletStore()
-  
-  const statusColor = {
-    'up': 'up',
-    'degraded': 'degraded', 
-    'down': 'down'
-  }[node.status]
-
-  return (
-    <div className="status-bar">
-      <div className="status-left">
-        <div className={`status-dot ${statusColor}`} title={`Node ${node.status}`}></div>
-        <span className="status-handle">
-          {profile ? `@${profile.handle}` : '@handle'}
-        </span>
-      </div>
-      <div className="status-right">
-        {profile && (
-          <a 
-            href="/settings"
-            className="settings-link"
-            title="Settings"
-          >
-            ⚙️
-          </a>
-        )}
-        {!profile && (
-          <a 
-            href="/#/import"
-            className="enter-vision-btn"
-            style={{ textDecoration: 'none', display: 'inline-block' }}
-          >
-            Import Wallet
-          </a>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// Component to conditionally render MiniCommandCenter
-function MiniCommandCenterWrapper() {
-  const { profile } = useWalletStore()
-  const location = useLocation()
-  
-  // Don't show on splash/onboarding routes
-  const hideOnRoutes = ['/', '/import', '/handle', '/secure']
-  const shouldHide = hideOnRoutes.includes(location.pathname) || !profile
-  
-  if (shouldHide) return null
-  
-  return <MiniCommandCenter />
-}
 
 function App() {
   const { setNode } = useWalletStore()
@@ -126,14 +69,12 @@ function App() {
 
   return (
     <Router basename={"/"}>
-      <StatusBar />
       {/* Node offline banner */}
       {node.status === 'down' && (
         <div className="node-banner" style={{ background: '#fef3c7', color: '#92400e', padding: '8px 12px', textAlign: 'center' }}>
           Node offline ({env.NODE_URL}). {env.WALLET_DEV_BYPASS ? 'Running in DEV fallback — balances may be stale.' : 'Running in offline mode — balances may be stale.'}
         </div>
       )}
-      <MiniCommandCenterWrapper />
       <NavTabs />
       <div className="main-content">
         <Routes>

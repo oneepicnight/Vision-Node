@@ -6,7 +6,7 @@
 //! 3. Verify balances updated
 //! 4. Verify receipt written to /receipts/latest
 
-use ed25519_dalek::{Keypair, Signer};
+use ed25519_dalek::{Signer, SigningKey};
 use rand::rngs::OsRng;
 use serde_json::json;
 
@@ -26,10 +26,10 @@ async fn transfer_emits_receipt_and_updates_balances() {
     let url = base_url();
     let token = admin_token();
 
-    // Generate a keypair and use its public key as the sender address
+    // Generate a signing key and use its verifying key as the sender address
     let mut rng = OsRng;
-    let keypair = Keypair::generate(&mut rng);
-    let sender = hex::encode(keypair.public.as_bytes());
+    let keypair = SigningKey::generate(&mut rng);
+    let sender = hex::encode(keypair.verifying_key().to_bytes());
     let recipient = "b".repeat(64);
 
     // Step 1: Seed sender balance with 1,000,000 tokens
@@ -123,7 +123,7 @@ async fn transfer_emits_receipt_and_updates_balances() {
         "amount": transfer_amount,
         "fee": fee_amount,
         "nonce": 1u64,
-        "public_key": hex::encode(keypair.public.as_bytes()),
+        "public_key": hex::encode(keypair.verifying_key().to_bytes()),
         "signature": "", // to be filled
     });
 
@@ -247,8 +247,8 @@ async fn transfer_emits_receipt_and_updates_balances() {
     // Find our transfer receipt
     let transfer_receipt = receipts.iter().find(|r| {
         r["kind"].as_str() == Some("transfer")
-            && r["from"].as_str() == Some(&sender)
-            && r["to"].as_str() == Some(&recipient)
+            && r["from"].as_str() == Some(sender.as_str())
+            && r["to"].as_str() == Some(recipient.as_str())
     });
 
     assert!(
@@ -284,8 +284,8 @@ async fn receipts_limit_and_ordering() {
     let token = admin_token();
 
     let mut rng = OsRng;
-    let keypair = Keypair::generate(&mut rng);
-    let sender = hex::encode(keypair.public.as_bytes());
+    let keypair = SigningKey::generate(&mut rng);
+    let sender = hex::encode(keypair.verifying_key().to_bytes());
     let recipient = hex::encode([0x22u8; 32]);
 
     // Seed sufficient balance
@@ -305,7 +305,7 @@ async fn receipts_limit_and_ordering() {
             "amount": 100u64,
             "fee": 1u64,
             "nonce": i,
-            "public_key": hex::encode(keypair.public.as_bytes()),
+            "public_key": hex::encode(keypair.verifying_key().to_bytes()),
             "signature": "",
         });
         let mut sign_msg = Vec::new();
@@ -359,10 +359,10 @@ async fn transfer_insufficient_funds_fails() {
     let client = reqwest::Client::new();
     let url = base_url();
 
-    // Generate a fresh keypair and use its public as the sender address; no balance seeded => insufficient
+    // Generate a fresh signing key and use its verifying key as the sender address; no balance seeded => insufficient
     let mut rng = OsRng;
-    let keypair = Keypair::generate(&mut rng);
-    let sender = hex::encode(keypair.public.as_bytes());
+    let keypair = SigningKey::generate(&mut rng);
+    let sender = hex::encode(keypair.verifying_key().to_bytes());
     let recipient = "d".repeat(64);
 
     println!("🧪 Testing insufficient funds scenario...");
@@ -375,7 +375,7 @@ async fn transfer_insufficient_funds_fails() {
         "amount": 1_000_000_000_u64,
         "fee": 100_u64,
         "nonce": 1u64,
-        "public_key": hex::encode(keypair.public.as_bytes()),
+        "public_key": hex::encode(keypair.verifying_key().to_bytes()),
         "signature": "",
     });
     // Compose message and sign
@@ -420,10 +420,10 @@ async fn transfer_invalid_signature_fails() {
 
     // Generate two keypairs; sign with one and claim the other as sender (mismatch)
     let mut rng = OsRng;
-    let keypair1 = Keypair::generate(&mut rng);
-    let keypair2 = Keypair::generate(&mut rng);
-    let sender = hex::encode(keypair1.public.as_bytes());
-    let recipient = hex::encode(keypair2.public.as_bytes());
+    let keypair1 = SigningKey::generate(&mut rng);
+    let keypair2 = SigningKey::generate(&mut rng);
+    let sender = hex::encode(keypair1.verifying_key().to_bytes());
+    let recipient = hex::encode(keypair2.verifying_key().to_bytes());
 
     // Seed the sender with enough balance so the transfer would otherwise succeed
     let token = admin_token();
@@ -446,7 +446,7 @@ async fn transfer_invalid_signature_fails() {
         "amount": 1000_u64,
         "fee": 10_u64,
         "nonce": 1u64,
-        "public_key": hex::encode(keypair1.public.as_bytes()),
+        "public_key": hex::encode(keypair1.verifying_key().to_bytes()),
         "signature": "",
     });
 

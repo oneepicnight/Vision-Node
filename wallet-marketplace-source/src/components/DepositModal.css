@@ -1,0 +1,115 @@
+.deposit-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  backdrop-filter: blur(4px);
+}
+
+.deposit-modal-content {
+  background: #1a1a1a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 32px;
+  max-width: 400px;
+  width: 90%;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.deposit-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: transparent;
+  border: none;
+  color: #888;
+  font-size: 28px;
+  cursor: pointer;
+  padding: 4px 12px;
+  line-height: 1;
+  transition: color 0.2s ease;
+}
+
+.deposit-modal-close:hover {
+  color: #fff;
+}
+
+.deposit-modal-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.deposit-modal-title {
+  color: #fff;
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+}
+
+.deposit-modal-subtitle {
+  color: #999;
+  font-size: 14px;
+  margin: 0;
+}
+
+.deposit-modal-qr-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 24px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.deposit-modal-address-display {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.deposit-modal-address-label {
+  color: #999;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.deposit-modal-address-text {
+  color: #fff;
+  font-family: monospace;
+  font-size: 13px;
+  word-break: break-all;
+  line-height: 1.6;
+}
+
+.deposit-modal-copy-btn {
+  width: 100%;
+  padding: 12px;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.deposit-modal-copy-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
+}
+
+.deposit-modal-copy-btn:active {
+  transform: translateY(0);
+}

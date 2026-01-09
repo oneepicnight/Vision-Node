@@ -1,0 +1,79 @@
+﻿# Vision Node v1.0 - Windows Mainnet Release
+
+## Release Date
+December 28, 2025
+
+## Package Contents
+- vision-node.exe - Optimized mainnet binary (~112 MB)
+- start.bat - Quick launcher script
+- public/ - Web wallet and dashboard UI
+- keys.json.example - Node identity configuration template
+- p2p.json - P2P network configuration
+- miner.json - Mining configuration
+- token_accounts.toml - Token account settings
+- README.md - Project documentation
+- NOTICE - Legal notices
+
+## Quick Start
+
+### First Time Setup
+1. Copy keys.json.example to keys.json
+2. Edit keys.json with your node configuration
+3. Double-click start.bat
+
+### Accessing the Interface
+- Web Wallet: http://localhost:7070
+- Dashboard: http://localhost:7070/dashboard.html
+- Governance: http://localhost:7070/governance.html
+- API: http://localhost:7070/api/
+
+## System Requirements
+- Windows 10/11 or Windows Server 2019+
+- 8GB RAM minimum (16GB recommended)
+- 50GB free disk space for blockchain data
+- Stable internet connection for P2P sync
+
+## Features
+ Full blockchain validation and consensus
+ VisionX PoW mining support
+ P2P network participation with auto-discovery
+ Complete HTTP API for integrations
+ Built-in web wallet and dashboard
+ Market settlement and trading system
+ Guardian role support for governance
+ Real-time transaction processing
+
+## Build Information
+- Compiler: rustc (release profile)
+- Optimizations: Full release optimizations enabled
+- Build time: 17m 43s
+- Target: x86_64-pc-windows-msvc
+
+## Security Notes
+ This is production mainnet software
+- Keep your keys.json file secure and backed up
+- Configure firewall to allow P2P port (default 7072)
+- Do not share your private keys
+- Regularly backup your blockchain data
+
+## Data Directory
+The node stores blockchain data in:
+- Windows: .\vision_data_7070\
+
+## Firewall Configuration
+If running a public node, allow inbound connections on:
+- Port 7070 (HTTP API/Web UI)
+- Port 7072 (P2P network)
+
+## Support & Documentation
+For issues, updates, and documentation:
+- Check README.md for detailed setup
+- Review configuration files for available options
+- Visit project repository for latest information
+
+## License
+See NOTICE file for license and attribution information
+
+---
+Vision Node - Decentralized Blockchain Infrastructure
+Mainnet v1.0 - Production Ready

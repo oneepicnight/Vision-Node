@@ -1,0 +1,17 @@
+[2m2026-01-03T03:57:13.460491Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Vision node starting up [3madmin_token[0m[2m=[0munset
+[2m2026-01-03T03:57:13.461376Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Initialized shard 0
+[2m2026-01-03T03:57:13.461793Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Initialized shard 1
+[2m2026-01-03T03:57:13.462160Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Initialized shard 2
+[2m2026-01-03T03:57:13.462507Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Initialized shard 3
+[2m2026-01-03T03:57:13.462866Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Sharding system initialized with 4 shards
+[2m2026-01-03T03:57:13.463336Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m mempool TTL sweeping configured [3mmempool_ttl_secs[0m[2m=[0m900 [3mmempool_sweep_secs[0m[2m=[0m60
+[2m2026-01-03T03:57:13.473724Z[0m [32m INFO[0m [2mvision_node::p2p::memory[0m[2m:[0m [CONSTELLATION_MEMORY] Loaded 0 peers from persistent storage
+[2m2026-01-03T03:57:13.479337Z[0m [32m INFO[0m [2mvision_node::p2p::memory[0m[2m:[0m [CONSTELLATION_MEMORY] Loaded 0 peers from persistent storage
+[2m2026-01-03T03:57:13.480376Z[0m [32m INFO[0m [2mvision_node::globals[0m[2m:[0m [P2P] Migrated pre-DB peers: captured=0 kept=0 dropped=0 flushed=true
+[2m2026-01-03T03:57:13.484386Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m mempool loaded from disk [3mrecovered[0m[2m=[0m0 [3mcritical[0m[2m=[0m0 [3mbulk[0m[2m=[0m0 [3mduration_ms[0m[2m=[0m0
+[2m2026-01-03T03:57:13.533767Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m serving static files from [3mpublic_dir[0m[2m=[0mC:\vision-node\test-crash\vision-node-v1.0-windows-mainnet\public
+[2m2026-01-03T03:57:13.534055Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m serving wallet from [3mwallet_dir[0m[2m=[0mC:\vision-node\test-crash\vision-node-v1.0-windows-mainnet\wallet\dist
+[2m2026-01-03T03:57:13.536248Z[0m [32m INFO[0m [2mvision_node[0m[2m:[0m Vision node listening [3mlisten[0m[2m=[0m127.0.0.1:7070
+[2m2026-01-03T03:57:15.546501Z[0m [32m INFO[0m [2mvision_node::miner::manager[0m[2m:[0m [MINER-JOB] Created mining job [3mheight[0m[2m=[0m1 [3mdifficulty[0m[2m=[0m10000 [3mepoch[0m[2m=[0m0 [3mseed0[0m[2m=[0m[0, 0, 0, 0] [3mtarget0[0m[2m=[0m[0, 6, 141, 184, 186, 199, 16, 203] [3mmessage_bytes_len[0m[2m=[0m177
+[2m2026-01-03T03:57:15.546914Z[0m [32m INFO[0m [2mvision_node::mining_readiness[0m[2m:[0m [MINING-GATE] Peer requirements: env_min=1 mainnet_floor=3 effective_floor=3 connected=0
+[2m2026-01-03T03:57:17.567007Z[0m [32m INFO[0m [2mvision_node::miner::manager[0m[2m:[0m [MINER-JOB] Created mining job [3mheight[0m[2m=[0m1 [3mdifficulty[0m[2m=[0m10000 [3mepoch[0m[2m=[0m0 [3mseed0[0m[2m=[0m[0, 0, 0, 0] [3mtarget0[0m[2m=[0m[0, 6, 141, 184, 186, 199, 16, 203] [3mmessage_bytes_len[0m[2m=[0m177

@@ -81,3 +81,7 @@ run-node*/
 test-node-*/
 localhost/
 public.bak.*
+
+# Distribution packages (should be in GitHub Releases, not in repo)
+vision-node-v1.0-windows-mainnet*/
+vision-node-v1.0-linux-source*/

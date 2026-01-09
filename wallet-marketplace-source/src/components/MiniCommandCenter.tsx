@@ -31,7 +31,7 @@ export default function MiniCommandCenter() {
           <div className="mini-cc-label">Node</div>
           <div className="mini-cc-value">
             {nodeStatus.online ? 'Online' : 'Offline'}
-            <span className="mini-cc-subvalue"> • {nodeStatus.height.toLocaleString()}</span>
+            <span className="mini-cc-subvalue"> • {(nodeStatus.height || 0).toLocaleString()}</span>
           </div>
         </div>
       </div>
@@ -60,8 +60,8 @@ export default function MiniCommandCenter() {
         <div className="mini-cc-content">
           <div className="mini-cc-label">Wallet</div>
           <div className="mini-cc-value">
-            {balances.LAND.toFixed(2)} LAND
-            <span className="mini-cc-subvalue"> • {balances.CASH.toFixed(0)} CASH</span>
+            {(balances?.LAND || 0).toFixed(2)} LAND
+            <span className="mini-cc-subvalue"> • {(balances?.CASH || 0).toFixed(0)} CASH</span>
           </div>
         </div>
       </div>

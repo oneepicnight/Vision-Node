@@ -6,7 +6,7 @@ use tempfile::TempDir;
 mod harness;
 use serde_json::json;
 // use serial_test::serial;  // Not in Cargo.toml dependencies
-use ed25519_dalek::{Keypair, Signer};
+use ed25519_dalek::{Signer, SigningKey};
 use rand::rngs::OsRng;
 
 /// Simple client-side tx struct to match the server's JSON format and
@@ -45,8 +45,8 @@ fn signable_bytes(tx: &TestTx) -> Vec<u8> {
     serde_json::to_vec(&tmp).unwrap()
 }
 
-fn build_signed_tx(kp: &Keypair, nonce: u64, tip: u64, fee_limit: u64) -> serde_json::Value {
-    let sender = hex::encode(kp.public.as_bytes());
+fn build_signed_tx(sk: &SigningKey, nonce: u64, tip: u64, fee_limit: u64) -> serde_json::Value {
+    let sender = hex::encode(sk.verifying_key().to_bytes());
     let tx = TestTx {
         nonce,
         sender_pubkey: &sender,
@@ -61,7 +61,7 @@ fn build_signed_tx(kp: &Keypair, nonce: u64, tip: u64, fee_limit: u64) -> serde_
         max_fee_per_gas: 0,
     };
     let to_sign = signable_bytes(&tx);
-    let sig = kp.sign(&to_sign);
+    let sig = sk.sign(&to_sign);
     let mut j = serde_json::to_value(&tx).unwrap();
     j["sig"] = serde_json::Value::String(hex::encode(sig.to_bytes()));
     j
@@ -88,9 +88,8 @@ async fn mempool_eviction_prefers_bulk_and_accepts_high_tip() {
     // Build mempool_max low-tip txs from distinct senders
     for i in 0..mempool_max {
         let mut rng = OsRng;
-        let kp = Keypair::generate(&mut rng);
-        let signer = kp;
-        let tx_json = build_signed_tx(&signer, 0, 1, 1000);
+        let sk = SigningKey::generate(&mut rng);
+        let tx_json = build_signed_tx(&sk, 0, 1, 1000);
         let resp = client
             .post(format!("{}/submit_tx", base))
             .json(&json!({"tx": tx_json}))
@@ -121,8 +120,8 @@ async fn mempool_eviction_prefers_bulk_and_accepts_high_tip() {
 
     // Submit a new high-tip tx that should evict a low-tip one
     let mut rng = OsRng;
-    let kp = Keypair::generate(&mut rng);
-    let high_tx = build_signed_tx(&kp, 0, 5000, 1000);
+    let sk = SigningKey::generate(&mut rng);
+    let high_tx = build_signed_tx(&sk, 0, 5000, 1000);
     let resp = client
         .post(format!("{}/submit_tx", base))
         .json(&json!({"tx": high_tx}))
@@ -177,8 +176,8 @@ async fn mempool_rejects_low_tip_when_full() {
     // Fill with bulk low-tip txs
     for _ in 0..mempool_max {
         let mut rng = OsRng;
-        let kp = Keypair::generate(&mut rng);
-        let tx_json = build_signed_tx(&kp, 0, 1, 1000);
+        let sk = SigningKey::generate(&mut rng);
+        let tx_json = build_signed_tx(&sk, 0, 1, 1000);
         let resp = client
             .post(format!("{}/submit_tx", base))
             .json(&json!({"tx": tx_json}))
@@ -189,8 +188,8 @@ async fn mempool_rejects_low_tip_when_full() {
     }
     // Submitting another low-tip should be rejected with mempool_full
     let mut rng = OsRng;
-    let kp = Keypair::generate(&mut rng);
-    let tx_json = build_signed_tx(&kp, 0, 1, 1000);
+    let sk = SigningKey::generate(&mut rng);
+    let tx_json = build_signed_tx(&sk, 0, 1, 1000);
     let resp = client
         .post(format!("{}/submit_tx", base))
         .json(&json!({"tx": tx_json}))
@@ -221,8 +220,8 @@ async fn rbf_replace_and_reject_behavior() {
 
     // Choose a sender and submit a low-tip tx
     let mut rng = OsRng;
-    let kp = Keypair::generate(&mut rng);
-    let tx_low = build_signed_tx(&kp, 0, 1, 1000);
+    let sk = SigningKey::generate(&mut rng);
+    let tx_low = build_signed_tx(&sk, 0, 1, 1000);
     let resp_low = client
         .post(format!("{}/submit_tx", base))
         .json(&json!({"tx": tx_low}))
@@ -232,7 +231,7 @@ async fn rbf_replace_and_reject_behavior() {
     assert!(resp_low.status().is_success());
 
     // Submit higher tip for same sender/nonce: should replace (OK)
-    let tx_high = build_signed_tx(&kp, 0, 100, 1000);
+    let tx_high = build_signed_tx(&sk, 0, 100, 1000);
     let resp_high = client
         .post(format!("{}/submit_tx", base))
         .json(&json!({"tx": tx_high}))
@@ -251,7 +250,7 @@ async fn rbf_replace_and_reject_behavior() {
         .unwrap();
     let mut seen = false;
     for t in mem["transactions"].as_array().unwrap() {
-        if t["sender"].as_str() == Some(hex::encode(kp.public.as_bytes()).as_str()) {
+        if t["sender"].as_str() == Some(hex::encode(sk.verifying_key().to_bytes()).as_str()) {
             assert_eq!(t["tip"].as_u64().unwrap_or(0), 100);
             seen = true;
         }
@@ -259,7 +258,7 @@ async fn rbf_replace_and_reject_behavior() {
     assert!(seen);
 
     // Submit lower tip for same sender/nonce: should be rejected (409 rbf_tip_too_low)
-    let tx_lower = build_signed_tx(&kp, 0, 10, 1000);
+    let tx_lower = build_signed_tx(&sk, 0, 10, 1000);
     let resp_lower = client
         .post(format!("{}/submit_tx", base))
         .json(&json!({"tx": tx_lower}))
@@ -288,8 +287,8 @@ async fn submit_tx_rate_limit_headers_present() {
             .await;
     let client = reqwest::Client::new();
     let mut rng = OsRng;
-    let kp = Keypair::generate(&mut rng);
-    let tx_json = build_signed_tx(&kp, 0, 1, 1000);
+    let sk = SigningKey::generate(&mut rng);
+    let tx_json = build_signed_tx(&sk, 0, 1, 1000);
     let resp = client
         .post(format!("{}/submit_tx", base))
         .json(&json!({"tx": tx_json}))

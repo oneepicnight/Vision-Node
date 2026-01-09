@@ -972,7 +972,7 @@
 
         <header style="text-align: center; margin-bottom: 2rem;">
             <h1 class="vision-title">⛏️ Miner Control Panel</h1>
-            <p class="vision-subtitle">Testnet 1</p>
+            <p class="vision-subtitle">Mainnet</p>
             
             <!-- Anchor Mode Toggle -->
             <div id="anchorModeContainer" style="margin-top: 1rem;"></div>
@@ -3049,6 +3049,56 @@
             }
         }
 
+        // Shared node identity loaded once
+        let nodeIdentityCache = null;
+        let nodeIdentityLoading = false;
+
+        async function loadNodeIdentity() {
+            if (nodeIdentityCache || nodeIdentityLoading) return nodeIdentityCache;
+            
+            nodeIdentityLoading = true;
+            try {
+                const response = await fetch(`${API_BASE}/node/identity`);
+                if (response.ok) {
+                    const identity = await response.json();
+                    nodeIdentityCache = identity;
+                    
+                    // Update Node Identity Panel
+                    const nodeIdEl = document.getElementById('node-id');
+                    const nodeFingerprintEl = document.getElementById('node-fingerprint');
+                    const nodePubkeyEl = document.getElementById('node-pubkey');
+                    const approvalStatusEl = document.getElementById('approval-status');
+                    
+                    if (nodeIdEl) nodeIdEl.textContent = identity.node_id || 'Unavailable';
+                    if (nodeFingerprintEl) nodeFingerprintEl.textContent = identity.pubkey_fpr || 'Unavailable';
+                    if (nodePubkeyEl) nodePubkeyEl.textContent = identity.public_key || 'Unavailable';
+                    if (approvalStatusEl) {
+                        if (identity.approved && identity.verified) {
+                            approvalStatusEl.textContent = '✅ Approved';
+                            approvalStatusEl.style.color = 'var(--accent-green)';
+                        } else {
+                            approvalStatusEl.textContent = '⏳ Not Approved';
+                            approvalStatusEl.style.color = '#fbbf24';
+                        }
+                    }
+                    
+                    // Update Link Wallet Panel
+                    const nodeIdDisplayLink = document.getElementById('node-id-display-link');
+                    if (nodeIdDisplayLink) {
+                        nodeIdDisplayLink.textContent = identity.node_id || 'Unavailable';
+                    }
+                    
+                    console.log('[NodeIdentity] Loaded:', identity);
+                    return identity;
+                }
+            } catch (error) {
+                console.error('[NodeIdentity] Failed to load:', error);
+            } finally {
+                nodeIdentityLoading = false;
+            }
+            return null;
+        }
+
         let lastApprovalStatus = null; // Track last status to avoid duplicate logs
         
         async function loadApprovalStatus() {
@@ -3960,6 +4010,9 @@
 
         // Auto-refresh every 5 seconds
         setInterval(refreshData, 5000);
+
+        // Load node identity once on page load
+        loadNodeIdentity();
 
         // Refresh rig health every 10 seconds
         setInterval(fetchRigHealth, 10000);

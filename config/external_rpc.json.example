@@ -1,0 +1,23 @@
+{
+  "btc": {
+    "rpc_url": "http://localhost:8332",
+    "username": "bitcoinrpc",
+    "password": "your_password_here",
+    "timeout_ms": 8000,
+    "max_retries": 3
+  },
+  "bch": {
+    "rpc_url": "http://localhost:8442",
+    "username": "bitcoincashrpc",
+    "password": "your_password_here",
+    "timeout_ms": 8000,
+    "max_retries": 3
+  },
+  "doge": {
+    "rpc_url": "http://localhost:22555",
+    "username": "dogecoinrpc",
+    "password": "your_password_here",
+    "timeout_ms": 8000,
+    "max_retries": 3
+  }
+}

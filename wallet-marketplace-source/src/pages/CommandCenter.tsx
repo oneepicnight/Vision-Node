@@ -7,6 +7,9 @@ import { useGuardianStatus } from '../hooks/useGuardianStatus'
 import { useConstellationStatus, computeP2PHealth } from '../hooks/useConstellationStatus'
 import RoutingIntelligenceDashboard from '../components/RoutingIntelligenceDashboard'
 import { VaultStatusDashboard } from '../components/VaultStatusDashboard'
+import MiningControls from '../components/MiningControls'
+import VisionGlobe from '../components/VisionGlobe'
+import GovernancePanel from '../components/GovernancePanel'
 import '../styles/command-center.css'
 import '../styles/routing-intelligence.css'
 
@@ -14,20 +17,6 @@ interface ApprovalStatus {
   approved: boolean
   wallet_address: string | null
   node_id: string
-}
-
-// Helper function to get mood emoji
-function getMoodEmoji(moodType: string): string {
-  const moodEmojis: Record<string, string> = {
-    calm: '🌊',
-    warning: '⚠️',
-    storm: '⛈️',
-    celebration: '🎉',
-    guardian: '🛡️',
-    wounded: '💔',
-    rage: '🔥'
-  }
-  return moodEmojis[moodType.toLowerCase()] || '🌌'
 }
 
 export default function CommandCenter() {
@@ -43,60 +32,26 @@ export default function CommandCenter() {
   // Compute P2P IPv4 health
   const p2pHealth = computeP2PHealth(constellation)
   
-  const [mood, setMood] = useState<{
-    mood: string
-    score: number
-    reason: string
-    details?: any
-  } | null>(null)
-  
   const [events, setEvents] = useState<Array<{id: string, time: string, type: string, message: string}>>([])
   
   // Node approval state
   const [approvalStatus, setApprovalStatus] = useState<ApprovalStatus | null>(null)
   const [approving, setApproving] = useState(false)
+  const [minerWalletAddress, setMinerWalletAddress] = useState<string>('')
   
   // Hashrate history
   const [hashrateHistory, setHashrateHistory] = useState<number[]>([])
   
   // Mining stats
   const [miningStats, setMiningStats] = useState<any>(null)
-
-  // Fetch mood data
-  useEffect(() => {
-    const fetchMood = async () => {
-      try {
-        const moodResponse = await fetch('http://127.0.0.1:7070/api/mood')
-        const moodData = await moodResponse.json()
-        
-        // Store mood data for display
-        if (moodData.mood) {
-          setMood({
-            mood: moodData.mood,
-            score: moodData.score,
-            reason: moodData.reason,
-            details: moodData.details
-          })
-          
-          const moodEvent = `Mood: ${moodData.mood} - ${moodData.reason}`
-          setEvents(prev => [{
-            id: `mood-${Date.now()}`,
-            time: new Date().toLocaleTimeString(),
-            type: 'mood',
-            message: moodEvent
-          }, ...prev].slice(0, 20))
-        }
-      } catch (err) {
-        console.debug('Mood fetch failed:', err)
-      }
-    }
-    
-    fetchMood()
-    const interval = setInterval(fetchMood, 10000)
-    return () => clearInterval(interval)
-  }, [])
   
-  // Fetch approval status
+  // Blockchain stats
+  const [blockHeight, setBlockHeight] = useState<number>(0)
+  const [mempoolSize, setMempoolSize] = useState<number>(0)
+  const [avgBlockTime, setAvgBlockTime] = useState<string>('0ms')
+  const [blocksFound, setBlocksFound] = useState<number>(0)
+
+  // Fetch approval status and miner wallet
   useEffect(() => {
     const fetchApproval = async () => {
       try {
@@ -107,6 +62,17 @@ export default function CommandCenter() {
         }
       } catch (err) {
         console.debug('Approval status fetch failed:', err)
+      }
+      
+      // Also fetch the actual miner wallet address
+      try {
+        const minerResponse = await fetch('http://127.0.0.1:7070/api/miner/wallet')
+        if (minerResponse.ok) {
+          const minerData = await minerResponse.json()
+          setMinerWalletAddress(minerData.wallet || '')
+        }
+      } catch (err) {
+        console.debug('Miner wallet fetch failed:', err)
       }
     }
     
@@ -138,6 +104,37 @@ export default function CommandCenter() {
     return () => clearInterval(interval)
   }, [])
   
+  // Fetch blockchain stats
+  useEffect(() => {
+    const fetchBlockchainStats = async () => {
+      try {
+        // Fetch node status for block height and mempool
+        const statusResponse = await fetch('http://127.0.0.1:7070/api/website/status')
+        if (statusResponse.ok) {
+          const statusData = await statusResponse.json()
+          setBlockHeight(statusData.height || 0)
+          setMempoolSize(statusData.mempool || 0)
+        }
+        
+        // Fetch mining stats for blocks found and avg time
+        const minerResponse = await fetch('http://127.0.0.1:7070/api/miner/stats')
+        if (minerResponse.ok) {
+          const minerData = await minerResponse.json()
+          setBlocksFound(minerData.blocks_found || 0)
+          if (minerData.average_time_ms) {
+            setAvgBlockTime(`${minerData.average_time_ms}ms`)
+          }
+        }
+      } catch (err) {
+        console.debug('Blockchain stats fetch failed:', err)
+      }
+    }
+    
+    fetchBlockchainStats()
+    const interval = setInterval(fetchBlockchainStats, 5000)
+    return () => clearInterval(interval)
+  }, [])
+  
   // Mock event stream (replace with real event source)
   useEffect(() => {
     const addEvent = (type: string, message: string) => {
@@ -160,51 +157,43 @@ export default function CommandCenter() {
     }
   }, [nodeStatus.online, miningStatus.active, miningStatus.mode])
   
-  const handleStartMining = async (mode: 'solo' | 'pool') => {
-    try {
-      await fetch('http://127.0.0.1:7070/api/miner/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pool_mining: mode === 'pool' })
-      })
-    } catch (err) {
-      console.error('Failed to start mining:', err)
-    }
-  }
-  
-  const handleStopMining = async () => {
-    try {
-      await fetch('http://127.0.0.1:7070/api/miner/stop', {
-        method: 'POST'
-      })
-    } catch (err) {
-      console.error('Failed to stop mining:', err)
-    }
-  }
-  
   const handleApproveNode = async () => {
     if (approving) return
     setApproving(true)
     
     try {
-      // Step 1: Get wallet address from status
-      const statusResponse = await fetch('http://127.0.0.1:7070/api/website/status')
-      if (!statusResponse.ok) {
-        alert('Failed to fetch node status')
-        return
-      }
-      
-      const statusText = await statusResponse.text()
-      if (!statusText) {
-        alert('Empty response from status endpoint')
-        return
-      }
-      
-      const status = JSON.parse(statusText)
-      const walletAddress = status.wallet_address
+      // Get wallet address from the wallet store
+      const walletAddress = profile?.address
       
       if (!walletAddress) {
-        alert('No wallet found. Please create a wallet first.')
+        alert('No wallet found. Please create a wallet first by going to the Wallet page.')
+        return
+      }
+      
+      // Check if already approved - if so, just configure miner wallet
+      if (approvalStatus?.approved) {
+        try {
+          const minerWalletResponse = await fetch('http://127.0.0.1:7070/api/miner/wallet', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ wallet: walletAddress })
+          })
+          
+          if (minerWalletResponse.ok) {
+            alert('✅ Mining rewards wallet configured!\n\n💰 All mining rewards will now be sent to your wallet')
+            
+            // Refresh miner wallet address
+            const minerResponse = await fetch('http://127.0.0.1:7070/api/miner/wallet')
+            if (minerResponse.ok) {
+              const minerData = await minerResponse.json()
+              setMinerWalletAddress(minerData.wallet || '')
+            }
+          } else {
+            alert('❌ Failed to configure mining rewards wallet')
+          }
+        } catch (e) {
+          alert('❌ Failed to configure mining rewards wallet')
+        }
         return
       }
       
@@ -262,12 +251,35 @@ export default function CommandCenter() {
       }
       
       if (approvalResult.ok) {
-        alert('✅ Node approved successfully! Mining is now enabled.')
-        // Refresh approval status
+        // Step 5: Configure miner wallet address to receive rewards
+        try {
+          const minerWalletResponse = await fetch('http://127.0.0.1:7070/api/miner/wallet', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ wallet: walletAddress })
+          })
+          
+          if (minerWalletResponse.ok) {
+            alert('✅ Wallet linked successfully!\n\n🔗 Node approved for mining\n💰 Wallet configured to receive LAND rewards')
+          } else {
+            alert('✅ Node approved, but failed to configure mining rewards wallet.\n\nPlease visit http://127.0.0.1:7070/panel.html to manually link your wallet address.')
+          }
+        } catch (e) {
+          alert('✅ Node approved, but failed to configure mining rewards wallet.\n\nPlease visit http://127.0.0.1:7070/panel.html to manually link your wallet address.')
+        }
+        
+        // Refresh approval status and miner wallet
         const response = await fetch('http://127.0.0.1:7070/api/node/approval/status')
         if (response.ok) {
           const data = await response.json()
           setApprovalStatus(data)
+        }
+        
+        // Refresh miner wallet address
+        const minerResponse = await fetch('http://127.0.0.1:7070/api/miner/wallet')
+        if (minerResponse.ok) {
+          const minerData = await minerResponse.json()
+          setMinerWalletAddress(minerData.wallet || '')
         }
       } else {
         alert(`❌ Approval failed: ${approvalResult.error || 'Unknown error'}`)
@@ -281,25 +293,159 @@ export default function CommandCenter() {
 
   return (
     <div className="command-center">
-      {/* Header */}
-      <div className="cc-header">
-        <h1 className="cc-title">COMMAND CENTER</h1>
-        <p className="cc-subtitle">Real-time overview of your node, mining, wallet, and Guardian status.</p>
-        
-        {/* Mood Ring */}
-        {mood && (
-          <div className="cc-mood-ring">
-            <div className={`cc-mood-indicator cc-mood-${mood.mood}`}>
-              <span className="cc-mood-emoji">{getMoodEmoji(mood.mood)}</span>
-              <div className="cc-mood-info">
-                <span className="cc-mood-name">{mood.mood.toUpperCase()}</span>
-                <span className="cc-mood-score">Health: {(mood.score * 100).toFixed(1)}%</span>
-              </div>
-            </div>
-            <p className="cc-mood-reason">{mood.reason}</p>
-          </div>
-        )}
+      {/* Animated Earth Background */}
+      <div style={{
+        position: 'fixed',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        width: '1400px',
+        height: '1400px',
+        opacity: 0.08,
+        pointerEvents: 'none',
+        zIndex: 0,
+        filter: 'blur(2px)'
+      }}>
+        <VisionGlobe />
       </div>
+
+      {/* Content wrapper with z-index */}
+      <div style={{ position: 'relative', zIndex: 1 }}>
+        {/* Blockchain Stats - Above Node Approval */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+        <div className="cc-panel" style={{ margin: 0 }}>
+          <div className="cc-panel-header" style={{ padding: '0.75rem 1rem' }}>
+            <span style={{ fontSize: '1.5rem', marginRight: '0.5rem' }}>📦</span>
+            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>BLOCK HEIGHT</span>
+          </div>
+          <div className="cc-panel-body" style={{ padding: '1rem', textAlign: 'center' }}>
+            <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--accent-purple)', marginBottom: '0.25rem' }}>
+              {blockHeight.toLocaleString()}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Current chain height</div>
+          </div>
+        </div>
+
+        <div className="cc-panel" style={{ margin: 0 }}>
+          <div className="cc-panel-header" style={{ padding: '0.75rem 1rem' }}>
+            <span style={{ fontSize: '1.5rem', marginRight: '0.5rem' }}>⏳</span>
+            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>MEMPOOL SIZE</span>
+          </div>
+          <div className="cc-panel-body" style={{ padding: '1rem', textAlign: 'center' }}>
+            <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--accent-cyan)', marginBottom: '0.25rem' }}>
+              {mempoolSize}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Pending transactions</div>
+          </div>
+        </div>
+
+        <div className="cc-panel" style={{ margin: 0 }}>
+          <div className="cc-panel-header" style={{ padding: '0.75rem 1rem' }}>
+            <span style={{ fontSize: '1.5rem', marginRight: '0.5rem' }}>⚡</span>
+            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>AVG BLOCK TIME</span>
+          </div>
+          <div className="cc-panel-body" style={{ padding: '1rem', textAlign: 'center' }}>
+            <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--accent-green)', marginBottom: '0.25rem' }}>
+              {avgBlockTime}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Average mining duration</div>
+          </div>
+        </div>
+
+        <div className="cc-panel" style={{ margin: 0 }}>
+          <div className="cc-panel-header" style={{ padding: '0.75rem 1rem' }}>
+            <span style={{ fontSize: '1.5rem', marginRight: '0.5rem' }}>🎯</span>
+            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>BLOCKS FOUND</span>
+          </div>
+          <div className="cc-panel-body" style={{ padding: '1rem', textAlign: 'center' }}>
+            <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '0.25rem' }}>
+              {blocksFound}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Total blocks produced</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Node Approval Section - Top */}
+      <div className="cc-panel" style={{ marginBottom: '1.5rem' }}>
+        <div className="cc-panel-header">
+          <h3 className="cc-panel-title">🔐 NODE APPROVAL & WALLET LINK</h3>
+        </div>
+        <div className="cc-panel-body">
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+            Link your wallet to this node to enable mining and receive LAND rewards
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', background: 'rgba(138, 92, 255, 0.1)', borderRadius: '0.5rem', border: '1px solid rgba(162, 145, 255, 0.3)' }}>
+              <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Approval Status:</span>
+              <span style={{ 
+                color: approvalStatus?.approved ? 'var(--accent-green)' : '#fbbf24', 
+                fontWeight: 600,
+                fontSize: '1rem'
+              }}>
+                {approvalStatus?.approved ? '✅ Approved & Mining Enabled' : '⚠️ Not Approved - Mining Disabled'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', background: 'rgba(12, 8, 33, 0.6)', borderRadius: '0.5rem', border: '1px solid var(--border-color)' }}>
+              <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Mining Rewards Wallet:</span>
+              <span style={{ 
+                color: minerWalletAddress && minerWalletAddress !== 'pow_miner' ? 'var(--accent-green)' : '#fbbf24', 
+                fontFamily: "'Courier New', monospace",
+                fontSize: '0.85rem',
+                fontWeight: 600
+              }}>
+                {minerWalletAddress && minerWalletAddress !== 'pow_miner' ? 
+                  `${minerWalletAddress.slice(0, 8)}...${minerWalletAddress.slice(-6)}` 
+                  : 'Not configured'}
+              </span>
+            </div>
+            {approvalStatus?.approved && (!minerWalletAddress || minerWalletAddress === 'pow_miner') && (
+              <div style={{ 
+                color: '#ef4444', 
+                fontSize: '0.9rem',
+                padding: '0.75rem',
+                background: 'rgba(239, 68, 68, 0.1)',
+                borderRadius: '0.5rem',
+                border: '1px solid rgba(239, 68, 68, 0.3)'
+              }}>
+                ⚠️ Node is approved but mining rewards wallet is not configured! Click the button below to configure it now.
+              </div>
+            )}
+            {!approvalStatus?.approved && constellation?.mining_blocked_reason && (
+              <div style={{ 
+                color: '#fbbf24', 
+                fontSize: '0.9rem',
+                padding: '0.75rem',
+                background: 'rgba(245, 158, 11, 0.1)',
+                borderRadius: '0.5rem',
+                border: '1px solid rgba(245, 158, 11, 0.3)'
+              }}>
+                ⚠️ {constellation.mining_blocked_reason}
+              </div>
+            )}
+            <button 
+              className="cc-btn cc-btn-primary"
+              onClick={handleApproveNode}
+              disabled={approving || (approvalStatus?.approved && !!minerWalletAddress && minerWalletAddress !== 'pow_miner')}
+              style={{ 
+                minWidth: '250px',
+                opacity: (approving || (approvalStatus?.approved && !!minerWalletAddress && minerWalletAddress !== 'pow_miner')) ? 0.6 : 1,
+                cursor: (approving || (approvalStatus?.approved && !!minerWalletAddress && minerWalletAddress !== 'pow_miner')) ? 'not-allowed' : 'pointer',
+                fontSize: '1rem',
+                padding: '0.875rem 1.5rem'
+              }}
+            >
+              {approving ? '⏳ Approving...' : 
+               (approvalStatus?.approved && !!minerWalletAddress && minerWalletAddress !== 'pow_miner') ? '✅ Wallet Already Linked' : 
+               approvalStatus?.approved ? '💰 Configure Mining Rewards Wallet' :
+               '🔗 Link Wallet & Approve Node'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Mining Controls */}
+      <MiningControls />
 
       {/* Top Row - Status Cards */}
       <div className="cc-status-row">
@@ -318,7 +464,7 @@ export default function CommandCenter() {
             </div>
             <div className="cc-stat">
               <span className="cc-stat-label">Height</span>
-              <span className="cc-stat-value">{nodeStatus.height.toLocaleString()}</span>
+              <span className="cc-stat-value">{(nodeStatus.height || 0).toLocaleString()}</span>
             </div>
           </div>
         </div>
@@ -433,11 +579,11 @@ export default function CommandCenter() {
           <div className="cc-card-body">
             <div className="cc-stat">
               <span className="cc-stat-label">LAND</span>
-              <span className="cc-stat-value cc-balance">{balances.LAND.toFixed(4)}</span>
+              <span className="cc-stat-value cc-balance">{(balances?.LAND || 0).toFixed(4)}</span>
             </div>
             <div className="cc-stat">
               <span className="cc-stat-label">CASH</span>
-              <span className="cc-stat-value cc-balance">{balances.CASH.toFixed(2)}</span>
+              <span className="cc-stat-value cc-balance">{(balances?.CASH || 0).toFixed(2)}</span>
             </div>
             <button 
               className="cc-link-button"
@@ -532,10 +678,10 @@ export default function CommandCenter() {
 
       {/* Middle Row - Panels */}
       <div className="cc-panels-row">
-        {/* Left: Quick Miner Panel */}
+        {/* Left: Anchor Mode & Links */}
         <div className="cc-panel">
           <div className="cc-panel-header">
-            <h3 className="cc-panel-title">QUICK MINER CONTROLS</h3>
+            <h3 className="cc-panel-title">NODE CONFIGURATION</h3>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               {/* Anchor Mode Toggle */}
               {constellation && (
@@ -574,63 +720,10 @@ export default function CommandCenter() {
                   )}
                 </button>
               )}
-              <a 
-                href="http://127.0.0.1:7070/panel.html"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="cc-panel-link"
-                style={{ textDecoration: 'none' }}
-              >
-                Full Panel →
-              </a>
-              <a 
-                href="http://127.0.0.1:7070/dashboard.html"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="cc-panel-link"
-                style={{ textDecoration: 'none' }}
-              >
-                Health Dashboard →
-              </a>
             </div>
           </div>
           <div className="cc-panel-body">
-            {!miningStatus.active ? (
-              <div className="cc-miner-controls">
-                <p className="cc-miner-hint">Start mining to earn LAND rewards</p>
-                <div className="cc-button-group">
-                  <button 
-                    className="cc-btn cc-btn-primary"
-                    onClick={() => handleStartMining('solo')}
-                  >
-                    Start Solo Mining
-                  </button>
-                  <button 
-                    className="cc-btn cc-btn-secondary"
-                    onClick={() => handleStartMining('pool')}
-                  >
-                    Start Pool Mining
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="cc-miner-controls">
-                <div className="cc-mining-active">
-                  <div className="cc-mining-pulse"></div>
-                  <p className="cc-mining-status">Mining in progress...</p>
-                  <p className="cc-mining-mode">{miningStatus.mode.toUpperCase()} MODE</p>
-                  <p className="cc-mining-hashrate">
-                    {(miningStatus.hashrate / 1000000).toFixed(2)} MH/s
-                  </p>
-                </div>
-                <button 
-                  className="cc-btn cc-btn-danger"
-                  onClick={handleStopMining}
-                >
-                  Stop Mining
-                </button>
-              </div>
-            )}
+            {/* Mining controls now integrated above - no external links needed */}
           </div>
         </div>
 
@@ -649,11 +742,11 @@ export default function CommandCenter() {
               </div>
               <div className="cc-wallet-balances">
                 <div className="cc-balance-item">
-                  <span className="cc-balance-amount">{balances.LAND.toFixed(4)}</span>
+                  <span className="cc-balance-amount">{(balances?.LAND || 0).toFixed(4)}</span>
                   <span className="cc-balance-token">LAND</span>
                 </div>
                 <div className="cc-balance-item">
-                  <span className="cc-balance-amount">{balances.CASH.toFixed(2)}</span>
+                  <span className="cc-balance-amount">{(balances?.CASH || 0).toFixed(2)}</span>
                   <span className="cc-balance-token">CASH</span>
                 </div>
               </div>
@@ -677,62 +770,7 @@ export default function CommandCenter() {
         </div>
       </div>
 
-      {/* Node Approval Section */}
-      <div className="cc-panel" style={{ marginTop: '1.5rem' }}>
-        <div className="cc-panel-header">
-          <h3 className="cc-panel-title">🔐 NODE APPROVAL</h3>
-        </div>
-        <div className="cc-panel-body">
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>
-            Approve this node to enable mining with your wallet
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Approval Status:</span>
-              <span style={{ 
-                color: approvalStatus?.approved ? 'var(--accent-green)' : '#fbbf24', 
-                fontWeight: 600 
-              }}>
-                {approvalStatus?.approved ? '✅ Approved' : '⚠️ Not Approved'}
-              </span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Wallet:</span>
-              <span style={{ 
-                color: 'var(--accent-green)', 
-                fontFamily: "'Courier New', monospace",
-                fontSize: '0.9rem'
-              }}>
-                {approvalStatus?.wallet_address || 'Not configured'}
-              </span>
-            </div>
-            {!approvalStatus?.approved && constellation?.mining_blocked_reason && (
-              <div style={{ 
-                color: '#fbbf24', 
-                fontSize: '0.9rem',
-                padding: '0.75rem',
-                background: 'rgba(245, 158, 11, 0.1)',
-                borderRadius: '0.5rem',
-                border: '1px solid rgba(245, 158, 11, 0.3)'
-              }}>
-                ⚠️ {constellation.mining_blocked_reason}
-              </div>
-            )}
-            <button 
-              className="cc-btn cc-btn-primary"
-              onClick={handleApproveNode}
-              disabled={approving || approvalStatus?.approved}
-              style={{ 
-                minWidth: '200px',
-                opacity: (approving || approvalStatus?.approved) ? 0.6 : 1,
-                cursor: (approving || approvalStatus?.approved) ? 'not-allowed' : 'pointer'
-              }}
-            >
-              {approving ? '⏳ Approving...' : approvalStatus?.approved ? '✅ Already Approved' : '✅ Approve Node With Wallet'}
-            </button>
-          </div>
-        </div>
-      </div>
+
 
       {/* Mining Stats */}
       {miningStats && (
@@ -906,6 +944,11 @@ export default function CommandCenter() {
           )}
         </div>
       </div>
+
+      {/* Governance Panel */}
+      <GovernancePanel />
+      
+      </div> {/* End content wrapper */}
     </div>
   )
 }

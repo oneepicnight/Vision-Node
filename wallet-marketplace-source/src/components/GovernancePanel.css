@@ -1,0 +1,339 @@
+.governance-panel {
+  background: radial-gradient(circle at top, rgba(60, 47, 140, 0.4), rgba(12, 8, 33, 0.85));
+  border: 1px solid rgba(162, 145, 255, 0.3);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.governance-header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.governance-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.governance-subtitle {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+/* Locked State */
+.governance-locked {
+  text-align: center;
+  padding: 3rem 1.5rem;
+}
+
+.locked-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.governance-locked h4 {
+  font-size: 1.2rem;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.governance-locked p {
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+  line-height: 1.6;
+}
+
+/* Stats Grid */
+.governance-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.gov-stat {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(162, 145, 255, 0.2);
+}
+
+.gov-stat-label {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  margin-bottom: 0.5rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.gov-stat-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--accent-purple);
+}
+
+/* Tabs */
+.governance-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.gov-tab {
+  padding: 0.75rem 1.5rem;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.gov-tab:hover {
+  color: var(--text-primary);
+}
+
+.gov-tab.active {
+  color: var(--accent-purple);
+  border-bottom-color: var(--accent-purple);
+}
+
+/* Content */
+.governance-content {
+  min-height: 200px;
+}
+
+.governance-loading {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-secondary);
+}
+
+.governance-empty {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-secondary);
+}
+
+/* Proposals List */
+.proposals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.proposal-card {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(162, 145, 255, 0.2);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  transition: all 0.2s;
+}
+
+.proposal-card:hover {
+  border-color: rgba(162, 145, 255, 0.4);
+  transform: translateY(-2px);
+}
+
+.proposal-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  margin-bottom: 0.75rem;
+}
+
+.proposal-card-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.proposal-card-meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.proposal-status {
+  padding: 0.25rem 0.75rem;
+  background: rgba(138, 92, 255, 0.3);
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent-purple);
+}
+
+.proposal-card-body {
+  margin-bottom: 1rem;
+}
+
+.proposal-card-body p {
+  color: var(--text-secondary);
+  line-height: 1.6;
+  font-size: 0.9rem;
+}
+
+.vote-bar-container {
+  margin-bottom: 0.75rem;
+}
+
+.vote-bar {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.vote-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-green), var(--accent-cyan));
+  transition: width 0.3s;
+}
+
+.vote-counts {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.proposal-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.time-remaining {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.vote-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.vote-btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.85rem;
+}
+
+.vote-btn.yes {
+  background: var(--accent-green);
+  color: white;
+}
+
+.vote-btn.yes:hover {
+  background: #0ea76f;
+  transform: translateY(-1px);
+}
+
+.vote-btn.no {
+  background: var(--red);
+  color: white;
+}
+
+.vote-btn.no:hover {
+  background: #dc2626;
+  transform: translateY(-1px);
+}
+
+/* Create Proposal Form */
+.fee-notice {
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid #fbbf24;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  color: #fbbf24;
+}
+
+.fee-notice strong {
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.fee-notice p {
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+}
+
+.proposal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(162, 145, 255, 0.3);
+  border-radius: 0.5rem;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: var(--accent-purple);
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+.submit-btn {
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
+  border: none;
+  border-radius: 0.5rem;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 1rem;
+}
+
+.submit-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(138, 92, 255, 0.4);
+}
+
+.submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

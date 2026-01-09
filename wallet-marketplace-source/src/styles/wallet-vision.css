@@ -307,6 +307,24 @@
   box-shadow: 0 0 15px rgba(80, 120, 255, 0.5);
 }
 
+.vw-btn-qr {
+  padding: 0.4rem 1rem;
+  background: rgba(147, 51, 234, 0.3);
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-left: 0.5rem;
+}
+
+.vw-btn-qr:hover {
+  background: rgba(147, 51, 234, 0.5);
+  box-shadow: 0 0 15px rgba(147, 51, 234, 0.5);
+}
+
 .vw-btn-primary {
   width: 100%;
   padding: 0.875rem;
@@ -441,7 +459,7 @@
   line-height: 1.5;
 }
 
-.vw-deposit-footer {
+.vw-receive-footer {
   font-size: 0.8rem;
   color: rgba(180, 200, 255, 0.6);
   text-align: center;

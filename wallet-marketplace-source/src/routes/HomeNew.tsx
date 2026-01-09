@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useWalletStore } from '../state/wallet'
 import { getBalance, getVaultStatus, getDepositAddress, submitTx, SignedTransaction } from '../lib/api'
+import { useExchangeStatus } from '../hooks/useExchangeStatus'
 import TipButton from '../components/TipButton'
+import { DepositModal } from '../components/DepositModal'
+import { DepositWatcher } from '../components/DepositWatcher'
 import '../styles/wallet-vision.css'
 
 type Asset = 'LAND' | 'CASH' | 'BTC' | 'BCH' | 'DOGE'
@@ -24,17 +27,18 @@ const ASSETS: AssetInfo[] = [
 export default function HomeNew() {
   const navigate = useNavigate()
   const { profile, balances, setBalances } = useWalletStore()
+  const { status: exchangeStatus } = useExchangeStatus(profile?.address || null)
   
   // UI state
-  const [copyMessage, setCopyMessage] = useState('')
   const [sendAsset, setSendAsset] = useState<Asset>('LAND')
   const [sendTo, setSendTo] = useState('')
   const [sendAmount, setSendAmount] = useState('')
   const [sendError, setSendError] = useState('')
   const [sendSuccess, setSendSuccess] = useState(false)
-  const [depositAsset, setDepositAsset] = useState<'BTC' | 'BCH' | 'DOGE'>('BTC')
-  const [depositAddress, setDepositAddress] = useState('')
-  const [depositCopyMsg, setDepositCopyMsg] = useState('')
+  const [receiveAsset, setReceiveAsset] = useState<Asset>('LAND')
+  const [receiveAddress, setReceiveAddress] = useState('')
+  const [receiveCopyMsg, setReceiveCopyMsg] = useState('')
+  const [showQRModal, setShowQRModal] = useState(false)
   
   // Vault data
   const [vaultData, setVaultData] = useState<any>(null)
@@ -86,49 +90,45 @@ export default function HomeNew() {
     return () => clearInterval(interval)
   }, [profile])
 
-  // Load deposit address
+  // Load receive address
   useEffect(() => {
     if (!profile) return
 
+    // For LAND and CASH, use the user's own wallet address
+    if (receiveAsset === 'LAND' || receiveAsset === 'CASH') {
+      setReceiveAddress(profile.address)
+      return
+    }
+
+    // For BTC/BCH/DOGE, fetch external deposit address
     const loadDepositAddr = async () => {
       try {
-        const result = await getDepositAddress(depositAsset, profile.address)
-        setDepositAddress(result.address)
+        const result = await getDepositAddress(receiveAsset, profile.address)
+        setReceiveAddress(result.address)
       } catch (error) {
         console.error('Failed to load deposit address:', error)
-        setDepositAddress(`Error loading ${depositAsset} address`)
+        setReceiveAddress(`Error loading ${receiveAsset} address`)
       }
     }
 
     loadDepositAddr()
-  }, [profile, depositAsset])
+  }, [profile, receiveAsset])
 
   if (!profile) {
     return null
   }
 
-  const totalPortfolio = balances.LAND || 0
+  const totalPortfolio = balances?.LAND || 0
   const portfolioUSD = (totalPortfolio * 0.0).toFixed(2) // Placeholder for price conversion
 
-  const handleCopyAddress = async () => {
+  const handleCopyReceive = async () => {
     try {
-      await navigator.clipboard.writeText(profile.address)
-      setCopyMessage('Copied!')
-      setTimeout(() => setCopyMessage(''), 1200)
+      await navigator.clipboard.writeText(receiveAddress)
+      setReceiveCopyMsg('Copied!')
+      setTimeout(() => setReceiveCopyMsg(''), 1200)
     } catch (error) {
-      setCopyMessage('Failed')
-      setTimeout(() => setCopyMessage(''), 1200)
-    }
-  }
-
-  const handleCopyDeposit = async () => {
-    try {
-      await navigator.clipboard.writeText(depositAddress)
-      setDepositCopyMsg('Copied!')
-      setTimeout(() => setDepositCopyMsg(''), 1200)
-    } catch (error) {
-      setDepositCopyMsg('Failed')
-      setTimeout(() => setDepositCopyMsg(''), 1200)
+      setReceiveCopyMsg('Failed')
+      setTimeout(() => setReceiveCopyMsg(''), 1200)
     }
   }
 
@@ -182,7 +182,7 @@ export default function HomeNew() {
   }
 
   const getAssetBalance = (symbol: Asset) => {
-    return (balances as any)[symbol] || 0
+    return ((balances as any)?.[symbol]) || 0
   }
 
   const formatBalance = (value: number) => {
@@ -208,11 +208,19 @@ export default function HomeNew() {
       BCH: 6,
       DOGE: 20
     }
-    return confirmations[depositAsset] || 3
+    return confirmations[receiveAsset] || 3
   }
 
   return (
     <div className="vision-wallet-shell">
+      <DepositModal
+        isOpen={showQRModal}
+        onClose={() => setShowQRModal(false)}
+        coin={receiveAsset}
+        address={receiveAddress}
+        network="Mainnet"
+      />
+      
       <div className="vision-wallet-container">
         
         {/* Tip Button */}
@@ -285,16 +293,51 @@ export default function HomeNew() {
           {/* Receive Card */}
           <div className="vw-card vw-action-card">
             <h3 className="vw-action-title">Receive</h3>
-            <p className="vw-action-subtitle">Share your address to receive tokens</p>
+            <p className="vw-action-subtitle">Share your address to receive any asset</p>
+            
             <div className="vw-input-group">
-              <label className="vw-label-sm">YOUR ADDRESS</label>
+              <label className="vw-label-sm">SELECT ASSET</label>
+              <select 
+                className="vw-input"
+                value={receiveAsset}
+                onChange={(e) => setReceiveAsset(e.target.value as Asset)}
+              >
+                {ASSETS.map(a => (
+                  <option key={a.symbol} value={a.symbol}>{a.symbol}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="vw-input-group">
+              <label className="vw-label-sm">{receiveAsset} RECEIVE ADDRESS</label>
               <div className="vw-address-row">
-                <span className="vw-address-mono">{profile.address}</span>
-                <button className="vw-btn-copy" onClick={handleCopyAddress}>
-                  {copyMessage || 'Copy'}
+                <span className="vw-address-mono">{receiveAddress}</span>
+                <button className="vw-btn-copy" onClick={handleCopyReceive}>
+                  {receiveCopyMsg || 'Copy'}
+                </button>
+                <button className="vw-btn-qr" onClick={() => setShowQRModal(true)}>
+                  QR
                 </button>
               </div>
             </div>
+
+            {(receiveAsset === 'BTC' || receiveAsset === 'BCH' || receiveAsset === 'DOGE') && (
+              <>
+                <div className="vw-warning-box">
+                  ⚠️ Only send {receiveAsset} to this address. Sending other cryptocurrencies may result in permanent loss.
+                </div>
+
+                <DepositWatcher
+                  coin={receiveAsset}
+                  address={receiveAddress}
+                  isActive={true}
+                />
+
+                <div className="vw-receive-footer">
+                  Requires {getDepositConfirmations()} blockchain confirmations
+                </div>
+              </>
+            )}
           </div>
 
           {/* Send Card */}
@@ -365,72 +408,37 @@ export default function HomeNew() {
           <div className="vw-card vw-action-card-secondary">
             <h4 className="vw-secondary-title">Market</h4>
             <p className="vw-secondary-desc">
-              Trade LAND/CASH with live order books
+              View prices, charts, and trading activity
             </p>
-            <button className="vw-btn-secondary" onClick={() => navigate('/exchange')}>
+            <button className="vw-btn-secondary" onClick={() => navigate('/market')}>
               Open Market →
             </button>
           </div>
 
           <div className="vw-card vw-action-card-secondary">
-            <h4 className="vw-secondary-title">Miner Panel</h4>
+            <h4 className="vw-secondary-title">Exchange</h4>
             <p className="vw-secondary-desc">
-              Control mining operations and monitor hashrate performance
+              Trade LAND/CASH with live order books
             </p>
-            <button className="vw-btn-secondary" onClick={() => window.open('/panel.html', '_blank')}>
-              Open Miner Panel →
-            </button>
-          </div>
-
-          <div className="vw-card vw-action-card-secondary">
-            <h4 className="vw-secondary-title">Node Dashboard</h4>
-            <p className="vw-secondary-desc">
-              View blockchain stats, recent blocks, and network health
-            </p>
-            <button className="vw-btn-secondary" onClick={() => window.open('/dashboard.html', '_blank')}>
-              Open Dashboard →
-            </button>
+            {exchangeStatus.enabled ? (
+              <button className="vw-btn-secondary" onClick={() => navigate('/exchange')}>
+                Open Exchange →
+              </button>
+            ) : (
+              <button 
+                className="vw-btn-secondary" 
+                style={{ opacity: 0.5, cursor: 'not-allowed' }}
+                title={exchangeStatus.reason || 'Exchange unlocks after your deposit is confirmed.'}
+                disabled
+              >
+                🔒 Locked
+              </button>
+            )}
           </div>
         </div>
 
-        {/* SECTION 6: Bottom Row - Deposit + Vision Vault */}
+        {/* SECTION 6: Bottom Row - Vision Vault Only */}
         <div className="vw-bottom-row">
-          {/* Deposit Card */}
-          <div className="vw-card vw-deposit-card">
-            <h3 className="vw-action-title">Deposit</h3>
-            <p className="vw-action-subtitle">External deposits</p>
-
-            <div className="vw-toggle-group">
-              {(['BTC', 'BCH', 'DOGE'] as const).map((asset) => (
-                <button
-                  key={asset}
-                  className={`vw-toggle-btn ${depositAsset === asset ? 'active' : ''}`}
-                  onClick={() => setDepositAsset(asset)}
-                >
-                  {asset}
-                </button>
-              ))}
-            </div>
-
-            <div className="vw-input-group">
-              <label className="vw-label-sm">{depositAsset} DEPOSIT ADDRESS</label>
-              <div className="vw-address-row">
-                <span className="vw-address-mono">{depositAddress}</span>
-                <button className="vw-btn-copy" onClick={handleCopyDeposit}>
-                  {depositCopyMsg || 'Copy'}
-                </button>
-              </div>
-            </div>
-
-            <div className="vw-warning-box">
-              ⚠️ Only send {depositAsset} to this address. Sending other cryptocurrencies may result in permanent loss.
-            </div>
-
-            <div className="vw-deposit-footer">
-              Requires {getDepositConfirmations()} blockchain confirmations
-            </div>
-          </div>
-
           {/* Vision Vault Card */}
           <div className="vw-card vw-vault-card-new">
             <div className="vw-vault-header">

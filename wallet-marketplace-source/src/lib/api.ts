@@ -345,7 +345,7 @@ export async function getVaultEpochStatus(): Promise<VaultEpochStatus> {
   }
 
   try {
-    return await get('/vault/epoch');
+    return await get('/api/vault/epoch');
   } catch (error) {
     throw new Error(`Failed to get vault epoch: ${error instanceof Error ? error.message : 'Network error'}`);
   }

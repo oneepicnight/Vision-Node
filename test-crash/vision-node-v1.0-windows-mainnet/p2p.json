@@ -1,0 +1,6 @@
+{
+  "force_ipv4": true,
+  "listen_port": 7072,
+  "max_peers": 50,
+  "min_peers_for_mining": 2
+}

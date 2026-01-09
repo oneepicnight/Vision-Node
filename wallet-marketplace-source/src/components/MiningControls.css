@@ -1,0 +1,411 @@
+.mining-controls-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, rgba(60, 47, 140, 0.3), rgba(12, 8, 33, 0.6));
+  border-radius: 1rem;
+  border: 1px solid rgba(162, 145, 255, 0.3);
+}
+
+.mining-banner {
+  padding: 1rem;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(59, 130, 246, 0.15));
+  border: 2px solid rgba(139, 92, 246, 0.5);
+  border-radius: 0.75rem;
+}
+
+.mining-banner-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.mining-icon {
+  font-size: 1.5rem;
+}
+
+.mining-banner-title {
+  font-weight: 600;
+  color: rgba(139, 92, 246, 1);
+  font-size: 1rem;
+}
+
+.mining-banner-subtitle {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.85rem;
+}
+
+.mining-info-box {
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.mining-info-title {
+  color: rgba(34, 211, 238, 1);
+  margin-bottom: 0.5rem;
+}
+
+.mining-info-list {
+  margin: 0.5rem 0 0 1.25rem;
+  padding: 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.fans-section {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: rgba(255, 183, 77, 0.1);
+  border: 1px dashed #ffb74d;
+  border-radius: 0.5rem;
+}
+
+.fans-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  color: #ffb74d;
+  font-size: 0.9rem;
+}
+
+.fans-description {
+  margin: 0 0 0.75rem 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.btn-fans-brr {
+  width: 100%;
+  padding: 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.3s;
+}
+
+.btn-fans-brr:hover {
+  background: linear-gradient(135deg, #d97706, #b45309);
+  transform: translateY(-2px);
+}
+
+.btn-stop-fans {
+  width: 100%;
+  padding: 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  background: rgba(239, 68, 68, 0.8);
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.3s;
+}
+
+.btn-stop-fans:hover {
+  background: rgba(220, 38, 38, 0.9);
+}
+
+.fan-status {
+  margin-top: 0.5rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.fan-status strong {
+  color: rgba(34, 211, 238, 1);
+}
+
+.mining-section {
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 0.75rem;
+}
+
+.section-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+}
+
+.section-title {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+  color: rgba(99, 102, 241, 1);
+}
+
+.mode-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.mode-btn {
+  flex: 1;
+  min-width: 120px;
+  padding: 0.75rem;
+  background: rgba(75, 85, 99, 0.5);
+  color: white;
+  border: 2px solid transparent;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.3s;
+}
+
+.mode-btn:hover {
+  background: rgba(107, 114, 128, 0.7);
+}
+
+.mode-btn.active {
+  background: rgba(139, 92, 246, 0.5);
+  border-color: rgba(139, 92, 246, 1);
+  color: white;
+}
+
+.mode-btn.coming-soon {
+  opacity: 0.4;
+  cursor: not-allowed;
+  position: relative;
+}
+
+.mode-btn.coming-soon:hover {
+  background: rgba(75, 85, 99, 0.5);
+  opacity: 0.5;
+}
+
+.mode-description {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  background: rgba(13, 18, 38, 0.8);
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.performance-section {
+  padding: 1rem;
+  background: rgba(99, 102, 241, 0.05);
+  border-radius: 0.75rem;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+}
+
+.form-group small {
+  display: block;
+  margin-top: 0.25rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.8rem;
+}
+
+.mining-select,
+.mining-input {
+  width: 100%;
+  padding: 0.75rem;
+  background: rgba(12, 8, 33, 0.6);
+  border: 1px solid rgba(162, 145, 255, 0.3);
+  border-radius: 0.5rem;
+  color: white;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.mining-select:focus,
+.mining-input:focus {
+  outline: none;
+  border-color: rgba(139, 92, 246, 1);
+}
+
+.mining-stats {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 0.5rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+}
+
+.mining-stats strong {
+  color: rgba(34, 211, 238, 1);
+}
+
+.mining-hashrate {
+  margin-top: 0.75rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.mining-hashrate strong {
+  color: rgba(34, 211, 238, 1);
+}
+
+.pool-section {
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 0.75rem;
+}
+
+.fee-notice {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: rgba(185, 104, 255, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.5);
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.fee-notice strong {
+  color: rgba(139, 92, 246, 1);
+}
+
+.port-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.port-btn {
+  flex: 1;
+  padding: 0.75rem;
+  background: rgba(75, 85, 99, 0.5);
+  color: white;
+  border: 2px solid transparent;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.port-btn:hover {
+  background: rgba(107, 114, 128, 0.7);
+}
+
+.port-btn.active {
+  background: rgba(139, 92, 246, 0.5);
+  border-color: rgba(139, 92, 246, 1);
+}
+
+.btn-primary {
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.8), rgba(59, 130, 246, 0.8));
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 1), rgba(59, 130, 246, 1));
+  transform: translateY(-2px);
+}
+
+.btn-secondary {
+  padding: 0.75rem 1.5rem;
+  background: rgba(75, 85, 99, 0.6);
+  color: white;
+  border: 1px solid rgba(107, 114, 128, 0.8);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s;
+}
+
+.btn-secondary:hover {
+  background: rgba(107, 114, 128, 0.8);
+}
+
+.pool-status {
+  margin-top: 0.5rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.pool-status strong {
+  color: rgba(34, 211, 238, 1);
+}
+
+.pool-url-display {
+  margin-top: 1rem;
+  padding: 1.25rem;
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(0, 212, 255, 0.05));
+  border: 2px solid rgba(0, 212, 255, 0.5);
+  border-radius: 0.75rem;
+}
+
+.pool-url-header {
+  color: rgba(0, 212, 255, 1);
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.pool-url-subtitle {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.8rem;
+  margin-bottom: 0.75rem;
+}
+
+.pool-url-input {
+  flex: 1;
+  padding: 0.85rem;
+  font-family: 'Courier New', monospace;
+  background: rgba(13, 18, 38, 0.9);
+  border: 1px solid rgba(0, 212, 255, 0.5);
+  border-radius: 0.5rem;
+  color: rgba(0, 212, 255, 1);
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.btn-copy {
+  min-width: 120px;
+  padding: 0.85rem;
+  background: rgba(0, 212, 255, 0.3);
+  color: white;
+  border: 1px solid rgba(0, 212, 255, 0.5);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s;
+}
+
+.btn-copy:hover {
+  background: rgba(0, 212, 255, 0.5);
+}

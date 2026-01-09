@@ -1,0 +1,10 @@
+🔬 Vision Node - FULL (advanced) build active
+⛏️  Miner ready (use /api/miner/start or miner panel to begin)
+⛏️  Block integrator started
+🔄 Rebuilding VisionX dataset for epoch 0 with seed 0000...
+🧊 Miner idle (preview job) height=1 — waiting for peers+sync...
+🎯 New mining job: height=1, difficulty=10000, target=00068db8bac710cbffffffffffffffffffffffffffffffffffffffffffffffff
+   Target (first 8 bytes): 00068db8bac710cb
+🧊 Miner idle (preview job) height=1 — waiting for peers+sync...
+🎯 New mining job: height=1, difficulty=10000, target=00068db8bac710cbffffffffffffffffffffffffffffffffffffffffffffffff
+   Target (first 8 bytes): 00068db8bac710cb

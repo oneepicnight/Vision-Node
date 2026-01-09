@@ -108,8 +108,8 @@ $envVarScript
     $allHealthy = $true
     foreach ($node in $nodes) {
         try {
-            $health = Invoke-RestMethod "http://localhost:$($node.HttpPort)/health" -TimeoutSec 5
-            if ($health.status -eq "alive") {
+            $health = Invoke-RestMethod "http://localhost:$($node.HttpPort)/api/health" -TimeoutSec 5
+            if ($health -eq "ok") {
                 Write-Host "  $($node.Name) (port $($node.HttpPort)): OK" -ForegroundColor Green
             } else {
                 Write-Host "  $($node.Name) health check failed: status=$($health.status)" -ForegroundColor Red

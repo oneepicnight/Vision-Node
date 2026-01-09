@@ -62,7 +62,7 @@ export function useConstellationStatus(pollInterval = 10000) {
 
     const load = async () => {
       try {
-        const res = await fetch('http://127.0.0.1:7070/constellation/status')
+        const res = await fetch('http://127.0.0.1:7070/api/constellation/status')
         const data = await res.json()
         if (!cancelled) setConstellation(data)
       } catch (err) {

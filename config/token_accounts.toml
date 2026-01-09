@@ -1,16 +1,33 @@
-# System accounts
-vault_address = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"   # staking vault
-fund_address  = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"   # ecosystem/fund
+# System accounts - MAINNET CONSENSUS-LOCKED
+vault_address = "0xb977c16e539670ddfecc0ac902fcb916ec4b944e"   # Staking vault (50%)
+fund_address  = "0x8bb8edcd4cdbcb132cc5e88ff90ba48cebf11cbd"   # Ecosystem/OPS fund (30%)
 
-# Founders (Treasury split)
-founder1_address = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" # Donnie
-founder2_address = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" # Travis
+# Founders (Treasury split - 20% total)
+founder1_address = "0xdf7a79291bb96e9dd1c77da089933767999eabf0" # Donnie (10%)
+founder2_address = "0x083f95edd48e3e9da396891b704994b86e7790e7" # Travis (10%)
 
-# Split ratios (integers summing to 100)
-vault_pct = 50
-fund_pct  = 30
-treasury_pct = 20
+# Split ratios (basis points - must sum to 10000)
+vault_pct = 50     # 5000 bps = 50%
+fund_pct  = 30     # 3000 bps = 30%
+treasury_pct = 20  # 2000 bps = 20%
 
 # Treasury sub-split between founders (sum to 100)
-founder1_pct = 50
-founder2_pct = 50
+founder1_pct = 50  # 10% of total (50% of 20%)
+founder2_pct = 50  # 10% of total (50% of 20%)
+
+# Miners vault deposit addresses (off-chain fee collection - 50% of exchange fees)
+# These are non-custodial deposit addresses where exchange fees are collected
+# Miners wallet is the AUTO-BUY HOT WALLET for converting crypto → LAND
+miners_btc_address = "bc1qyj3rh42pa22p3lth6u5529uw4r8uvecauyavc5"   # BTC SegWit (bech32)
+miners_bch_address = "qr48t30n2gpzfwfgtqr6wrrysyc6s27g4u8h8up6l"    # BCH CashAddr
+miners_doge_address = "DHSe6buCnpJgSJc4DFrkuJnTESBVZgpEPC"          # DOGE
+
+# Founder 1 crypto addresses (25% of exchange fees - direct payout, no auto-buy)
+founder1_btc_address = "bc1q3swmre3zk3jepfv36mus2s05tc8vaw2gy4w9k7"
+founder1_bch_address = "bitcoincash:qe75x4s8ral8jaqgqewrg4avqll58kxgc5eal9u5t"
+founder1_doge_address = "DRsWAUD1PkU5pTCxwybngAC6tUkYfBF9Mr"
+
+# Founder 2 crypto addresses (25% of exchange fees - direct payout, no auto-buy)
+founder2_btc_address = "bc1q07wj9x8dgrcqjajg6t54hw8aswghlyex7a409a"
+founder2_bch_address = "bitcoincash:qkytj6m58n0pd4dl70qalrwqkssmcwcv0w3kts40g"
+founder2_doge_address = "DFdLJanBYpC1JAw7NW6zpxJua2qNT5hJtA"

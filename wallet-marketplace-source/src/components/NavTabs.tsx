@@ -1,5 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { useWalletStore } from '../state/wallet'
+import { useExchangeStatus } from '../hooks/useExchangeStatus'
 import { env } from '../utils/env'
 import '../styles/nav-tabs.css'
 
@@ -7,26 +8,25 @@ interface NavTab {
   label: string
   path: string
   devOnly?: boolean
+  requiresUnlock?: boolean
 }
 
 const mainTabs: NavTab[] = [
   { label: 'Command Center', path: '/command-center' },
   { label: 'Wallet', path: '/wallet' },
-  { label: 'Mining', path: '/mining' },
-  { label: 'Exchange', path: '/exchange' },
+  { label: 'Exchange', path: '/exchange', requiresUnlock: true },
   { label: 'Market', path: '/market' },
   { label: 'Settings', path: '/settings' },
 ]
 
 const devTabs: NavTab[] = [
-  { label: 'Miner', path: '/panel.html', devOnly: true },
-  { label: 'Dashboard', path: '/dashboard.html', devOnly: true },
   { label: 'Debug Crypto', path: '/debug/crypto', devOnly: true },
 ]
 
 export default function NavTabs() {
   const { profile } = useWalletStore()
   const location = useLocation()
+  const { status: exchangeStatus } = useExchangeStatus(profile?.address || null)
 
   // Don't render nav on splash/onboarding routes
   const hideOnRoutes = ['/', '/import', '/handle', '/secure']
@@ -40,6 +40,10 @@ export default function NavTabs() {
     <nav className="nav-tabs">
       <div className="nav-tabs-container">
         {allTabs.map((tab) => {
+          // Check if tab is locked
+          const isLocked = tab.requiresUnlock && !exchangeStatus.enabled
+          const tooltipText = isLocked ? exchangeStatus.reason || 'Exchange unlocks after your deposit is confirmed.' : undefined
+
           // Handle external links (dev panel links)
           if (tab.path.includes('.html')) {
             return (
@@ -55,7 +59,23 @@ export default function NavTabs() {
             )
           }
 
-          // Regular router links
+          // Regular router links with lock support
+          if (isLocked) {
+            return (
+              <div
+                key={tab.path}
+                className="nav-tab nav-tab-locked"
+                title={tooltipText}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                }}
+              >
+                {tab.label}
+              </div>
+            )
+          }
+
           return (
             <NavLink
               key={tab.path}

@@ -80,11 +80,22 @@ export function VaultStatusDashboard() {
     { key: 'DOGE', name: 'Dogecoin', color: 'bg-yellow-500/20 border-yellow-500/30', decimals: 2 }
   ] as const
 
-  const stakeholders = [
-    { key: 'miners', name: 'Miners', icon: TrendingUp, percentage: 50, color: 'text-green-400' },
-    { key: 'dev', name: 'Development', icon: Briefcase, percentage: 30, color: 'text-blue-400' },
-    { key: 'founders', name: 'Founders', icon: Users, percentage: 20, color: 'text-purple-400' }
-  ] as const
+  // Get stakeholders based on currency (BTC, BCH, DOGE use 50/50, LAND uses 50/30/20)
+  const getStakeholders = (currencyKey: string) => {
+    if (currencyKey === 'LAND') {
+      return [
+        { key: 'miners', name: 'Miners', icon: TrendingUp, percentage: 50, color: 'text-green-400' },
+        { key: 'dev', name: 'Development', icon: Briefcase, percentage: 30, color: 'text-blue-400' },
+        { key: 'founders', name: 'Founders', icon: Users, percentage: 20, color: 'text-purple-400' }
+      ] as const
+    } else {
+      // BTC, BCH, DOGE use 50/50 split between miners and founders
+      return [
+        { key: 'miners', name: 'Miners', icon: TrendingUp, percentage: 50, color: 'text-green-400' },
+        { key: 'founders', name: 'Founders', icon: Users, percentage: 50, color: 'text-purple-400' }
+      ] as const
+    }
+  }
 
   return (
     <div className="card">
@@ -98,15 +109,15 @@ export function VaultStatusDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-6">
           <div className="p-4 rounded-lg bg-black/30">
             <div className="text-xs opacity-70">Vault Balance</div>
-            <div className="text-lg font-bold font-mono">{Number(epochStatus.vault_balance).toLocaleString()}</div>
+            <div className="text-lg font-bold font-mono">{Number(epochStatus.vault_balance || 0).toLocaleString()}</div>
           </div>
           <div className="p-4 rounded-lg bg-black/30">
             <div className="text-xs opacity-70">Fund Balance</div>
-            <div className="text-lg font-bold font-mono">{Number(epochStatus.fund_balance).toLocaleString()}</div>
+            <div className="text-lg font-bold font-mono">{Number(epochStatus.fund_balance || 0).toLocaleString()}</div>
           </div>
           <div className="p-4 rounded-lg bg-black/30">
             <div className="text-xs opacity-70">Treasury Balance</div>
-            <div className="text-lg font-bold font-mono">{Number(epochStatus.treasury_balance).toLocaleString()}</div>
+            <div className="text-lg font-bold font-mono">{Number(epochStatus.treasury_balance || 0).toLocaleString()}</div>
           </div>
           <div className="p-4 rounded-lg bg-black/30">
             <div className="text-xs opacity-70">Epoch Index</div>
@@ -130,7 +141,8 @@ export function VaultStatusDashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {currencies.map(({ key, name, color, decimals }) => {
-          const balances = vaultStatus.balances[key as keyof typeof vaultStatus.balances]
+          const balances = vaultStatus.balances?.[key as keyof typeof vaultStatus.balances] || { miners: 0, dev: 0, founders: 0 }
+          const stakeholders = getStakeholders(key)
           const total = balances.miners + balances.dev + balances.founders
 
           return (
@@ -186,7 +198,7 @@ export function VaultStatusDashboard() {
               <div className="mt-4 pt-4 border-t border-white/10">
                 <div className="flex justify-between text-xs opacity-70">
                   <span>Distribution</span>
-                  <span>50% / 30% / 20%</span>
+                  <span>{key === 'LAND' ? '50% / 30% / 20%' : '50% / 50%'}</span>
                 </div>
               </div>
             </div>
@@ -199,19 +211,19 @@ export function VaultStatusDashboard() {
         <div className="grid grid-cols-3 gap-4 text-center">
           <div>
             <div className="text-2xl font-bold text-green-400">
-              {Object.values(vaultStatus.balances).reduce((sum, b) => sum + b.miners, 0).toFixed(2)}
+              {Object.values(vaultStatus.balances || {}).reduce((sum, b) => sum + (b?.miners || 0), 0).toFixed(2)}
             </div>
             <div className="text-xs opacity-70 mt-1">Total Miners</div>
           </div>
           <div>
             <div className="text-2xl font-bold text-blue-400">
-              {Object.values(vaultStatus.balances).reduce((sum, b) => sum + b.dev, 0).toFixed(2)}
+              {Object.values(vaultStatus.balances || {}).reduce((sum, b) => sum + (b?.dev || 0), 0).toFixed(2)}
             </div>
             <div className="text-xs opacity-70 mt-1">Total Dev</div>
           </div>
           <div>
             <div className="text-2xl font-bold text-purple-400">
-              {Object.values(vaultStatus.balances).reduce((sum, b) => sum + b.founders, 0).toFixed(2)}
+              {Object.values(vaultStatus.balances || {}).reduce((sum, b) => sum + (b?.founders || 0), 0).toFixed(2)}
             </div>
             <div className="text-xs opacity-70 mt-1">Total Founders</div>
           </div>
