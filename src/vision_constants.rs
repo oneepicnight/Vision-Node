@@ -216,12 +216,6 @@ pub fn ops_address() -> String {
     foundation_config::fund_address()
 }
 
-// DEPRECATED: Use vault_address() / founder_address() / ops_address() functions above
-// These legacy constants are kept for temporary compatibility only
-pub const VAULT_ADDRESS: &str = "0xb977c16e539670ddfecc0ac902fcb916ec4b944e";
-pub const FOUNDER_ADDRESS: &str = "0xdf7a79291bb96e9dd1c77da089933767999eabf0";
-pub const OPS_ADDRESS: &str = "0x8bb8edcd4cdbcb132cc5e88ff90ba48cebf11cbd";
-
 /// Pending rewards tree name for sled database
 /// Stores rewards banked for nodes that don't have a payout address set
 pub const PENDING_REWARDS_TREE: &str = "pending_rewards";

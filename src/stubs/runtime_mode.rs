@@ -1,4 +1,4 @@
-//! Stub for runtime_mode module when staging is disabled
+﻿//! Stub for runtime_mode module when staging is disabled
 
 use serde::{Deserialize, Serialize};
 
@@ -27,16 +27,44 @@ impl RuntimeMode {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Runtime configuration for different operational modes of the node
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RuntimeModeConfig {
-    pub mode: RuntimeMode,
+    /// Enable solo mining mode
+    pub solo_enabled: bool,
+    /// Enable pool hosting mode (accept external miners)
+    pub pool_enabled: bool,
+    /// Enable farm controller mode (manage LAN mining rigs)
+    pub farm_enabled: bool,
 }
 
 impl Default for RuntimeModeConfig {
     fn default() -> Self {
         Self {
-            mode: RuntimeMode::default(),
+            solo_enabled: true,
+            pool_enabled: false,
+            farm_enabled: false,
         }
+    }
+}
+
+impl RuntimeModeConfig {
+    /// Load from JSON string
+    pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
+        serde_json::from_str(json)
+    }
+
+    /// Serialize to JSON string
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string(self)
+    }
+
+    /// Validate configuration (ensure at least one mode is enabled)
+    pub fn validate(&self) -> Result<(), String> {
+        if !self.solo_enabled && !self.pool_enabled && !self.farm_enabled {
+            return Err("At least one mode must be enabled".to_string());
+        }
+        Ok(())
     }
 }
 

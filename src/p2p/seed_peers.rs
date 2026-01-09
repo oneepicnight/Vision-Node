@@ -7,6 +7,8 @@ use dirs::home_dir;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tracing::{debug, info, warn};
+use std::sync::Arc;
+use crate::globals::P2P_MANAGER;
 
 /// Hardcoded genesis seed peers - IPv4 only, pre-trusted
 /// All seeds on port 7072 (P2P port)
@@ -15,10 +17,11 @@ pub const INITIAL_SEEDS: &[(&str, u16)] = &[
     ("35.151.236.81", 7072),  // Seed 1
     ("16.163.123.221", 7072), // Seed 2
     ("69.173.206.211", 7072), // Seed 3
-    ("69.173.207.135", 7072), // Seed 4
-    ("75.128.156.69", 7072),  // Seed 5
-    ("98.97.137.74", 7072),   // Seed 6
-    ("182.106.66.15", 7072),  // Seed 7
+    ("75.128.156.69", 7072),  // Seed 4
+    ("98.97.137.74", 7072),   // Seed 5
+    ("182.106.66.15", 7072),  // Seed 6
+    ("69.173.206.46", 7072),  // Seed 7 (new)
+    ("68.142.62.22", 7072),   // Seed 8 (new)
 ];
 
 /// Get default anchor seeds for 7070 HTTP control plane

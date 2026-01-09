@@ -148,9 +148,17 @@ impl ActiveMiner {
         let submitter = Arc::new(BlockSubmitter::new(params, found_block_callback));
         let difficulty_tracker = DifficultyTracker::new(difficulty_config, initial_difficulty);
 
+        let available_cpus = num_cpus::get() as u64;
+        let initial_threads = available_cpus;
+        
+        eprintln!(
+            "⚙️  Miner initialized: available_cpus={}, starting_threads={}",
+            available_cpus, initial_threads
+        );
+
         let inner = Arc::new(MinerInner {
             params,
-            target_threads: AtomicU64::new(num_cpus::get() as u64),
+            target_threads: AtomicU64::new(initial_threads),
             enabled: AtomicBool::new(false),
             batch_size: AtomicU64::new(4), // Default SIMD batch size
             current_job: Mutex::new(None),
@@ -300,6 +308,8 @@ impl ActiveMiner {
             "[MINER] ⛏️  Mining enabled by user - miner will start when network conditions allow"
         );
 
+        let available_cpus = num_cpus::get();
+        
         // Apply mining profile logic from config
         let actual_threads =
             if let Ok(config) = crate::config::miner::MinerConfig::load_or_create("miner.json") {
@@ -331,6 +341,24 @@ impl ActiveMiner {
                 threads // Fallback to requested threads if config fails
             };
 
+        // Log thread clamping if it occurred
+        if actual_threads != threads {
+            eprintln!(
+                "⚙️  Mining threads adjusted: requested={}, actual={}, available_cpus={} (reason: config profile/override)",
+                threads, actual_threads, available_cpus
+            );
+        } else if actual_threads > available_cpus {
+            eprintln!(
+                "⚠️  Warning: Mining with {} threads but only {} CPUs available",
+                actual_threads, available_cpus
+            );
+        } else {
+            eprintln!(
+                "⚙️  Starting mining: requested={}, actual={}, available_cpus={}",
+                threads, actual_threads, available_cpus
+            );
+        }
+
         self.inner.enabled.store(true, Ordering::Relaxed);
         self.set_threads(actual_threads);
     }
@@ -345,6 +373,11 @@ impl ActiveMiner {
         while let Some(handle) = workers.pop() {
             let _ = handle.join();
         }
+    }
+
+    /// Clear the current mining job (used when sync starts to prevent stale work)
+    pub fn clear_job(&self) {
+        *self.inner.current_job.lock().unwrap() = None;
     }
 
     /// Set number of mining threads
@@ -406,6 +439,7 @@ impl ActiveMiner {
         _difficulty: u64,
         epoch_seed: [u8; 32],
     ) {
+        tracing::info!("[MINER-PARAMS] {}", self.inner.params.fingerprint());
         let local_test_mode = std::env::var("VISION_LOCAL_TEST_MODE").unwrap_or_default() == "true";
         let height = header.number;
 
@@ -454,6 +488,17 @@ impl ActiveMiner {
             // Note: This is expensive (64MB dataset rebuild) but only happens every ~10 blocks
             let new_engine = Arc::new(VisionXMiner::new(self.inner.params, &epoch_seed, epoch));
             *self.inner.engine.lock().unwrap() = new_engine;
+            
+            eprintln!(
+                "✅ VisionX dataset ready (epoch={}, seed={:02x}{:02x})",
+                epoch, epoch_seed[0], epoch_seed[1]
+            );
+        } else {
+            // Reusing cached dataset for same epoch
+            tracing::debug!(
+                "♻️  Reusing cached VisionX dataset (epoch={})",
+                epoch
+            );
         }
 
         // Create PowJob from pre-computed message bytes
@@ -475,14 +520,36 @@ impl ActiveMiner {
                 "[LOCAL_TEST_MODE] Mining job with max target (easy)"
             );
         }
+        let chain_tip_height = height.saturating_sub(1);
+        let chain_tip_hash = format!("0x{}", hex::encode(prev_hash));
+        
+        // 🔍 SPLIT BRAIN DIAGNOSTIC: Log DB path and tip for comparison with sync
+        let db_path = std::env::var("VISION_PORT")
+            .ok()
+            .and_then(|s| s.parse::<u16>().ok())
+            .map(|p| format!("./vision_data_{}", p))
+            .unwrap_or_else(|| "./vision_data_7070".to_string());
+        
+        let blocks_in_memory = {
+            let chain = crate::CHAIN.lock();
+            chain.blocks.len()
+        };
+        
         tracing::info!(
+            chain_db_path = %db_path,
+            chain_tip_height = chain_tip_height,
+            chain_tip_hash = %chain_tip_hash,
+            job_parent_hash = %chain_tip_hash,
+            job_height = height,
+            chain_db_scope = crate::vision_constants::VISION_NETWORK_ID,
+            blocks_in_memory = blocks_in_memory,
             height = height,
             difficulty = difficulty,
             epoch = epoch,
             seed0 = ?seed0,
             target0 = ?target0,
             message_bytes_len = message_bytes.len(),
-            "[MINER-JOB] Created mining job"
+            "[MINER-JOB] Created mining job from CHAIN.lock()"
         );
 
         // Avoid job spam/reset when nothing materially changed
@@ -939,8 +1006,33 @@ impl ActiveMiner {
 
                     // Create FoundPowBlock with full header and solution
                     let mut finalized_header = job.header.clone();
+                    eprintln!("[MINER-SOLUTION] Worker {} found solution! solution.nonce={}, solution.digest={}", worker_id, solution.nonce, hex::encode(solution.digest));
                     finalized_header.nonce = solution.nonce;
                     finalized_header.pow_hash = format!("0x{}", hex::encode(solution.digest));
+
+                    // DIAGNOSTIC: Log the pow_hash we're setting AND compute pow_message_bytes
+                    tracing::info!(
+                        "[MINER-POW-HASH] Set pow_hash={} from digest for height={}",
+                        finalized_header.pow_hash,
+                        finalized_header.number
+                    );
+                    
+                    // DIAGNOSTIC: Compute pow_message_bytes with nonce=0 to verify encoding
+                    // The actual mining was done with nonce=0 in the message, so log it that way too
+                    let mut header_for_diagnostic = finalized_header.clone();
+                    header_for_diagnostic.nonce = 0;  // Use nonce=0 to match what was actually hashed
+                    
+                    if let Ok(miner_pow_msg) = crate::consensus_pow::pow_message_bytes(&header_for_diagnostic) {
+                        eprintln!("[MINER-POW-MSG] Block #{} pow_message_bytes:", finalized_header.number);
+                        eprintln!("  parent_hash: {}", finalized_header.parent_hash);
+                        eprintln!("  number: {}", finalized_header.number);
+                        eprintln!("  timestamp: {}", finalized_header.timestamp);
+                        eprintln!("  difficulty: {}", finalized_header.difficulty);
+                        eprintln!("  nonce: {} (will be passed separately to visionx_hash)", finalized_header.nonce);
+                        eprintln!("  tx_root: {}", finalized_header.tx_root);
+                        eprintln!("  pow_msg length: {} bytes (with nonce=0 in message)", miner_pow_msg.len());
+                        eprintln!("  pow_msg (first 64 bytes): {}", hex::encode(&miner_pow_msg[..64.min(miner_pow_msg.len())]));
+                    }
 
                     let found_block = crate::consensus_pow::FoundPowBlock {
                         header: finalized_header.clone(),

@@ -449,7 +449,7 @@ impl TxHistoryManager {
 
         // Get RPC client
         let client = {
-            let clients = crate::EXTERNAL_RPC_CLIENTS.lock();
+            let clients = crate::EXTERNAL_RPC_CLIENTS.lock().expect("External RPC clients lock poisoned");
             clients
                 .get(&chain)
                 .ok_or_else(|| anyhow!("RPC client not available for {:?}", chain))?

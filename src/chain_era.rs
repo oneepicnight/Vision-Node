@@ -13,7 +13,7 @@ use tracing::{info, warn};
 
 /// Maximum supply cap for LAND token (in base units: nanoLAND = 10^9)
 /// When reached, emissions end and staking era begins
-pub const MAX_SUPPLY: u128 = 100_000_000 * 1_000_000_000; // 100 million LAND
+pub const MAX_SUPPLY: u128 = 1_000_000_000 * 1_000_000_000; // 1 billion LAND
 
 /// Staking era base reward per block (in nanoLAND)
 /// This is split among all active stakers (land deed holders)

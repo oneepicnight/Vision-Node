@@ -19,6 +19,21 @@ pub struct VisionXParams {
     pub epoch_blocks: u32,   // e.g., 32
 }
 
+impl VisionXParams {
+    /// Stable fingerprint for logging/debugging to detect param drift between miner and validator
+    pub fn fingerprint(&self) -> String {
+        format!(
+            "v=1 dataset_mb={} scratch_mb={} mix_iters={} reads_per_iter={} write_every={} epoch_blocks={}",
+            self.dataset_mb,
+            self.scratch_mb,
+            self.mix_iters,
+            self.reads_per_iter,
+            self.write_every,
+            self.epoch_blocks,
+        )
+    }
+}
+
 impl Default for VisionXParams {
     fn default() -> Self {
         Self {
@@ -381,19 +396,21 @@ impl VisionXMiner {
         start_nonce: u64,
         batch: u32,
     ) -> (Vec<PowSolution>, u32) {
-        // clone header locally; we'll overwrite nonce region each loop
-        let mut header = job.header.clone();
+        // Use header as-is (nonce=0 from pow_message_bytes)
+        // DO NOT write nonce into header - it's passed separately to visionx_hash
+        let header = &job.header;
         let mut sols = Vec::new();
         let t0 = now_ns();
 
         for n in 0..batch {
             let nonce = start_nonce.wrapping_add(n as u64);
-            header[job.nonce_offset..job.nonce_offset + 8].copy_from_slice(&nonce.to_be_bytes());
+            // Fixed: Don't overwrite header bytes with nonce
+            // The nonce parameter to visionx_hash is sufficient
             let digest = visionx_hash(
                 &self.params,
                 self.dataset.as_slice(),
                 self.mask,
-                &header,
+                header,
                 nonce,
             );
             if u256_leq(&digest, &job.target) {

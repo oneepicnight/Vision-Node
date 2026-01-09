@@ -329,14 +329,11 @@ pub async fn get_cash_supply(State(state): State<Arc<AirdropRouteState>>) -> imp
             total_supply: Some(supply.to_string()),
             error: None,
         }),
-        Err(e) => {
-            error!("[CASH SUPPLY] Failed to get supply: {}", e);
-            Json(SupplyResponse {
-                ok: false,
-                total_supply: None,
-                error: Some(e.to_string()),
-            })
-        }
+        Err(e) => Json(SupplyResponse {
+            ok: false,
+            total_supply: None,
+            error: Some(e),
+        }),
     }
 }
 

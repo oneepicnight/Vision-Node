@@ -257,7 +257,7 @@ pub fn handle_reorg(new_block: &Block) -> ReorgResult {
 
     // 3. Apply fork blocks using unified validation
     for block in &fork.blocks {
-        if let Err(e) = crate::chain::accept::apply_block(&mut g, block) {
+        if let Err(e) = crate::chain::accept::apply_block(&mut g, block, None) {
             return ReorgResult::Failed(format!("Failed to apply fork block: {}", e));
         }
     }

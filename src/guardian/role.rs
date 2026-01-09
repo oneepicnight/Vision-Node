@@ -42,6 +42,33 @@ pub struct GuardianRoleState {
     pub last_guardian_ping: u64,
 }
 
+impl GuardianRoleState {
+    /// Get current guardian EBID (if any)
+    pub fn get_current_guardian(&self) -> Option<String> {
+        if self.current_guardian_ebid.is_empty() {
+            None
+        } else {
+            Some(self.current_guardian_ebid.clone())
+        }
+    }
+
+    /// Get current state
+    pub fn get_state(&self) -> Option<&GuardianRoleState> {
+        Some(self)
+    }
+
+    /// Check if guardian is considered reachable
+    pub fn is_guardian_reachable(&self, now: u64) -> bool {
+        let time_since_ping = now.saturating_sub(self.last_guardian_ping);
+        time_since_ping < 300 // 5 minute default timeout
+    }
+
+    /// Get time remaining for guardian
+    pub fn time_remaining(&self, now: u64) -> u64 {
+        now.saturating_sub(self.last_guardian_ping)
+    }
+}
+
 /// Guardian role manager
 pub struct GuardianRole {
     /// Persistent storage
@@ -115,6 +142,19 @@ impl GuardianRole {
     /// Get current guardian EBID (if any)
     pub fn get_current_guardian(&self) -> Option<String> {
         self.state.as_ref().map(|s| s.current_guardian_ebid.clone())
+    }
+
+    /// Get current guardian role state, if loaded
+    pub fn get_state(&self) -> Option<&GuardianRoleState> {
+        self.state.as_ref()
+    }
+
+    /// Check reachability based on last ping timestamp
+    pub fn is_guardian_reachable(&self, now: u64) -> bool {
+        self.state
+            .as_ref()
+            .map(|s| s.is_guardian_reachable(now))
+            .unwrap_or(false)
     }
 
     /// Set a new guardian

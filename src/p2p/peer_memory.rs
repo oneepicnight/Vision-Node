@@ -474,6 +474,11 @@ impl ConstellationMemory {
         Ok(())
     }
 
+    /// Get a snapshot of all peers (cloned) for migration/inspection
+    pub fn all_peers(&self) -> Vec<ConstellationPeerMemory> {
+        self.peers.values().cloned().collect()
+    }
+
     /// Get total count of known peers
     pub fn peer_count(&self) -> usize {
         self.peers.len()

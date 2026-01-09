@@ -11,6 +11,8 @@
 
 use serde::Deserialize;
 use tracing::{debug, info, warn};
+use std::sync::Arc;
+use crate::globals::{P2P_MANAGER, PEER_STORE_DB};
 
 /// Response from the bootstrap endpoint
 #[derive(Debug, Deserialize)]
@@ -353,7 +355,7 @@ async fn bootstrap_from_peer_book() -> Result<usize, String> {
     use super::peer_store::PeerStore;
 
     // Get global peer store DB
-    let db = crate::PEER_STORE_DB.clone();
+    let db = PEER_STORE_DB.clone();
 
     let store = PeerStore::new(&db).map_err(|e| format!("Failed to open peer store: {}", e))?;
 

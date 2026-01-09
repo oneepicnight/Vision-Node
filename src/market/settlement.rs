@@ -5,8 +5,9 @@ use crate::vision_constants;
 use anyhow::Result;
 
 /// Route exchange fee using new vault system
-/// Fee is charged in the quote asset and split 50/30/20 (Miners/DevOps/Founders)
-/// Also triggers land auto-buy cycle if enabled.
+/// Fee is charged in the quote asset and split 50/25/25 (Miners/Founder1/Founder2)
+/// DevOps gets ZERO crypto fees (they only participate in on-chain LAND revenue)
+/// Miners address is the AUTO-BUY HOT WALLET - triggers land auto-buy cycle if enabled.
 pub fn route_exchange_fee(quote: QuoteAsset, fee_amount: f64) -> Result<()> {
     // Get database from global chain context
     let db = {
@@ -26,20 +27,20 @@ pub fn route_exchange_fee(quote: QuoteAsset, fee_amount: f64) -> Result<()> {
     let miners_bal = store
         .get_bucket_balance(crate::vault::store::VaultBucket::Miners, quote)
         .unwrap_or(0);
-    let devops_bal = store
-        .get_bucket_balance(crate::vault::store::VaultBucket::DevOps, quote)
+    let founder1_bal = store
+        .get_bucket_balance(crate::vault::store::VaultBucket::Founder1, quote)
         .unwrap_or(0);
-    let founders_bal = store
-        .get_bucket_balance(crate::vault::store::VaultBucket::Founders, quote)
+    let founder2_bal = store
+        .get_bucket_balance(crate::vault::store::VaultBucket::Founder2, quote)
         .unwrap_or(0);
 
     tracing::info!(
-        "[VAULT] routed fee: asset={} amount={:.8} -> buckets: miners={} devops={} founders={} (50/30/20 split)",
+        "[VAULT] routed fee: asset={} amount={:.8} -> buckets: miners={} (50% auto-buy) founder1={} (25%) founder2={} (25%)",
         quote.as_str(),
         fee_amount,
         miners_bal,
-        devops_bal,
-        founders_bal
+        founder1_bal,
+        founder2_bal
     );
 
     // Trigger vault auto-buy cycle to convert external assets to LAND

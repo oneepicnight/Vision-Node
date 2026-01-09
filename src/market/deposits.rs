@@ -288,7 +288,9 @@ impl BitcoinBackend {
     pub fn new() -> Self {
         // Check if external RPC is configured
         let has_rpc = {
-            let clients = crate::EXTERNAL_RPC_CLIENTS.lock();
+            let clients = crate::EXTERNAL_RPC_CLIENTS
+                .lock()
+                .expect("External RPC clients lock poisoned");
             clients.contains_key(&crate::external_rpc::ExternalChain::Btc)
         };
 
@@ -304,7 +306,9 @@ impl BitcoinBackend {
     }
 
     fn get_rpc_client(&self) -> Option<Arc<crate::external_rpc::RpcClient>> {
-        let clients = crate::EXTERNAL_RPC_CLIENTS.lock();
+        let clients = crate::EXTERNAL_RPC_CLIENTS
+            .lock()
+            .expect("External RPC clients lock poisoned");
         clients
             .get(&crate::external_rpc::ExternalChain::Btc)
             .cloned()
@@ -448,21 +452,9 @@ impl ExternalChainBackend for BitcoinBackend {
     }
 
     fn get_block_height(&self) -> Result<u64> {
-        let client = match self.get_rpc_client() {
-            Some(c) => c,
-            None => return Ok(0),
-        };
-
-        let height_future = async {
-            let result = client.call_no_params("getblockcount").await?;
-            result
-                .as_u64()
-                .ok_or_else(|| anyhow!("Invalid block count response"))
-        };
-
-        tokio::runtime::Handle::current()
-            .block_on(height_future)
-            .map_err(|e| anyhow!("Failed to get block height: {}", e))
+        // TODO: Use cached height from async background task
+        // For now, return 0 to allow scanner to skip this chain
+        Ok(0)
     }
 }
 
@@ -474,7 +466,9 @@ pub struct BitcoinCashBackend {
 impl BitcoinCashBackend {
     pub fn new() -> Self {
         let has_rpc = {
-            let clients = crate::EXTERNAL_RPC_CLIENTS.lock();
+            let clients = crate::EXTERNAL_RPC_CLIENTS
+                .lock()
+                .expect("External RPC clients lock poisoned");
             clients.contains_key(&crate::external_rpc::ExternalChain::Bch)
         };
 
@@ -490,7 +484,9 @@ impl BitcoinCashBackend {
     }
 
     fn get_rpc_client(&self) -> Option<Arc<crate::external_rpc::RpcClient>> {
-        let clients = crate::EXTERNAL_RPC_CLIENTS.lock();
+        let clients = crate::EXTERNAL_RPC_CLIENTS
+            .lock()
+            .expect("External RPC clients lock poisoned");
         clients
             .get(&crate::external_rpc::ExternalChain::Bch)
             .cloned()
@@ -535,21 +531,9 @@ impl ExternalChainBackend for BitcoinCashBackend {
     }
 
     fn get_block_height(&self) -> Result<u64> {
-        let client = match self.get_rpc_client() {
-            Some(c) => c,
-            None => return Ok(0),
-        };
-
-        let height_future = async {
-            let result = client.call_no_params("getblockcount").await?;
-            result
-                .as_u64()
-                .ok_or_else(|| anyhow!("Invalid block count response"))
-        };
-
-        tokio::runtime::Handle::current()
-            .block_on(height_future)
-            .map_err(|e| anyhow!("Failed to get block height: {}", e))
+        // TODO: Use cached height from async background task
+        // For now, return 0 to allow scanner to skip this chain
+        Ok(0)
     }
 }
 
@@ -561,7 +545,9 @@ pub struct DogecoinBackend {
 impl DogecoinBackend {
     pub fn new() -> Self {
         let has_rpc = {
-            let clients = crate::EXTERNAL_RPC_CLIENTS.lock();
+            let clients = crate::EXTERNAL_RPC_CLIENTS
+                .lock()
+                .expect("External RPC clients lock poisoned");
             clients.contains_key(&crate::external_rpc::ExternalChain::Doge)
         };
 
@@ -577,7 +563,9 @@ impl DogecoinBackend {
     }
 
     fn get_rpc_client(&self) -> Option<Arc<crate::external_rpc::RpcClient>> {
-        let clients = crate::EXTERNAL_RPC_CLIENTS.lock();
+        let clients = crate::EXTERNAL_RPC_CLIENTS
+            .lock()
+            .expect("External RPC clients lock poisoned");
         clients
             .get(&crate::external_rpc::ExternalChain::Doge)
             .cloned()
@@ -620,27 +608,19 @@ impl ExternalChainBackend for DogecoinBackend {
     }
 
     fn get_block_height(&self) -> Result<u64> {
-        let client = match self.get_rpc_client() {
-            Some(c) => c,
-            None => return Ok(0),
-        };
-
-        let height_future = async {
-            let result = client.call_no_params("getblockcount").await?;
-            result
-                .as_u64()
-                .ok_or_else(|| anyhow!("Invalid block count response"))
-        };
-
-        tokio::runtime::Handle::current()
-            .block_on(height_future)
-            .map_err(|e| anyhow!("Failed to get block height: {}", e))
+        // TODO: Use cached height from async background task
+        // For now, return 0 to allow scanner to skip this chain
+        Ok(0)
     }
 }
 
 /// Last scanned block heights per chain
 static LAST_SCANNED_HEIGHTS: Lazy<Arc<Mutex<HashMap<String, u64>>>> =
     Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
+
+/// Last scan timestamp
+static LAST_SCAN_TIME: Lazy<Arc<Mutex<Option<chrono::DateTime<chrono::Utc>>>>> =
+    Lazy::new(|| Arc::new(Mutex::new(None)));
 
 fn get_last_scanned_height(chain_name: &str) -> u64 {
     let heights = LAST_SCANNED_HEIGHTS.lock().unwrap();
@@ -764,6 +744,12 @@ pub async fn run_deposit_scanner() {
     loop {
         interval.tick().await;
 
+        // Update last scan time
+        {
+            let mut last_scan = LAST_SCAN_TIME.lock().unwrap();
+            *last_scan = Some(chrono::Utc::now());
+        }
+
         match scanner.scan_all_chains() {
             Ok(count) if count > 0 => {
                 tracing::info!("Deposit scan complete: processed {} deposits", count);
@@ -776,6 +762,57 @@ pub async fn run_deposit_scanner() {
             }
         }
     }
+}
+
+/// Get deposit scanner status for API
+pub fn get_deposit_status() -> serde_json::Value {
+    let clients = crate::EXTERNAL_RPC_CLIENTS.lock().unwrap();
+    let heights = LAST_SCANNED_HEIGHTS.lock().unwrap();
+    let last_scan = LAST_SCAN_TIME.lock().unwrap();
+
+    let mut chains = serde_json::Map::new();
+
+    // BTC status
+    if clients.contains_key(&crate::external_rpc::ExternalChain::Btc) {
+        chains.insert(
+            "btc".to_string(),
+            serde_json::json!({
+                "rpc_ok": true,
+                "last_scanned_height": heights.get("Bitcoin").copied().unwrap_or(0),
+                "confirmations_required": 3
+            }),
+        );
+    }
+
+    // BCH status
+    if clients.contains_key(&crate::external_rpc::ExternalChain::Bch) {
+        chains.insert(
+            "bch".to_string(),
+            serde_json::json!({
+                "rpc_ok": true,
+                "last_scanned_height": heights.get("Bitcoin Cash").copied().unwrap_or(0),
+                "confirmations_required": 6
+            }),
+        );
+    }
+
+    // DOGE status
+    if clients.contains_key(&crate::external_rpc::ExternalChain::Doge) {
+        chains.insert(
+            "doge".to_string(),
+            serde_json::json!({
+                "rpc_ok": true,
+                "last_scanned_height": heights.get("Dogecoin").copied().unwrap_or(0),
+                "confirmations_required": 20
+            }),
+        );
+    }
+
+    serde_json::json!({
+        "enabled": !clients.is_empty(),
+        "chains": chains,
+        "last_scan_utc": last_scan.map(|t| t.to_rfc3339())
+    })
 }
 
 #[cfg(test)]

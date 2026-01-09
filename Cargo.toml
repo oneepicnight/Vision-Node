@@ -22,6 +22,7 @@ farm = []                 # Farm/rig control endpoints and state
 resilience = []           # Network topology/reputation experiments
 multi-currency = ["bitcoin", "bip32", "bitcoincore-rpc"]  # BTC/BCH/DOGE wallet support
 hwloc = ["hwloc2"]  # Advanced NUMA topology detection (optional)
+market-tests-disabled = []  # Disable market order book tests
 
 [dependencies]
 # async + web

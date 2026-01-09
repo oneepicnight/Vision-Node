@@ -1,39 +1,43 @@
 //! Stub implementation of node_approval module when staging feature is disabled
 //! Non-custodial: provides safe stubs, no signing/key operations
 
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default)]
 pub struct NodeApproval {
+    pub wallet_address: String,
     pub node_id: String,
-    pub approved: bool,
+    pub node_pubkey_b64: String,
+    pub ts_unix: u64,
+    pub nonce_hex: String,
+    pub signature_b64: String,
 }
 
 impl NodeApproval {
-    pub fn load(_node_id: &str) -> Result<Option<Self>, String> {
+    /// Mirror real signature; staging-off returns None
+    pub fn load() -> Result<Option<Self>, String> {
         Ok(None)
     }
 
-    pub fn save(&self) -> Result<(), String> {
-        Ok(())
+    /// Mirror real verify; always deny in staging-off builds
+    pub fn verify(&self, _node_id: &str, _node_pubkey: &str) -> Result<(), String> {
+        Err("node approval is disabled in this build".to_string())
+    }
+
+    /// Build canonical message (stubbed)
+    pub fn build_canonical_message(
+        _wallet_address: &str,
+        _node_id: &str,
+        _node_pubkey_b64: &str,
+        _ts_unix: u64,
+        _nonce_hex: &str,
+    ) -> String {
+        "VISION_NODE_APPROVAL_V1\nstub".to_string()
     }
 }
 
-impl Default for NodeApproval {
-    fn default() -> Self {
-        Self {
-            node_id: String::new(),
-            approved: false,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct ApprovalSubmitRequest {
-    pub node_id: String,
-}
-
-/// Stub build_canonical_message - returns empty/safe string
-pub fn build_canonical_message(_node_id: &str) -> String {
-    "canonical_message_stub".to_string()
+    pub wallet_address: String,
+    pub ts_unix: u64,
+    pub nonce_hex: String,
+    pub signature_b64: String,
 }

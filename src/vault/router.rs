@@ -19,6 +19,8 @@ impl VaultRouter {
     }
 
     /// Route an EXCHANGE fee into the vault balances (in the quote asset)
+    /// Split: 50% Miners (auto-buy hot wallet), 25% Founder1, 25% Founder2
+    /// DevOps gets ZERO crypto fees (they only participate in on-chain LAND revenue)
     pub fn route_exchange_fee(&self, asset: QuoteAsset, amount: f64) -> Result<()> {
         if amount == 0.0 {
             return Ok(());
@@ -26,27 +28,26 @@ impl VaultRouter {
 
         // Convert to u128 for split (assuming amounts in smallest units)
         let amount_units = (amount * 100_000_000.0) as u128;
-        let split = split_50_30_20(amount_units as u64);
-
-        // Convert u64 split results to u128
-        let miners_amount = split.miners as u128;
-        let devops_amount = split.devops as u128;
-        let founders_amount = split.founders as u128;
+        
+        // Split 50/25/25 (Miners/Founder1/Founder2)
+        let miners_amount = amount_units.saturating_mul(50) / 100;
+        let founder1_amount = amount_units.saturating_mul(25) / 100;
+        let founder2_amount = amount_units.saturating_sub(miners_amount + founder1_amount); // Remaining to avoid dust
 
         self.store
             .credit_vault(VaultBucket::Miners, asset, miners_amount)?;
         self.store
-            .credit_vault(VaultBucket::DevOps, asset, devops_amount)?;
+            .credit_vault(VaultBucket::Founder1, asset, founder1_amount)?;
         self.store
-            .credit_vault(VaultBucket::Founders, asset, founders_amount)?;
+            .credit_vault(VaultBucket::Founder2, asset, founder2_amount)?;
 
         tracing::info!(
-            "💰 Vault fee routed: asset={} total={:.8} miners={} devops={} founders={}",
+            "💰 Vault fee routed: asset={} total={:.8} → miners={} (50% auto-buy) founder1={} (25%) founder2={} (25%)",
             asset.as_str(),
             amount,
             miners_amount,
-            devops_amount,
-            founders_amount
+            founder1_amount,
+            founder2_amount
         );
 
         Ok(())

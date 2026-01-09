@@ -194,7 +194,7 @@ mod tests {
         // Foundation should get 1% + dust
         let foundation_payout = payouts
             .iter()
-            .find(|(addr, _)| addr == &crate::vision_constants::VAULT_ADDRESS)
+            .find(|(addr, _)| addr == &crate::vision_constants::vault_address())
             .map(|(_, amt)| *amt)
             .unwrap_or(0);
         assert!(

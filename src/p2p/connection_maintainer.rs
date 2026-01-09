@@ -15,6 +15,7 @@ use tracing::{debug, info, warn};
 
 use crate::p2p::p2p_config::SeedPeersConfig;
 use crate::p2p::peer_store::PeerStore;
+use crate::p2p::peer_connect_report::{PeerConnectReport, PeerConnectReason};
 
 /// Connection maintainer statistics
 #[derive(Debug, Clone, Default)]
@@ -24,6 +25,7 @@ pub struct MaintainerStats {
     pub store_peers_tried: u64,
     pub connections_established: u64,
     pub last_check_time: u64,
+    pub seed_cursor: usize, // Round-robin position in seed list
 }
 
 /// Run the connection maintainer loop
@@ -142,6 +144,11 @@ pub async fn run_connection_maintainer(
             .unwrap()
             .as_secs();
 
+        // Initialize connection report for this cycle
+        // Use peer store scope (matches chain scope)
+        let scope = peer_store.get_scope().to_string();
+        let mut report = PeerConnectReport::new(scope, cfg.max_outbound_connections);
+
         // Count currently connected peers AND peer store size
         let connected = count_connected_peers(&peer_store).await;
         let peer_store_count = peer_store.get_all().len();
@@ -158,6 +165,16 @@ pub async fn run_connection_maintainer(
                 connected,
                 peer_store_count
             );
+            
+            // Write report even when fully meshed
+            report.set_final_connected(connected);
+            if let Ok(data_dir) = std::path::PathBuf::from("./vision_data_7070").canonicalize() {
+                let public_dir = data_dir.join("public");
+                if let Err(e) = report.write_all(&public_dir) {
+                    warn!("[CONN_REPORT] Failed to write diagnostics: {}", e);
+                }
+            }
+            
             continue;
         }
 
@@ -168,6 +185,16 @@ pub async fn run_connection_maintainer(
                 cfg.max_outbound_connections,
                 peer_store_count - connected
             );
+            
+            // Write report
+            report.set_final_connected(connected);
+            if let Ok(data_dir) = std::path::PathBuf::from("./vision_data_7070").canonicalize() {
+                let public_dir = data_dir.join("public");
+                if let Err(e) = report.write_all(&public_dir) {
+                    warn!("[CONN_REPORT] Failed to write diagnostics: {}", e);
+                }
+            }
+            
             continue;
         }
 
@@ -194,168 +221,400 @@ pub async fn run_connection_maintainer(
             unconnected_peers, slots_available
         );
 
-        // Phase 1: Try all seeds first
-        info!(
-            "[CONN_MAINTAINER] 🌱 Trying {} seed peers",
-            cfg.seed_peers.len()
-        );
-        let mut dials_this_cycle = 0usize;
-        for seed_addr in &cfg.seed_peers {
-            if dials_this_cycle >= needed {
-                break;
-            }
-            stats.seeds_tried += 1;
-
-            // PATCH 3: Prefilter candidates before dialing
-            if !should_dial(seed_addr).await {
-                debug!("[DIAL] SKIP seed peer (prefilter): {}", seed_addr);
-                continue;
-            }
-
-            info!(
-                target: "p2p::connect",
-                seed = %seed_addr,
-                "Attempting seed connection (maintainer)"
-            );
-
-            let p2p_manager = std::sync::Arc::clone(&crate::P2P_MANAGER);
-            dials_this_cycle += 1;
-            match p2p_manager.connect_to_peer(seed_addr.clone()).await {
-                Ok(_) => {
-                    stats.connections_established += 1;
-                    info!("[CONN_MAINTAINER] ✅ Connected to seed: {}", seed_addr);
-
-                    // Check if we've reached max capacity
-                    let new_count = count_connected_peers(&peer_store).await;
-                    if new_count >= cfg.max_outbound_connections {
-                        info!(
-                            "[CONN_MAINTAINER] Max capacity reached: {} peers",
-                            new_count
-                        );
-                        break;
-                    }
-                }
-                Err(e) => {
-                    // PATCH 3: Only record failures for real dial attempts (not prefiltered ones)
-                    debug!(
-                        target: "p2p::connect",
-                        seed = %seed_addr,
-                        reason = %e,
-                        "Seed connection attempt failed"
-                    );
-                    crate::p2p::dial_tracker::record_dial_failure(
-                        seed_addr.clone(),
-                        e.to_string(),
-                        "seed".to_string(),
-                    );
-                }
-            }
+        // === SMART DIAL SELECTION WITH BACKOFF & ROTATION ===
+        
+        // Prepare seed candidates with round-robin rotation
+        let mut seeds = cfg.seed_peers.clone();
+        
+        // Start from seed_cursor (round-robin fairness)
+        if stats.seed_cursor >= seeds.len() && !seeds.is_empty() {
+            stats.seed_cursor = 0; // Wrap around
         }
-
-        // Check again after seed attempts - continue if not at max capacity
-        let connected_after_seeds = count_connected_peers(&peer_store).await;
-        if connected_after_seeds >= cfg.max_outbound_connections {
-            info!(
-                "[CONN_MAINTAINER] Max capacity reached after seed attempts: {} peers",
-                connected_after_seeds
-            );
-            continue;
+        
+        // Rotate seeds so we start from cursor position
+        if !seeds.is_empty() && stats.seed_cursor < seeds.len() {
+            seeds.rotate_left(stats.seed_cursor);
         }
-
-        // Phase 2: Try peers from peer store (sorted by health)
-        info!("[CONN_MAINTAINER] 📖 Trying peers from peer store");
+        
+        // Prepare peer store candidates (filtered and sorted by health)
         let store_peers = peer_store.get_all();
-
-        // Filter candidates and shuffle for round-robin rotation
+        let connected_peers = crate::P2P_MANAGER.get_peer_addresses().await;
+        
+        // Track already-connected peers in report
+        for connected_addr in &connected_peers {
+            if let Ok(sock_addr) = connected_addr.parse() {
+                report.add_reason(PeerConnectReason::AlreadyConnected, &sock_addr);
+            }
+        }
+        
         let mut candidates: Vec<_> = store_peers
             .into_iter()
             .filter(|p| {
                 // Only try peers with some health and a valid IP
-                p.health_score > 0 && p.ip_address.is_some()
+                if p.health_score == 0 || p.ip_address.is_none() {
+                    // Track peers with zero health
+                    if p.health_score == 0 {
+                        if let Some(ref addr) = p.ip_address {
+                            if let Ok(sock_addr) = addr.parse() {
+                                report.add_reason(PeerConnectReason::PeerUnhealthy, &sock_addr);
+                            }
+                        }
+                    }
+                    // Track peers with invalid addresses
+                    if p.ip_address.is_none() {
+                        // Can't add to report without address
+                    }
+                    return false;
+                }
+                // ✅ CRITICAL: Don't include already-connected peers in candidates
+                // This was wasting dial slots on "recent_success" peers we're already talking to
+                if let Some(ref addr) = p.ip_address {
+                    if connected_peers.iter().any(|c| c == addr) {
+                        return false;
+                    }
+                }
+                true
             })
             .collect();
 
-        // Shuffle candidates for fair round-robin selection instead of always picking highest health
-        // Keep the RNG in a tight scope so this future remains Send.
+        // Shuffle candidates for fair round-robin selection
         {
             use rand::seq::SliceRandom;
             let mut rng = rand::thread_rng();
             candidates.shuffle(&mut rng);
         }
 
-        // Then sort by health score descending (shuffle breaks ties)
+        // Sort by health score descending (shuffle breaks ties)
         candidates.sort_by(|a, b| b.health_score.cmp(&a.health_score));
 
-        let to_try = needed.saturating_sub(dials_this_cycle).max(0);
-        if to_try == 0 {
+        // === BACKOFF FILTERING ===
+        // Remove peers that are in cooldown or quarantined
+        let seeds_before_filter = seeds.len();
+        let peers_before_filter = candidates.len();
+        
+        seeds.retain(|addr| {
+            if crate::p2p::dial_tracker::is_peer_in_cooldown(addr) {
+                if let Some(backoff) = crate::p2p::dial_tracker::get_peer_backoff(addr) {
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs();
+                    debug!(
+                        "[BACKOFF] Skipping seed {} (cooldown: {}s remaining, streak: {})",
+                        addr,
+                        backoff.cooldown_remaining(now),
+                        backoff.fail_streak
+                    );
+                    
+                    // Record in report
+                    if let Ok(sock_addr) = addr.parse() {
+                        report.add_reason(PeerConnectReason::CooldownActive, &sock_addr);
+                    }
+                }
+                return false;
+            }
+            if crate::p2p::dial_tracker::should_quarantine_peer(addr) {
+                debug!("[QUARANTINE] Skipping seed {} (quarantined)", addr);
+                if let Ok(sock_addr) = addr.parse() {
+                    report.add_reason(PeerConnectReason::PeerBanned, &sock_addr);
+                }
+                return false;
+            }
+            true
+        });
+        
+        candidates.retain(|p| {
+            if let Some(ref addr) = p.ip_address {
+                if crate::p2p::dial_tracker::is_peer_in_cooldown(addr) {
+                    if let Ok(sock_addr) = addr.parse() {
+                        report.add_reason(PeerConnectReason::CooldownActive, &sock_addr);
+                    }
+                    return false;
+                }
+                if crate::p2p::dial_tracker::should_quarantine_peer(addr) {
+                    if let Ok(sock_addr) = addr.parse() {
+                        report.add_reason(PeerConnectReason::PeerBanned, &sock_addr);
+                    }
+                    return false;
+                }
+            }
+            true
+        });
+        
+        let seeds_skipped = seeds_before_filter.saturating_sub(seeds.len());
+        let peers_skipped = peers_before_filter.saturating_sub(candidates.len());
+        
+        // Calculate dial limit for this cycle
+        let dial_limit = slots_available.min(MAX_NEW_DIALS_PER_CYCLE).max(1);
+        
+        // === COMPREHENSIVE CYCLE LOGGING ===
+        info!(
+            "[DIAL_CYCLE] 📊 Seeds: {}/{} available ({} in cooldown), PeerStore: {}/{} available ({} in cooldown), Slots: {}, Will attempt: {}",
+            seeds.len(),
+            seeds_before_filter,
+            seeds_skipped,
+            candidates.len(),
+            peers_before_filter,
+            peers_skipped,
+            slots_available,
+            dial_limit
+        );
+        
+        // Log first 5 chosen peers with selection reason
+        let mut chosen_preview: Vec<String> = Vec::new();
+        for (idx, seed) in seeds.iter().take(5).enumerate() {
+            chosen_preview.push(format!("{}. {} (seed_rotation)", idx + 1, seed));
+        }
+        for (idx, peer) in candidates.iter().take(5 - chosen_preview.len().min(5)).enumerate() {
+            if let Some(ref addr) = peer.ip_address {
+                let reason = if peer.health_score >= 80 {
+                    "high_health"
+                } else if crate::p2p::dial_tracker::get_peer_backoff(addr)
+                    .map(|b| b.total_successes > 0)
+                    .unwrap_or(false)
+                {
+                    "recent_success"
+                } else {
+                    "new_peer"
+                };
+                chosen_preview.push(format!(
+                    "{}. {} ({})",
+                    chosen_preview.len() + 1,
+                    peer.node_tag,
+                    reason
+                ));
+            }
+        }
+        
+        if !chosen_preview.is_empty() {
+            info!("[DIAL_CYCLE] 🎯 Top candidates:\n{}", chosen_preview.join("\n"));
+        }
+
+        // Interleave: Try 2 seeds, then 2 peer store peers, repeat
+        let mut seed_idx = 0;
+        let mut peer_idx = 0;
+        let mut dials_this_cycle = 0usize;
+        let mut successful_connections = 0;
+        
+        while dials_this_cycle < dial_limit {
+            let mut made_attempt = false;
+            
+            // Try 2 seeds
+            for _ in 0..2 {
+                if seed_idx >= seeds.len() || dials_this_cycle >= dial_limit {
+                    break;
+                }
+                
+                let seed_addr = &seeds[seed_idx];
+                seed_idx += 1;
+                stats.seeds_tried += 1;
+
+                // Skip seeds in cooldown
+                if is_seed_in_cooldown(seed_addr) {
+                    debug!("[BOOTSTRAP] ⏳ Skipping seed in cooldown: {}", seed_addr);
+                    continue;
+                }
+
+                // Prefilter candidates
+                if !should_dial(seed_addr).await {
+                    debug!("[DIAL] SKIP seed peer (prefilter): {}", seed_addr);
+                    continue;
+                }
+
+                info!(
+                    "[BOOTSTRAP] 🔁 Trying seed {}/{}: {}",
+                    seed_idx,
+                    seeds.len(),
+                    seed_addr
+                );
+
+                let p2p_manager = std::sync::Arc::clone(&crate::P2P_MANAGER);
+                dials_this_cycle += 1;
+                made_attempt = true;
+                report.record_attempt();
+                
+                match p2p_manager.connect_to_peer(seed_addr.clone()).await {
+                    Ok(_) => {
+                        stats.connections_established += 1;
+                        successful_connections += 1;
+                        report.record_connected();
+                        info!("[CONN_MAINTAINER] ✅ Connected to seed: {}", seed_addr);
+                        
+                        // Record success in backoff tracker (resets fail streak)
+                        crate::p2p::dial_tracker::record_dial_success(seed_addr.clone());
+                        
+                        // Advance seed cursor for round-robin fairness
+                        stats.seed_cursor = (stats.seed_cursor + 1) % seeds_before_filter.max(1);
+
+                        // Check if we've reached max capacity
+                        let new_count = count_connected_peers(&peer_store).await;
+                        if new_count >= cfg.max_outbound_connections {
+                            info!(
+                                "[CONN_MAINTAINER] Max capacity reached: {} peers",
+                                new_count
+                            );
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        debug!(
+                            target: "p2p::connect",
+                            seed = %seed_addr,
+                            reason = %e,
+                            "Seed connection attempt failed"
+                        );
+                        
+                        // Record failure reason in report
+                        if let Ok(sock_addr) = seed_addr.parse() {
+                            let reason = classify_dial_error(&e.to_string());
+                            report.add_reason(reason, &sock_addr);
+                        }
+                        
+                        crate::p2p::dial_tracker::record_dial_failure(
+                            seed_addr.clone(),
+                            e.to_string(),
+                            "seed".to_string(),
+                        );
+                    }
+                }
+            }
+            
+            // Try 2 peer store peers
+            for _ in 0..2 {
+                if peer_idx >= candidates.len() || dials_this_cycle >= dial_limit {
+                    break;
+                }
+                
+                let peer = &candidates[peer_idx];
+                peer_idx += 1;
+                stats.store_peers_tried += 1;
+
+                let addr = match peer.ip_address {
+                    Some(ref a) => a.clone(),
+                    None => continue,
+                };
+
+                // Prefilter candidates
+                if !should_dial(&addr).await {
+                    debug!(
+                        "[DIAL] SKIP peer book entry (prefilter): {} ({})",
+                        peer.node_tag, addr
+                    );
+                    continue;
+                }
+
+                info!(
+                    target: "p2p::connect",
+                    peer = %peer.node_tag,
+                    addr = %addr,
+                    health = peer.health_score,
+                    "Attempting stored peer connection (maintainer)"
+                );
+
+                let p2p_manager = std::sync::Arc::clone(&crate::P2P_MANAGER);
+                dials_this_cycle += 1;
+                made_attempt = true;
+                report.record_attempt();
+                
+                match p2p_manager.connect_to_peer(addr.clone()).await {
+                    Ok(_) => {
+                        stats.connections_established += 1;
+                        successful_connections += 1;
+                        report.record_connected();
+                        info!(
+                            "[CONN_MAINTAINER] ✅ Connected to stored peer: {}",
+                            peer.node_tag
+                        );
+                        
+                        // Record success in backoff tracker (resets fail streak)
+                        crate::p2p::dial_tracker::record_dial_success(addr.clone());
+
+                        let new_count = count_connected_peers(&peer_store).await;
+                        if new_count >= cfg.max_outbound_connections {
+                            info!(
+                                "[CONN_MAINTAINER] Max capacity reached: {} peers",
+                                new_count
+                            );
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        debug!(
+                            target: "p2p::connect",
+                            peer = %peer.node_tag,
+                            addr = %addr,
+                            reason = %e,
+                            "Stored peer connection attempt failed"
+                        );
+                        
+                        // Record failure reason in report
+                        if let Ok(sock_addr) = addr.parse() {
+                            let reason = classify_dial_error(&e.to_string());
+                            report.add_reason(reason, &sock_addr);
+                        }
+                        
+                        crate::p2p::dial_tracker::record_dial_failure(
+                            addr.clone(),
+                            e.to_string(),
+                            "peer_book".to_string(),
+                        );
+                    }
+                }
+            }
+            
+            // If we've exhausted both seeds and peers, break
+            if !made_attempt && seed_idx >= seeds.len() && peer_idx >= candidates.len() {
+                break;
+            }
+        }
+
+        // Check if we've reached max capacity after all attempts
+        let connected_after_attempts = count_connected_peers(&peer_store).await;
+        if connected_after_attempts >= cfg.max_outbound_connections {
+            info!(
+                "[CONN_MAINTAINER] Max capacity reached: {} peers",
+                connected_after_attempts
+            );
             continue;
         }
 
-        for peer in candidates.into_iter().take(to_try) {
-            stats.store_peers_tried += 1;
-
-            let addr = match peer.ip_address {
-                Some(ref a) => a.clone(),
-                None => continue,
-            };
-
-            // PATCH 3: Prefilter candidates before dialing
-            if !should_dial(&addr).await {
-                debug!(
-                    "[DIAL] SKIP peer book entry (prefilter): {} ({})",
-                    peer.node_tag, addr
-                );
-                continue;
-            }
-
-            info!(
-                target: "p2p::connect",
-                peer = %peer.node_tag,
-                addr = %addr,
-                health = peer.health_score,
-                "Attempting stored peer connection (maintainer)"
-            );
-
-            let p2p_manager = std::sync::Arc::clone(&crate::P2P_MANAGER);
-            dials_this_cycle = dials_this_cycle.saturating_add(1);
-            match p2p_manager.connect_to_peer(addr.clone()).await {
-                Ok(_) => {
-                    stats.connections_established += 1;
-                    info!(
-                        "[CONN_MAINTAINER] ✅ Connected to stored peer: {}",
-                        peer.node_tag
-                    );
-
-                    let new_count = count_connected_peers(&peer_store).await;
-                    if new_count >= cfg.max_outbound_connections {
-                        info!(
-                            "[CONN_MAINTAINER] Max capacity reached: {} peers",
-                            new_count
-                        );
-                        break;
-                    }
-                }
-                Err(e) => {
-                    // PATCH 3: Only record failures for real dial attempts (not prefiltered ones)
-                    debug!(
-                        target: "p2p::connect",
-                        peer = %peer.node_tag,
-                        addr = %addr,
-                        reason = %e,
-                        "Stored peer connection attempt failed"
-                    );
-                    crate::p2p::dial_tracker::record_dial_failure(
-                        addr.clone(),
-                        e.to_string(),
-                        "peer_book".to_string(),
-                    );
-                }
-            }
-        }
-
+        // Phase 2 is now integrated above with seeds (interleaved)
+        
         let final_count = count_connected_peers(&peer_store).await;
         let final_store_count = peer_store.get_all().len();
         let unconnected = final_store_count.saturating_sub(final_count);
+        
+        // Update report with final counts
+        report.set_final_connected(final_count);
+        
+        // === CYCLE SUMMARY ===
+        info!(
+            "[CYCLE_SUMMARY] 📊 Attempted: {}, Connected: {}, Skipped cooldown: {} seeds + {} peers, Final: {}/{} peers",
+            dials_this_cycle,
+            successful_connections,
+            seeds_skipped,
+            peers_skipped,
+            final_count,
+            cfg.max_outbound_connections
+        );
+
+        // Write connection diagnostics report
+        if let Ok(data_dir) = std::path::PathBuf::from("./vision_data_7070").canonicalize() {
+            let public_dir = data_dir.join("public");
+            match report.write_all(&public_dir) {
+                Ok(()) => {
+                    debug!(
+                        "[CONN_REPORT] ✅ Wrote diagnostics to {}",
+                        public_dir.display()
+                    );
+                }
+                Err(e) => {
+                    warn!("[CONN_REPORT] Failed to write diagnostics: {}", e);
+                }
+            }
+        } else {
+            debug!("[CONN_REPORT] Could not resolve vision_data_7070 path for diagnostics");
+        }
 
         if final_count < cfg.min_outbound_connections {
             warn!(
@@ -422,6 +681,22 @@ async fn is_already_connected(_peer_store: &Arc<PeerStore>, addr: &str) -> bool 
 /// - Already connected
 /// - Port is invalid (0)
 /// - IP failed validation for dialing
+/// Check if a seed is in cooldown period (recently failed)
+fn is_seed_in_cooldown(addr: &str) -> bool {
+    let failures = crate::p2p::dial_tracker::get_dial_failures();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    
+    // 60-second cooldown for failed seeds
+    const COOLDOWN_SECONDS: u64 = 60;
+    
+    failures.iter().any(|f| {
+        f.addr == addr && (now - f.timestamp_unix < COOLDOWN_SECONDS)
+    })
+}
+
 async fn should_dial(addr: &str) -> bool {
     use std::net::SocketAddr;
 
@@ -445,9 +720,21 @@ async fn should_dial(addr: &str) -> bool {
         return false;
     }
 
-    // Skip loopback (self)
+    // Skip loopback (self) unless in local test mode
     if socket_addr.ip().is_loopback() {
-        return false;
+        // Allow loopback in local test mode for testing
+        let allow_loopback = std::env::var("VISION_LOCAL_TEST")
+            .ok()
+            .map(|v| v == "1" || v.to_lowercase() == "true")
+            .unwrap_or(false)
+            || std::env::var("VISION_ALLOW_PRIVATE_PEERS")
+                .ok()
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(false);
+        
+        if !allow_loopback {
+            return false;
+        }
     }
 
     // Skip if already connected
@@ -476,4 +763,29 @@ async fn should_dial(addr: &str) -> bool {
     }
 
     true
+}
+
+/// Classify dial error into a reason category
+fn classify_dial_error(error: &str) -> PeerConnectReason {
+    let lower = error.to_lowercase();
+    
+    if lower.contains("timeout") || lower.contains("timed out") {
+        PeerConnectReason::DialTimeout
+    } else if lower.contains("refused") || lower.contains("connection refused") {
+        PeerConnectReason::DialRefused
+    } else if lower.contains("no route") || lower.contains("unreachable") {
+        PeerConnectReason::NoRouteToHost
+    } else if lower.contains("handshake") && lower.contains("timeout") {
+        PeerConnectReason::HandshakeTimeout
+    } else if lower.contains("incompatible") || lower.contains("chain") {
+        PeerConnectReason::HandshakeFailed_IncompatibleChain
+    } else if lower.contains("version") {
+        PeerConnectReason::HandshakeFailed_Version
+    } else if lower.contains("chain_id") || lower.contains("chainid") {
+        PeerConnectReason::HandshakeFailed_ChainId
+    } else if lower.contains("handshake") {
+        PeerConnectReason::HandshakeFailed_Other
+    } else {
+        PeerConnectReason::DialError
+    }
 }

@@ -130,8 +130,8 @@ async fn purchase_deed_handler(
     // Check if buyer already owns a deed (one-deed-per-wallet rule)
     if land_deeds::wallet_has_deed(&state.db, &buyer) {
         let existing_deed = land_deeds::get_owned_deed_id(&state.db, &buyer)
-            .map(|id| format!("{}", id))
-            .unwrap_or_else(|| "unknown".to_string());
+            .map(|id| format!("{:?}", id))
+            .unwrap_or_else(|_| "unknown".to_string());
         let msg = format!(
             "Buyer {} already owns deed {}. One deed per wallet enforced.",
             &buyer, existing_deed

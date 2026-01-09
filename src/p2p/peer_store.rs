@@ -488,6 +488,11 @@ impl PeerStore {
         Ok(Self { db: tree, scope })
     }
 
+    /// Get the scope/network identifier for this peer store
+    pub fn get_scope(&self) -> &str {
+        &self.scope
+    }
+
     /// Generate scope-prefixed key for peer storage
     fn scoped_key(&self, key: &str) -> String {
         format!("{}|{}", self.scope, key)
@@ -1018,6 +1023,16 @@ impl PeerStore {
     /// Mark peer failure by node_id
     pub fn mark_peer_failure(&self, node_id: &str, now: u64) -> Result<()> {
         if let Some(mut peer) = self.get(node_id) {
+            // PATCH 2: Do not mark failure or evict if peer is already connected
+            // This prevents false timeout errors (after successful handshake) from evicting good peers
+            if peer.connection_status == "connected" {
+                debug!(
+                    "[PEER BOOK] Ignoring failure for connected peer {} (status={})",
+                    peer.node_tag, peer.connection_status
+                );
+                return Ok(());
+            }
+
             peer.mark_failure(now);
 
             // Hard evict if health/failures exceed limits

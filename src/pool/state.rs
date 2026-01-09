@@ -47,7 +47,7 @@ impl Default for PoolConfig {
         Self {
             pool_fee_bps: 150,       // 1.5% pool fee
             foundation_fee_bps: 100, // 1% foundation fee
-            foundation_address: crate::vision_constants::VAULT_ADDRESS.to_string(),
+            foundation_address: crate::vision_constants::vault_address(),
             host_address: String::new(),
             pool_name: "Unnamed Pool".to_string(),
             pool_port: 7072,              // Default pool port (7072 or 8082)

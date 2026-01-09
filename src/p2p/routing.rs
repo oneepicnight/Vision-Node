@@ -369,10 +369,10 @@ pub fn select_relay_targets_with_learning(
         let mut used_indices = std::collections::HashSet::new();
 
         for _ in 0..explore_count.min(remaining.len()) {
-            // rand 0.7 API: gen_range(low, high) not gen_range(low..high)
-            let mut idx = rng.gen_range(0, remaining.len());
+            // rand 0.8 API: gen_range(low..high)
+            let mut idx = rng.gen_range(0..remaining.len());
             while used_indices.contains(&idx) && used_indices.len() < remaining.len() {
-                idx = rng.gen_range(0, remaining.len());
+                idx = rng.gen_range(0..remaining.len());
             }
             used_indices.insert(idx);
             explore_peers.push(remaining[idx].clone());

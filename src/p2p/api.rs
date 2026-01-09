@@ -18,6 +18,7 @@ use crate::p2p::peer_manager::{PeerBucket, PeerManager, PeerState};
 use crate::p2p::upnp::UPNP_SUCCESS;
 use crate::CHAIN;
 use std::sync::atomic::Ordering;
+use crate::globals::EBID_MANAGER; // Import EBID_MANAGER from globals
 
 /// P2P API state with health monitoring
 #[derive(Clone)]
@@ -217,7 +218,7 @@ pub async fn get_constellation_status(State(state): State<Arc<P2PApiState>>) -> 
 
     // Get local EBID from EBID manager
     let local_ebid = {
-        let ebid_mgr = crate::EBID_MANAGER.lock();
+        let ebid_mgr = EBID_MANAGER.lock();
         ebid_mgr.get_ebid().to_string()
     };
 

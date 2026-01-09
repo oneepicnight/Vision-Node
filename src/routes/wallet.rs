@@ -273,7 +273,7 @@ mod tests {
             "amount": 1000u128.to_string(),
             "fee": 1u128.to_string(),
             "nonce": 1u64,
-            "public_key": hex::encode(legit_kp.public.as_bytes()),
+            "public_key": hex::encode(legit_kp.verifying_key().as_bytes()),
         });
 
         // Sign message with wrong key
@@ -335,7 +335,7 @@ mod tests {
             memo: None,
             signature: String::new(),
             nonce: 1u64,
-            public_key: hex::encode(legit_kp.public.as_bytes()),
+            public_key: hex::encode(legit_kp.verifying_key().as_bytes()),
         };
         // Sign with wrong key
         let mut sign_msg = Vec::new();

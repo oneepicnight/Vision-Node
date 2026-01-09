@@ -467,7 +467,15 @@ impl Default for AutoSyncConfig {
 ///
 /// It only checks: "Is there a taller compatible chain?" → "Sync to it."
 pub fn spawn_auto_sync_task(config: AutoSyncConfig) {
+    tracing::warn!(
+        "[AUTO-SYNC] 🚀 SPAWNING AUTO-SYNC TASK! poll_interval={}s max_lag={}",
+        config.poll_interval_secs,
+        config.max_lag_before_sync
+    );
+    
     tokio::spawn(async move {
+        tracing::warn!("[AUTO-SYNC] 🔄 AUTO-SYNC LOOP STARTED!");
+        
         loop {
             if let Err(e) = auto_sync_step(&config).await {
                 tracing::warn!("AUTO-SYNC error: {:?}", e);
@@ -479,15 +487,45 @@ pub fn spawn_auto_sync_task(config: AutoSyncConfig) {
 }
 
 /// Single auto-sync check: compare local vs remote height, sync if needed
+/// 
+/// SYNC GATE: Only requires 1 peer minimum (separate from mining gate of 3)
+/// Sync is how you earn readiness - allow it to start with minimal connectivity.
 async fn auto_sync_step(config: &AutoSyncConfig) -> anyhow::Result<()> {
+    // 0) Check if we have minimum peers for sync (1 peer minimum)
+    let connected_peers = crate::globals::P2P_MANAGER.clone_inner().try_get_peer_count();
+    
+    tracing::warn!(
+        "[AUTO-SYNC-TICK] ⏰ Sync check running: connected_peers={} min_required={}",
+        connected_peers,
+        crate::mining_readiness::MIN_PEERS_FOR_SYNC
+    );
+    
+    if connected_peers < crate::mining_readiness::MIN_PEERS_FOR_SYNC as usize {
+        tracing::debug!(
+            "[SYNC-GATE] Waiting for minimum peers: have={} need={}",
+            connected_peers,
+            crate::mining_readiness::MIN_PEERS_FOR_SYNC
+        );
+        return Ok(());
+    }
+    
     // 1) Get best remote height from peer manager
+    tracing::warn!("[AUTO-SYNC-TICK] 🔍 Querying PEER_MANAGER.best_remote_height()...");
     let best_remote = crate::PEER_MANAGER.best_remote_height().await;
+
+    tracing::warn!(
+        "[AUTO-SYNC-TICK] 📊 PEER_MANAGER returned: {:?}",
+        best_remote
+    );
 
     let best_remote = match best_remote {
         Some(h) => h,
         None => {
-            // No peers with known height yet
-            tracing::debug!("AUTO-SYNC: no peers with known height");
+            // No peers with known height yet - THIS IS THE PROBLEM!
+            tracing::warn!(
+                "[AUTO-SYNC] ⚠️ NO PEER HEIGHTS KNOWN! connected_peers={} but best_remote_height=None. Peers may not be reporting heights in handshake.",
+                connected_peers
+            );
             return Ok(());
         }
     };
@@ -547,6 +585,35 @@ async fn auto_sync_step(config: &AutoSyncConfig) -> anyhow::Result<()> {
     }
 
     // 6) We're behind! Trigger sync
+    // Get best peer info for diagnostic logging
+    let best_peer_addr = {
+        let peers = crate::PEER_MANAGER.connected_peers().await;
+        peers
+            .iter()
+            .filter_map(|p| p.height.map(|h| (format!("{}:{}", p.ip, p.port), h)))
+            .max_by_key(|(_, h)| *h)
+            .map(|(addr, _)| addr)
+            .unwrap_or_else(|| "unknown".to_string())
+    };
+
+    tracing::warn!(
+        "[SYNC_DECISION] local={} best_peer={} peer_h={} behind_by={} action=START_SYNC",
+        local_height,
+        best_peer_addr,
+        best_remote,
+        lag
+    );
+
+    // CRITICAL: Stop miner BEFORE sync attempt (not after)
+    // Don't waste CPU mining wrong fork during fork detection + sync
+    tracing::warn!(
+        "[AUTO-SYNC] ⏸️  STOPPING MINER: Mining paused during sync (local={}, network={})",
+        local_height,
+        best_remote
+    );
+    crate::ACTIVE_MINER.stop();
+    crate::ACTIVE_MINER.clear_job();
+
     tracing::info!(
         "AUTO-SYNC: behind by {} blocks (local={}, remote={}), starting catch-up",
         lag,
@@ -554,76 +621,326 @@ async fn auto_sync_step(config: &AutoSyncConfig) -> anyhow::Result<()> {
         best_remote
     );
 
-    // 7) Perform chain catchup via HTTP /sync/pull (uses existing sync logic)
+    // 7) Perform chain catchup via P2P messages over port 7072 (NOT localhost HTTP!)
     perform_chain_catchup(local_height, best_remote).await?;
 
     Ok(())
 }
 
-/// Trigger chain catchup by calling existing /sync/pull endpoint
+/// Trigger chain catchup using P2P messages (NOT HTTP!)
+/// This uses the P2P protocol over port 7072, not HTTP over localhost:7070
 async fn perform_chain_catchup(local_height: u64, target_height: u64) -> anyhow::Result<()> {
-    let my_port = local_port();
-    let url = format!("http://127.0.0.1:{}/sync/pull", my_port);
-
-    // Get peers from P2P manager
-    let peers_url = format!("http://127.0.0.1:{}/peers", my_port);
-    let peers: Vec<String> = match HTTP.get(&peers_url).send().await {
-        Ok(resp) => match resp.json::<serde_json::Value>().await {
-            Ok(v) => v
-                .get("peers")
-                .and_then(|x| x.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|s| s.as_str().map(|t| t.to_string()))
-                        .collect()
-                })
-                .unwrap_or_default(),
-            Err(_) => vec![],
-        },
-        Err(_) => vec![],
-    };
-
+    // Get connected peers with their heights from PEER_MANAGER
+    let peers = crate::PEER_MANAGER.connected_peers().await;
+    
     if peers.is_empty() {
         return Err(anyhow::anyhow!("no peers available for sync"));
     }
 
-    // Try to sync from any peer
-    for peer_url in peers {
-        let body = json!({
-            "src": peer_url,
-            "from": local_height + 1,
-            "to": target_height
-        });
+    // 🎯 SMART PEER SELECTION: Pick peer with highest advertised height
+    // Filter out:
+    // 1. Peers with height <= local_height (they're behind us or stale)
+    // 2. Peers at height=1 on mainnet (fake seeds, not real sync sources)
+    // 3. Peers with no known height
+    let mut viable_peers: Vec<_> = peers
+        .iter()
+        .filter(|p| {
+            if let Some(h) = p.height {
+                // On mainnet, reject height=1 peers as sync sources
+                // (they're either stale seeds or fresh nodes, not helpful)
+                if h <= 1 && local_height > 1 {
+                    tracing::debug!(
+                        "[SYNC-FILTER] Rejecting peer {}:{} with height={} (below local={}, likely stale seed)",
+                        p.ip,
+                        p.port,
+                        h,
+                        local_height
+                    );
+                    return false;
+                }
+                // Only accept peers ahead of us
+                h > local_height
+            } else {
+                false // No known height = not viable
+            }
+        })
+        .collect();
 
-        match HTTP.post(&url).json(&body).send().await {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    if let Ok(result) = resp.json::<serde_json::Value>().await {
-                        if let Some(pulled) = result.get("pulled").and_then(|p| p.as_u64()) {
-                            if pulled > 0 {
-                                tracing::info!(
-                                    "AUTO-SYNC: pulled {} blocks from {}",
-                                    pulled,
-                                    peer_url
-                                );
-                                return Ok(());
-                            }
-                        }
-                    }
+    if viable_peers.is_empty() {
+        // No peer is ahead of us
+        tracing::warn!(
+            "[SYNC-PEER-CHOICE] local={} best_seen={} picked=NONE reason=no_peers_ahead_of_us",
+            local_height,
+            target_height
+        );
+        return Err(anyhow::anyhow!("no peers ahead of local height"));
+    }
+
+    // Sort by height descending (highest first)
+    viable_peers.sort_by(|a, b| {
+        let h_a = a.height.unwrap_or(0);
+        let h_b = b.height.unwrap_or(0);
+        h_b.cmp(&h_a) // Descending
+    });
+
+    // Pick the peer with the highest height
+    let best_peer = viable_peers[0];
+    let picked_height = best_peer.height.unwrap_or(0);
+    let picked_addr = format!("{}:{}", best_peer.ip, best_peer.port);
+    
+    // 📖 SMOKING GUN LOG: Show exactly what we're doing
+    tracing::info!(
+        "[SYNC-PEER-CHOICE] local={} best_seen={} picked={} picked_height={} reason=highest_height viable_peers={}",
+        local_height,
+        target_height,
+        picked_addr,
+        picked_height,
+        viable_peers.len()
+    );
+
+    // 🚀 P2P-BASED SYNC: Request blocks via P2P messages (port 7072)
+    // Try best peer first, then fallback to others if it fails
+    for (idx, peer) in viable_peers.iter().enumerate() {
+        let peer_height = peer.height.unwrap_or(0);
+        let peer_addr = format!("{}:{}", peer.ip, peer.port);
+        
+        // 🔍 FORK SAFETY: Verify peer's chain matches ours before sync
+        // Find common ancestor to avoid plugging Ford alternator into Chevy engine
+        let common_ancestor = match find_common_ancestor(&peer_addr, local_height).await {
+            Ok(height) => height,
+            Err(e) => {
+                tracing::warn!(
+                    "[SYNC-FORK] Failed to find common ancestor with {}: {}",
+                    peer_addr,
+                    e
+                );
+                continue; // Try next peer
+            }
+        };
+        
+        if common_ancestor < local_height {
+            tracing::warn!(
+                "[SYNC-FORK] Peer {} diverged at height {} (local={}), need reorg first",
+                peer_addr,
+                common_ancestor,
+                local_height
+            );
+            // TODO: Trigger reorg to common ancestor, then sync forward
+            // For now, skip this peer and try others
+            continue;
+        }
+        
+        tracing::info!(
+            "[SYNC] -> P2P_SYNC peer={} from_height={} to_height={} (using P2P messages over port 7072)",
+            peer_addr,
+            local_height + 1,
+            target_height
+        );
+        
+        tracing::debug!(
+            "[SYNC] Attempting peer {}/{}: {} (height={})",
+            idx + 1,
+            viable_peers.len(),
+            peer_addr,
+            peer_height
+        );
+
+        // Use P2P GetBlocks message (compatible with old peers)
+        let msg = crate::p2p::connection::P2PMessage::GetBlocks {
+            start_height: local_height + 1,
+            end_height: target_height.min(local_height + 100), // Batch size: 100 blocks max
+        };
+
+        // Send via P2P connection manager
+        match crate::P2P_MANAGER.send_to_peer(&peer_addr, msg).await {
+            Ok(()) => {
+                tracing::info!(
+                    "[SYNC] ✅ P2P sync request sent to {} (height={}), waiting for blocks...",
+                    peer_addr,
+                    peer_height
+                );
+                
+                // Wait for blocks to arrive (they'll be processed by the P2PMessage::Blocks handler)
+                // Give it 10 seconds to start receiving blocks
+                tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+                
+                // Check if we made progress
+                let new_height = {
+                    let chain = crate::CHAIN.lock();
+                    chain.blocks.len() as u64
+                };
+                
+                if new_height > local_height {
+                    let pulled = new_height - local_height;
+                    tracing::info!(
+                        "[AUTO-SYNC] ✅ Pulled {} blocks via P2P from {} (new_height={})",
+                        pulled,
+                        peer_addr,
+                        new_height
+                    );
+                    return Ok(());
+                } else {
+                    tracing::warn!(
+                        "[AUTO-SYNC] ⚠️ No blocks received from {} after 10s, trying next peer",
+                        peer_addr
+                    );
                 }
             }
             Err(e) => {
-                tracing::debug!("AUTO-SYNC: failed to sync from {}: {:?}", peer_url, e);
+                tracing::debug!(
+                    "[AUTO-SYNC] ❌ Failed to send P2P sync request to {} (height={}): {}",
+                    peer_addr,
+                    peer_height,
+                    e
+                );
                 continue;
             }
         }
     }
 
-    Err(anyhow::anyhow!("failed to sync from any peer"))
+    Err(anyhow::anyhow!("failed to sync from any viable peer via P2P"))
 }
 
 /// Legacy function - kept for backward compatibility
 /// Calls the new spawn_auto_sync_task() with default config
 pub fn start_autosync() {
     spawn_auto_sync_task(AutoSyncConfig::default());
+}
+
+/// Find common ancestor height with peer using binary search
+/// Returns the highest height where both our chain and peer's chain agree
+async fn find_common_ancestor(peer_addr: &str, our_height: u64) -> anyhow::Result<u64> {
+    // Quick check: does peer agree on our current tip?
+    let our_tip_hash = {
+        let chain = crate::CHAIN.lock();
+        if our_height == 0 || our_height as usize > chain.blocks.len() {
+            return Err(anyhow::anyhow!("invalid local height"));
+        }
+        let idx = (our_height - 1) as usize;
+        chain.blocks.get(idx)
+            .map(|b| crate::canon_hash(&b.header.pow_hash))
+            .ok_or_else(|| anyhow::anyhow!("local tip not found"))?
+    };
+    
+    // Request peer's hash at our height
+    tracing::debug!(
+        "[SYNC-FORK] Requesting hash at height {} from peer {}",
+        our_height,
+        peer_addr
+    );
+    let msg = crate::p2p::connection::P2PMessage::GetBlockHash { height: our_height };
+    crate::P2P_MANAGER.send_to_peer(peer_addr, msg).await
+        .map_err(|e| anyhow::anyhow!("send_to_peer failed: {}", e))?;
+    
+    // Wait for response (with timeout) - 5s for network round-trip
+    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+    
+    let peer_hash = {
+        let cache = crate::SYNC_HASH_CACHE.lock();
+        cache.get(&(peer_addr.to_string(), our_height)).cloned()
+    };
+    
+    match peer_hash {
+        Some(hash) if hash == our_tip_hash => {
+            // Perfect! Peer agrees on our tip
+            tracing::debug!(
+                "[SYNC-FORK] Peer {} agrees on height {} hash={}",
+                peer_addr,
+                our_height,
+                &hash[..8]
+            );
+            return Ok(our_height);
+        }
+        Some(hash) => {
+            // Fork detected! Binary search backwards to find common ancestor
+            tracing::warn!(
+                "[SYNC-FORK] Peer {} disagrees at height {}: ours={} theirs={}",
+                peer_addr,
+                our_height,
+                &our_tip_hash[..8],
+                &hash[..8]
+            );
+            
+            // Binary search from 0 to our_height
+            let mut low = 0u64;
+            let mut high = our_height;
+            let mut common = 0u64;
+            
+            while low <= high {
+                let mid = (low + high) / 2;
+                
+                // Get our hash at mid
+                let our_hash = {
+                    let chain = crate::CHAIN.lock();
+                    if mid == 0 || mid as usize > chain.blocks.len() {
+                        break;
+                    }
+                    let idx = (mid - 1) as usize;
+                    chain.blocks.get(idx)
+                        .map(|b| crate::canon_hash(&b.header.pow_hash))
+                };
+                
+                let Some(our_hash) = our_hash else { break; };
+                
+                // Request peer's hash at mid
+                tracing::debug!(
+                    "[SYNC-FORK] Binary search: checking height {} (range {}-{})",
+                    mid, low, high
+                );
+                let msg = crate::p2p::connection::P2PMessage::GetBlockHash { height: mid };
+                crate::P2P_MANAGER.send_to_peer(peer_addr, msg).await
+                    .map_err(|e| anyhow::anyhow!("send_to_peer failed: {}", e))?;
+                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                
+                let peer_hash = {
+                    let cache = crate::SYNC_HASH_CACHE.lock();
+                    cache.get(&(peer_addr.to_string(), mid)).cloned()
+                };
+                
+                match peer_hash {
+                    Some(hash) if hash == our_hash => {
+                        // Agreement at mid, search higher
+                        common = mid;
+                        low = mid + 1;
+                        tracing::debug!(
+                            "[SYNC-FORK] Agreement at height {}, searching higher",
+                            mid
+                        );
+                    }
+                    Some(_) => {
+                        // Disagreement at mid, search lower
+                        if mid == 0 {
+                            break;
+                        }
+                        high = mid - 1;
+                        tracing::debug!(
+                            "[SYNC-FORK] Disagreement at height {}, searching lower",
+                            mid
+                        );
+                    }
+                    None => {
+                        // Timeout or peer doesn't have this height
+                        tracing::warn!(
+                            "[SYNC-FORK] No response from peer at height {}",
+                            mid
+                        );
+                        break;
+                    }
+                }
+            }
+            
+            tracing::info!(
+                "[SYNC-FORK] Common ancestor with {} found at height {}",
+                peer_addr,
+                common
+            );
+            return Ok(common);
+        }
+        None => {
+            // Timeout waiting for peer response
+            return Err(anyhow::anyhow!(
+                "timeout waiting for peer hash response"
+            ));
+        }
+    }
 }

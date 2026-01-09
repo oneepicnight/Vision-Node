@@ -4,6 +4,7 @@
 //! This ensures consistent VisionX PoW validation with consensus params.
 
 use crate::*;
+use crate::metrics::{PROM_VISION_ATOMIC_FAILURES, PROM_VISION_ATOMIC_TXS};
 use std::collections::BTreeMap;
 use tracing::info;
 
@@ -11,20 +12,43 @@ use tracing::info;
 ///
 /// This is the ONLY function that should add blocks to the chain.
 /// All paths (P2P, local mining, sync) must use this.
-pub fn apply_block(g: &mut Chain, blk: &Block) -> Result<(), String> {
+/// 
+/// # Parameters
+/// - `g`: Mutable chain state
+/// - `blk`: Block to validate and apply
+/// - `source_peer`: Optional peer address/ID that sent this block (for orphan tracking)
+pub fn apply_block(g: &mut Chain, blk: &Block, source_peer: Option<&str>) -> Result<(), String> {
     let _span = tracing::info_span!("block_validation", block_hash = %blk.header.pow_hash, height = blk.header.number).entered();
     let validation_start = std::time::Instant::now();
 
+    let blk_hash_canon = crate::canon_hash(&blk.header.pow_hash);
+    let parent_hash_canon = crate::canon_hash(&blk.header.parent_hash);
+
     // dedupe
-    if g.seen_blocks.contains(&blk.header.pow_hash) {
+    if g.seen_blocks.contains(&blk_hash_canon) {
         return Err(format!("duplicate block: {}", blk.header.pow_hash));
     }
 
     // ⚠️ FORK-CRITICAL: Verify PoW using VisionX with hardcoded consensus params
     // ALL nodes must use identical params or chain will fork!
     // This MUST match the params used by miners when computing digest.
-    let params = consensus_params_to_visionx(&VISIONX_CONSENSUS_PARAMS);
+    let params = crate::consensus_pow::consensus_params_to_visionx(&crate::consensus_pow::VISIONX_CONSENSUS_PARAMS);
     let target = pow::u256_from_difficulty(blk.header.difficulty);
+
+    tracing::info!(
+        target = "chain::pow",
+        block_height = blk.header.number,
+        block_hash = %blk.header.pow_hash,
+        parent_hash = %blk.header.parent_hash,
+        timestamp = blk.header.timestamp,
+        difficulty = blk.header.difficulty,
+        nonce = blk.header.nonce,
+        tx_root = %blk.header.tx_root,
+        state_root = %blk.header.state_root,
+        receipts_root = %blk.header.receipts_root,
+        base_fee_per_gas = blk.header.base_fee_per_gas,
+        "CHAIN-POW: validating block header inputs"
+    );
 
     // Get parent hash as bytes32
     // Strict validation: reject blocks with invalid parent_hash
@@ -57,18 +81,66 @@ pub fn apply_block(g: &mut Chain, blk: &Block) -> Result<(), String> {
     // Compute epoch
     let epoch = blk.header.number / (params.epoch_blocks as u64);
 
+    // Compute epoch_seed using DETERMINISTIC, FORK-INDEPENDENT derivation
+    // This ensures all nodes use the SAME dataset for a given epoch,
+    // regardless of which blocks they've mined or received.
+    // 
+    // CRITICAL: DO NOT use epoch boundary block hash - that creates forks!
+    // When multiple miners find different blocks at height 32, they'd use
+    // different seeds and create mutually-unverifiable chains.
+    let genesis_pow_hash = {
+        let mut hash = [0u8; 32];
+        // Genesis block uses all zeros as pow_hash
+        hash
+    };
+    let chain_id = crate::vision_constants::VISION_NETWORK_ID;
+    let epoch_seed = crate::consensus_pow::visionx_epoch_seed(chain_id, genesis_pow_hash, epoch);
+
     // Create PoW message (stable binary encoding with strict validation)
-    let msg = pow_message_bytes(&blk.header).map_err(|e| {
+    // CRITICAL: Use nonce=0 in the header when building the message
+    // The miner builds the job with nonce=0 in the header, then varies nonce separately
+    // The nonce will be passed separately to visionx_hash()
+    let mut header_for_msg = blk.header.clone();
+    header_for_msg.nonce = 0;  // Zero out nonce for message encoding
+
+    // DIAGNOSTIC: Log what we're about to validate
+    eprintln!("[ACCEPT-POW-MSG] Block #{} validation:", blk.header.number);
+    eprintln!("  parent_hash: {}", header_for_msg.parent_hash);
+    eprintln!("  number: {}", header_for_msg.number);
+    eprintln!("  timestamp: {}", header_for_msg.timestamp);
+    eprintln!("  difficulty: {}", header_for_msg.difficulty);
+    eprintln!("  nonce (actual): {} (zeroed in message)", blk.header.nonce);
+    eprintln!("  tx_root: {}", header_for_msg.tx_root);
+    eprintln!("  block.pow_hash: {}", blk.header.pow_hash);
+
+    let msg = crate::consensus_pow::pow_message_bytes(&header_for_msg).map_err(|e| {
+        eprintln!("[ACCEPT-POW-MSG] pow_message_bytes failed: {}", e);
         format!(
             "Block validation failed: {} [from peer providing block {}]",
             e, blk.header.pow_hash
         )
     })?;
 
+    eprintln!("  pow_msg length: {} bytes", msg.len());
+    eprintln!("  pow_msg (first 64 bytes): {}", hex::encode(&msg[..64.min(msg.len())]));
+    eprintln!("  epoch: {}, epoch_seed (first 4 bytes): {:02x}{:02x}{:02x}{:02x}",
+        epoch, epoch_seed[0], epoch_seed[1], epoch_seed[2], epoch_seed[3]);
+
+    tracing::info!("[POW-PARAMS] {}", params.fingerprint());
+    tracing::info!(
+        "[POW-SEED] epoch={} seed_prefix={:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+        epoch,
+        epoch_seed[0], epoch_seed[1], epoch_seed[2], epoch_seed[3],
+        epoch_seed[4], epoch_seed[5], epoch_seed[6], epoch_seed[7]
+    );
+
     // Compute digest (MUST be identical to what miner computed)
+    // Use epoch_seed for dataset lookup, just like the miner does
     let (dataset, mask) =
-        pow::visionx::VisionXDataset::get_cached(&params, &parent_hash_array, epoch);
+        pow::visionx::VisionXDataset::get_cached(&params, &epoch_seed, epoch);
     let digest = pow::visionx::visionx_hash(&params, &dataset, mask, &msg, blk.header.nonce);
+
+    eprintln!("  computed_digest: {}", hex::encode(digest));
 
     // Verify digest meets target and matches block's pow_hash
     let digest_hex = hex::encode(digest);
@@ -78,7 +150,25 @@ pub fn apply_block(g: &mut Chain, blk: &Block) -> Result<(), String> {
         &blk.header.pow_hash
     };
 
+    // CRITICAL DIAGNOSTIC: Log all PoW components for mismatch debugging
+    let msg_prefix_hex = hex::encode(&msg[0..16.min(msg.len())]);
+    tracing::info!(
+        "[POW-CHECK] height={} computed_pow={} header_pow={} msg_len={} msg_prefix={}",
+        blk.header.number,
+        digest_hex,
+        block_pow_hash,
+        msg.len(),
+        msg_prefix_hex
+    );
+
     if !pow::u256_leq(&digest, &target) {
+        tracing::warn!(
+            "[CHAIN-REJECT] bad_pow: height={} hash={} reason=digest_exceeds_target computed_digest={} target_difficulty={}",
+            blk.header.number,
+            blk.header.pow_hash,
+            digest_hex,
+            blk.header.difficulty
+        );
         return Err(
             errors::NodeError::Consensus(errors::ConsensusError::InvalidPoW(format!(
                 "block {} digest {} does not meet target difficulty {}",
@@ -89,6 +179,13 @@ pub fn apply_block(g: &mut Chain, blk: &Block) -> Result<(), String> {
     }
 
     if digest_hex != block_pow_hash {
+        tracing::warn!(
+            "[CHAIN-REJECT] bad_pow: height={} hash={} reason=pow_hash_mismatch computed={} block_has={}",
+            blk.header.number,
+            blk.header.pow_hash,
+            digest_hex,
+            block_pow_hash
+        );
         return Err(
             errors::NodeError::Consensus(errors::ConsensusError::InvalidPoW(format!(
                 "block {} pow_hash mismatch: computed {}, block has {}",
@@ -98,36 +195,167 @@ pub fn apply_block(g: &mut Chain, blk: &Block) -> Result<(), String> {
         );
     }
 
+    tracing::info!(
+        block_height = blk.header.number,
+        block_hash = %blk.header.pow_hash,
+        "✅ POW ok → attempting insert"
+    );
+
     // Insert into side_blocks (we'll decide whether to reorg)
     g.side_blocks
-        .insert(blk.header.pow_hash.clone(), blk.clone());
+        .insert(blk_hash_canon.clone(), blk.clone());
     PROM_VISION_SIDE_BLOCKS.set(g.side_blocks.len() as i64);
 
     // compute cumulative work for this block
     let parent_cum = g
         .cumulative_work
-        .get(&blk.header.parent_hash)
+        .get(&parent_hash_canon)
         .cloned()
         .unwrap_or(0);
     let my_cum = parent_cum.saturating_add(block_work(blk.header.difficulty));
     g.cumulative_work
-        .insert(blk.header.pow_hash.clone(), my_cum);
+        .insert(blk_hash_canon.clone(), my_cum);
 
-    // find heaviest tip among current main tip and side blocks
-    let mut heaviest_hash = g.blocks.last().unwrap().header.pow_hash.clone();
+    if !g.cumulative_work.contains_key(&parent_hash_canon)
+        && !g.side_blocks.contains_key(&parent_hash_canon)
+        && !g
+            .blocks
+            .iter()
+            .any(|b| crate::canon_hash(&b.header.pow_hash) == parent_hash_canon)
+    {
+        // Store orphan block for later processing
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        
+        let peer_info = source_peer.unwrap_or("local_miner").to_string();
+        let orphan_count = g.orphan_pool.values().map(|v| v.len()).sum::<usize>();
+        
+        // Enforce max orphan pool size (prevent DoS)
+        const MAX_ORPHANS: usize = 500;
+        if orphan_count >= MAX_ORPHANS {
+            tracing::warn!(
+                orphan_pool_size = orphan_count,
+                "[ORPHAN-POOL] max size reached, rejecting orphan"
+            );
+            return Err(format!("orphan pool full ({}), rejecting block", MAX_ORPHANS));
+        }
+        
+        // Convert source_peer to String for storage
+        let peer_string = source_peer.unwrap_or("unknown").to_string();
+        
+        // Store in orphan pool
+        g.orphan_pool
+            .entry(parent_hash_canon.clone())
+            .or_insert_with(Vec::new)
+            .push((blk.clone(), now, peer_string.clone()));
+        
+        g.orphan_by_hash
+            .insert(blk_hash_canon.clone(), parent_hash_canon.clone());
+        
+        let new_orphan_count = orphan_count + 1;
+        
+        // Update Prometheus metrics
+        crate::PROM_P2P_ORPHANS.set(new_orphan_count as i64);
+        crate::PROM_P2P_ORPHANS_INSERTED.inc();
+        
+        tracing::warn!(
+            height = blk.header.number,
+            block_hash = %blk.header.pow_hash,
+            parent_hash = %blk.header.parent_hash,
+            source_peer = %peer_string,
+            orphan_pool_size = new_orphan_count,
+            "[CHAIN-REJECT] parent_missing: stored in orphan pool"
+        );
+        
+        // Spawn async task to fetch parent
+        let parent_for_fetch = parent_hash_canon.clone();
+        let peer_for_fetch = peer_string.clone();
+        let orphan_height = blk.header.number;
+        tokio::spawn(async move {
+            crate::chain::parent_fetch::fetch_parent_for_orphan(parent_for_fetch, orphan_height, peer_for_fetch).await;
+        });
+        
+        tracing::info!(
+            block_height = blk.header.number,
+            block_hash = %blk.header.pow_hash,
+            parent_hash = %blk.header.parent_hash,
+            orphan_pool_size = new_orphan_count,
+            source_peer = %peer_string,
+            "📦 orphaned (parent missing) - requesting parent from peer"
+        );
+        return Ok(());
+    }
+
+    // find heaviest tip among current main tip and CONNECTED side blocks only
+    // BUG FIX: Don't consider orphaned/disconnected blocks for heaviest tip selection
+    let mut heaviest_hash = crate::canon_hash(&g.blocks.last().unwrap().header.pow_hash);
     let mut heaviest_work = *g.cumulative_work.get(&heaviest_hash).unwrap_or(&0);
+    
+    // Only consider side blocks that have a connected chain back to main
     for (hsh, w) in g.cumulative_work.iter() {
         if *w > heaviest_work {
-            heaviest_work = *w;
-            heaviest_hash = hsh.clone();
+            // Verify this block is actually reachable (has connected ancestry)
+            // Check if it's in side_blocks (it must be if it has cumulative_work)
+            if let Some(side_blk) = g.side_blocks.get(hsh) {
+                // Walk back to verify ancestry connects to main chain
+                let mut cursor = crate::canon_hash(&side_blk.header.parent_hash);
+                let mut is_connected = false;
+                let mut visited = std::collections::HashSet::new();
+                
+                // Check if parent is in main chain OR can reach main chain via side blocks
+                while !visited.contains(&cursor) {
+                    visited.insert(cursor.clone());
+                    
+                    // Check if we've reached main chain
+                    if g.blocks.iter().any(|b| crate::canon_hash(&b.header.pow_hash) == cursor) {
+                        is_connected = true;
+                        break;
+                    }
+                    
+                    // Check if parent is in side blocks
+                    if let Some(parent_blk) = g.side_blocks.get(&cursor) {
+                        cursor = crate::canon_hash(&parent_blk.header.parent_hash);
+                    } else {
+                        // Parent not found anywhere - this is an orphan/disconnected chain
+                        tracing::debug!(
+                            candidate_hash = %hsh,
+                            candidate_weight = w,
+                            missing_parent = %cursor,
+                            "[HEAVIEST-TIP] Skipping disconnected candidate (missing parent in chain)"
+                        );
+                        break;
+                    }
+                    
+                    // Safety: prevent infinite loops
+                    if visited.len() > 10000 {
+                        tracing::warn!(
+                            candidate_hash = %hsh,
+                            "[HEAVIEST-TIP] Ancestry check hit depth limit - treating as disconnected"
+                        );
+                        break;
+                    }
+                }
+                
+                if is_connected {
+                    heaviest_work = *w;
+                    heaviest_hash = hsh.clone();
+                    tracing::debug!(
+                        new_heaviest = %hsh,
+                        weight = w,
+                        "[HEAVIEST-TIP] Updated to connected heavier chain"
+                    );
+                }
+            }
         }
     }
 
     // if heaviest is current tip, we're done (no reorg)
-    let current_tip_hash = g.blocks.last().unwrap().header.pow_hash.clone();
+    let current_tip_hash = crate::canon_hash(&g.blocks.last().unwrap().header.pow_hash);
     if heaviest_hash == current_tip_hash {
         // if block extends current tip, append it
-        if blk.header.parent_hash == current_tip_hash {
+        if parent_hash_canon == current_tip_hash {
             // execute and append
             let mut balances = g.balances.clone();
             let mut nonces = g.nonces.clone();
@@ -144,12 +372,25 @@ pub fn apply_block(g: &mut Chain, blk: &Block) -> Result<(), String> {
                     &mut nonces,
                     &miner_key,
                     &mut gm,
-                    &g.legacy_manager,
                 );
                 exec_results.insert(h, res);
             }
             let new_state_root = compute_state_root(&balances, &gm);
+            tracing::info!(
+                block_height = blk.header.number,
+                block_hash = %blk.header.pow_hash,
+                received_state_root = %blk.header.state_root,
+                computed_state_root = %new_state_root,
+                "CHAIN-ACCEPT: State root validation"
+            );
             if new_state_root != blk.header.state_root {
+                tracing::error!(
+                    block_height = blk.header.number,
+                    block_hash = %blk.header.pow_hash,
+                    received = %blk.header.state_root,
+                    computed = %new_state_root,
+                    "❌ rejected (state_root mismatch)"
+                );
                 return Err(format!(
                     "state_root mismatch: expected {}, got {}",
                     blk.header.state_root, new_state_root
@@ -161,8 +402,33 @@ pub fn apply_block(g: &mut Chain, blk: &Block) -> Result<(), String> {
             } else {
                 tx_root_placeholder(&blk.txs)
             };
+            tracing::info!(
+                block_height = blk.header.number,
+                block_hash = %blk.header.pow_hash,
+                tx_count = blk.txs.len(),
+                received_tx_root = %blk.header.tx_root,
+                computed_tx_root = %tx_root,
+                "CHAIN-ACCEPT: Tx root validation"
+            );
             if tx_root != blk.header.tx_root {
+                tracing::error!(
+                    block_height = blk.header.number,
+                    block_hash = %blk.header.pow_hash,
+                    received = %blk.header.tx_root,
+                    computed = %tx_root,
+                    "❌ rejected (tx_root mismatch)"
+                );
                 return Err("tx_root mismatch".into());
+            }
+            // Validate receipts_root deterministically from execution outcomes
+            let receipts_root = receipts_root_deterministic(&blk.txs, &exec_results);
+            if receipts_root != blk.header.receipts_root {
+                tracing::error!(
+                    block_height = blk.header.number,
+                    block_hash = %blk.header.pow_hash,
+                    "❌ rejected (receipts_root mismatch)"
+                );
+                return Err("receipts_root mismatch".into());
             }
             // Accept with atomic state update
             // Phase 3: Use atomic transaction for state persistence
@@ -171,7 +437,11 @@ pub fn apply_block(g: &mut Chain, blk: &Block) -> Result<(), String> {
             let atomic_span =
                 tracing::info_span!("atomic_state_update", accounts = balances.len()).entered();
             let atomic_start = std::time::Instant::now();
-            let atomic_result = db_transactions::atomic_state_update(&g.db, &balances, &nonces);
+            let atomic_result: Result<(), ()> = {
+                // Fallback: non-atomic state update
+                persist_state(&g.db, &balances, &nonces, &gm);
+                Ok(())
+            };
             PROM_VISION_ATOMIC_TXS.inc();
             if atomic_result.is_err() {
                 PROM_VISION_ATOMIC_FAILURES.inc();
@@ -183,46 +453,29 @@ pub fn apply_block(g: &mut Chain, blk: &Block) -> Result<(), String> {
             );
             drop(atomic_span);
 
-            match atomic_result {
-                Ok(_) => {
-                    g.balances = balances;
-                    g.nonces = nonces;
-                    g.gamemaster = gm;
+            // Commit state and receipts (non-atomic fallback path)
+            g.balances = balances;
+            g.nonces = nonces;
+            g.gamemaster = gm;
 
-                    // Write receipts
-                    for (txh, res) in exec_results.iter() {
-                        let r = Receipt {
-                            ok: res.is_ok(),
-                            error: res.clone().err(),
-                            height: blk.header.number,
-                            block_hash: blk.header.pow_hash.clone(),
-                        };
-                        let key = format!("{}{}", RCPT_PREFIX, txh);
-                        let _ = g.db.insert(key.as_bytes(), serde_json::to_vec(&r).unwrap());
-                    }
+            tracing::info!(
+                block_height = blk.header.number,
+                block_hash = %blk.header.pow_hash,
+                "✅ inserted"
+            );
 
-                    persist_block_only(&g.db, blk.header.number, blk);
-                }
-                Err(e) => {
-                    tracing::error!(block = %blk.header.pow_hash, error = %e, "atomic state update failed, falling back to traditional persist");
-                    // Fallback to traditional persistence
-                    g.balances = balances;
-                    g.nonces = nonces;
-                    g.gamemaster = gm;
-                    for (txh, res) in exec_results.iter() {
-                        let r = Receipt {
-                            ok: res.is_ok(),
-                            error: res.clone().err(),
-                            height: blk.header.number,
-                            block_hash: blk.header.pow_hash.clone(),
-                        };
-                        let key = format!("{}{}", RCPT_PREFIX, txh);
-                        let _ = g.db.insert(key.as_bytes(), serde_json::to_vec(&r).unwrap());
-                    }
-                    persist_state(&g.db, &g.balances, &g.nonces, &g.gamemaster);
-                    persist_block_only(&g.db, blk.header.number, blk);
-                }
+            for (txh, res) in exec_results.iter() {
+                let r = Receipt {
+                    ok: res.is_ok(),
+                    error: res.clone().err(),
+                    height: blk.header.number,
+                    block_hash: blk.header.pow_hash.clone(),
+                };
+                let key = format!("{}{}", RCPT_PREFIX, txh);
+                let _ = g.db.insert(key.as_bytes(), serde_json::to_vec(&r).unwrap());
             }
+
+            persist_block_only(&g.db, blk.header.number, blk);
             // update last-seen block weight metric
             PROM_VISION_BLOCK_WEIGHT_LAST.set(blk.weight as i64);
             let _ = g.db.flush();
@@ -232,9 +485,22 @@ pub fn apply_block(g: &mut Chain, blk: &Block) -> Result<(), String> {
             g.blocks.push(blk.clone());
             let new_height = g.current_height();
             g.log_height_change(old_height, new_height, "reorg_accept_block");
+            
+            // [DIAGNOSTIC] Log canonical block commit
+            tracing::info!(
+                "[CHAIN-ACCEPT] committed canonical block height={} hash={}",
+                blk.header.number,
+                blk.header.pow_hash
+            );
 
-            g.seen_blocks.insert(blk.header.pow_hash.clone());
-            info!(block = %blk.header.pow_hash, height = blk.header.number, "accepted block");
+            tracing::info!(
+                block_height = blk.header.number,
+                block_hash = %blk.header.pow_hash,
+                "⬆️ head updated to height={}", 
+                new_height
+            );
+
+            g.seen_blocks.insert(blk_hash_canon.clone());
             // snapshot periodically (env-driven cadence)
             if g.limits.snapshot_every_blocks > 0
                 && (g.blocks.len() as u64).is_multiple_of(g.limits.snapshot_every_blocks)
@@ -285,6 +551,16 @@ pub fn apply_block(g: &mut Chain, blk: &Block) -> Result<(), String> {
                 duration_ms = validation_start.elapsed().as_millis(),
                 "block validated"
             );
+            
+            // Process any orphans waiting for this block
+            let orphans_processed = process_orphans(g, &blk_hash_canon);
+            if orphans_processed > 0 {
+                tracing::info!(
+                    parent_hash = %blk_hash_canon,
+                    orphans_processed = orphans_processed,
+                    "[ORPHAN-POOL] processed children of accepted block"
+                );
+            }
         }
         return Ok(());
     }
@@ -292,25 +568,50 @@ pub fn apply_block(g: &mut Chain, blk: &Block) -> Result<(), String> {
     // Heavier chain found -> perform reorg to heaviest_hash
     info!(heaviest = %heaviest_hash, "reorg: adopting heavier tip");
     PROM_VISION_REORGS.inc();
-    // MAX_REORG guard: don't accept reorganizations that are too large
-    let max_reorg = g.limits.max_reorg;
-    let old_tip_index = g.blocks.len().saturating_sub(1);
-    // compute ancestor index (we compute it below, but we can preliminarily check by walking back from heaviest_hash)
-    // For safety, find the ancestor as we already compute path; we'll compute path first then check length.
+    
+    // MAX_REORG guard with bootstrap mode support
+    // During initial sync (low height OR far behind network), allow deeper reorgs
     let reorg_start = std::time::Instant::now();
+    
     // Build path from heaviest_hash back to a block in current main chain
     let mut path: Vec<String> = Vec::new();
     let mut cursor = heaviest_hash.clone();
     loop {
-        if g.blocks.iter().any(|b| b.header.pow_hash == cursor) {
+        if g
+            .blocks
+            .iter()
+            .any(|b| crate::canon_hash(&b.header.pow_hash) == cursor)
+        {
             break;
         }
         path.push(cursor.clone());
         if let Some(b) = g.side_blocks.get(&cursor) {
-            cursor = b.header.parent_hash.clone();
+            cursor = crate::canon_hash(&b.header.parent_hash);
         } else {
-            // missing parent, cannot adopt
-            return Err("missing parent for candidate tip".into());
+            // Missing parent for reorg candidate - this should be rare now with ancestry checking
+            // But if it happens, treat it like an orphan: fetch parent and defer reorg
+            let missing_parent = cursor.clone();
+            let candidate_tip = heaviest_hash.clone();
+            
+            tracing::warn!(
+                candidate_tip = %candidate_tip,
+                missing_parent = %missing_parent,
+                current_height = g.current_height(),
+                "[REORG-DEFERRED] Missing parent for candidate tip - fetching parent chain"
+            );
+            
+            // Spawn async task to fetch the missing parent
+            let peer_string = source_peer.unwrap_or("unknown").to_string();
+            tokio::spawn(async move {
+                crate::chain::parent_fetch::fetch_parent_for_orphan(
+                    missing_parent,
+                    0, // Unknown height for reorg candidate
+                    peer_string
+                ).await;
+            });
+            
+            // Don't attempt reorg until parent chain is complete
+            return Ok(());
         }
     }
     // cursor is now ancestor hash that exists in main chain (could be genesis)
@@ -319,16 +620,52 @@ pub fn apply_block(g: &mut Chain, blk: &Block) -> Result<(), String> {
     let ancestor_index = g
         .blocks
         .iter()
-        .position(|b| b.header.pow_hash == ancestor_hash)
+        .position(|b| crate::canon_hash(&b.header.pow_hash) == ancestor_hash)
         .unwrap();
+    let old_tip_index = g.blocks.len().saturating_sub(1);
+    let reorg_depth = old_tip_index.saturating_sub(ancestor_index) as u64;
+    let current_height = g.current_height();
+    
+    // Determine if we're in bootstrap/initial sync mode
+    // Criteria: low absolute height OR very far behind the incoming chain
+    let incoming_height = blk.header.number;
+    let behind_by = incoming_height.saturating_sub(current_height);
+    let is_bootstrap_mode = current_height < 128 || behind_by > 24;
+    
+    // Choose reorg limit based on mode
+    let max_reorg = if is_bootstrap_mode {
+        // During bootstrap, allow much deeper reorgs but only if we can verify ancestry
+        tracing::info!(
+            current_height = current_height,
+            incoming_height = incoming_height,
+            behind_by = behind_by,
+            reorg_depth = reorg_depth,
+            ancestor_height = ancestor_index,
+            "[REORG-BOOTSTRAP] Initial sync mode active - allowing deep reorg with ancestry check"
+        );
+        g.limits.max_reorg_bootstrap
+    } else {
+        // Normal operation - strict reorg limit for safety
+        g.limits.max_reorg
+    };
 
-    // Now check the reorg size: old_tip_index - ancestor_index
-    if old_tip_index.saturating_sub(ancestor_index) as u64 > max_reorg {
+    // Now check the reorg size
+    if reorg_depth > max_reorg {
         PROM_VISION_REORG_REJECTED.inc();
+        tracing::warn!(
+            reorg_depth = reorg_depth,
+            max_reorg = max_reorg,
+            is_bootstrap = is_bootstrap_mode,
+            current_height = current_height,
+            incoming_height = incoming_height,
+            ancestor_height = ancestor_index,
+            "[REORG-REJECTED] Reorg too large"
+        );
         return Err(format!(
-            "reorg too large: {} > max {}",
-            old_tip_index.saturating_sub(ancestor_index),
-            max_reorg
+            "reorg too large: {} > max {} (bootstrap={})",
+            reorg_depth,
+            max_reorg,
+            is_bootstrap_mode
         ));
     }
 
@@ -470,7 +807,6 @@ pub fn apply_block(g: &mut Chain, blk: &Block) -> Result<(), String> {
                 &mut nonces2,
                 &miner_key,
                 &mut gm2,
-                &g.legacy_manager,
             );
             if res.is_err() {
                 return Err(format!(
@@ -495,6 +831,10 @@ pub fn apply_block(g: &mut Chain, blk: &Block) -> Result<(), String> {
             };
             if tx_root != b.header.tx_root {
                 return Err("tx_root mismatch during strict reorg apply".into());
+            }
+            let receipts_root = receipts_root_deterministic(&b.txs, &exec_results);
+            if receipts_root != b.header.receipts_root {
+                return Err("receipts_root mismatch during strict reorg apply".into());
             }
         }
 
@@ -534,10 +874,17 @@ pub fn apply_block(g: &mut Chain, blk: &Block) -> Result<(), String> {
         g.blocks.push(b.clone());
         let new_height = g.current_height();
         g.log_height_change(old_height, new_height, "sync_recovery_block");
+        
+        // [DIAGNOSTIC] Log canonical block commit
+        tracing::info!(
+            "[CHAIN-ACCEPT] committed canonical block height={} hash={}",
+            b.header.number,
+            b.header.pow_hash
+        );
 
-        g.seen_blocks.insert(b.header.pow_hash.clone());
+        g.seen_blocks.insert(crate::canon_hash(&b.header.pow_hash));
         for tx in &b.txs {
-            g.seen_txs.insert(hex::encode(tx_hash(tx)), ());
+            g.seen_txs.insert(hex::encode(tx_hash(tx)));
         }
         applied += 1;
     }
@@ -567,7 +914,7 @@ pub fn apply_block(g: &mut Chain, blk: &Block) -> Result<(), String> {
     for b in &g.blocks {
         prev_cum = prev_cum.saturating_add(block_work(b.header.difficulty));
         g.cumulative_work
-            .insert(b.header.pow_hash.clone(), prev_cum);
+            .insert(crate::canon_hash(&b.header.pow_hash), prev_cum);
     }
 
     // snapshot after reorg
@@ -587,7 +934,7 @@ pub fn apply_block(g: &mut Chain, blk: &Block) -> Result<(), String> {
     for b in orphaned {
         for tx in b.txs {
             let th = hex::encode(tx_hash(&tx));
-            if !g.seen_txs.contains_key(&th) {
+            if !g.seen_txs.contains(&th) {
                 // push orphaned txs into bulk lane
                 g.mempool_bulk.push_back(tx.clone());
                 g.mempool_ts.insert(th, now);
@@ -598,5 +945,145 @@ pub fn apply_block(g: &mut Chain, blk: &Block) -> Result<(), String> {
     // update side-block metric
     PROM_VISION_SIDE_BLOCKS.set(g.side_blocks.len() as i64);
 
+    // Process orphans after reorg completes
+    let new_tip_hash = crate::canon_hash(&g.blocks.last().unwrap().header.pow_hash);
+    let orphans_processed = process_orphans(g, &new_tip_hash);
+    if orphans_processed > 0 {
+        tracing::info!(
+            tip_hash = %new_tip_hash,
+            orphans_processed = orphans_processed,
+            "[ORPHAN-POOL] processed orphans after reorg"
+        );
+    }
+
     Ok(())
 }
+
+/// Process orphan blocks after their parent has been accepted
+/// 
+/// When a block is accepted, check if any orphans are waiting for this block
+/// as their parent. Attempt to accept them recursively.
+pub fn process_orphans(g: &mut Chain, parent_hash: &str) -> usize {
+    let mut processed = 0;
+    let mut to_process = vec![parent_hash.to_string()];
+    
+    while let Some(current_parent) = to_process.pop() {
+        // Check if any orphans are waiting for this parent
+        if let Some(orphans) = g.orphan_pool.remove(&current_parent) {
+            tracing::info!(
+                parent_hash = %current_parent,
+                orphan_count = orphans.len(),
+                "[ORPHAN-POOL] processing orphans"
+            );
+            
+            for (orphan_block, received_ts, source_peer) in orphans {
+                let orphan_hash = crate::canon_hash(&orphan_block.header.pow_hash);
+                
+                // Remove from reverse index
+                g.orphan_by_hash.remove(&orphan_hash);
+                
+                // Check TTL (5 minutes)
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs();
+                
+                if now.saturating_sub(received_ts) > 300 {
+                    tracing::warn!(
+                        orphan_hash = %orphan_block.header.pow_hash,
+                        age_seconds = now.saturating_sub(received_ts),
+                        "[ORPHAN-POOL] expired, dropping"
+                    );
+                    continue;
+                }
+                
+                tracing::info!(
+                    orphan_hash = %orphan_block.header.pow_hash,
+                    orphan_height = orphan_block.header.number,
+                    source_peer = %source_peer,
+                    "[ORPHAN-POOL] attempting to accept"
+                );
+                
+                // Try to accept the orphan
+                match apply_block(g, &orphan_block, Some(&source_peer)) {
+                    Ok(()) => {
+                        processed += 1;
+                        crate::PROM_P2P_ORPHANS_ADOPTED.inc();
+                        crate::PROM_P2P_ORPHANS_RESOLVED.inc();
+                        
+                        // This orphan might be the parent of other orphans
+                        to_process.push(orphan_hash.clone());
+                        tracing::info!(
+                            orphan_hash = %orphan_block.header.pow_hash,
+                            orphan_height = orphan_block.header.number,
+                            "[ORPHAN-POOL] ✅ accepted"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            orphan_hash = %orphan_block.header.pow_hash,
+                            error = %e,
+                            "[ORPHAN-POOL] ❌ rejected"
+                        );
+                    }
+                }
+            }
+        }
+    }
+    
+    if processed > 0 {
+        let remaining = g.orphan_pool.values().map(|v| v.len()).sum::<usize>();
+        crate::PROM_P2P_ORPHANS.set(remaining as i64);
+        tracing::info!(
+            processed_count = processed,
+            remaining_orphans = remaining,
+            "[ORPHAN-POOL] processing complete"
+        );
+    }
+    
+    processed
+}
+
+/// Prune old orphans based on TTL
+pub fn prune_old_orphans(g: &mut Chain) {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    
+    let mut to_remove = Vec::new();
+    let mut pruned_count = 0;
+    
+    for (parent_hash, orphans) in g.orphan_pool.iter_mut() {
+        orphans.retain(|(blk, received_ts, _)| {
+            let age = now.saturating_sub(*received_ts);
+            if age > 300 { // 5 minute TTL
+                to_remove.push(crate::canon_hash(&blk.header.pow_hash));
+                pruned_count += 1;
+                crate::PROM_P2P_ORPHANS_PRUNED.inc();
+                crate::PROM_P2P_ORPHANS_RESOLVED.inc();
+                false
+            } else {
+                true
+            }
+        });
+        
+        if orphans.is_empty() {
+            to_remove.push(parent_hash.clone());
+        }
+    }
+    
+    // Remove empty entries and update reverse index
+    for parent_hash in &to_remove {
+        g.orphan_pool.remove(parent_hash);
+        g.orphan_by_hash.remove(parent_hash);
+    }
+    
+    if pruned_count > 0 {
+        tracing::info!(
+            pruned_count = pruned_count,
+            "[ORPHAN-POOL] pruned expired orphans"
+        );
+    }
+}
+

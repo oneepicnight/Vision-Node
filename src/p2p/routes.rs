@@ -191,7 +191,12 @@ async fn handle_hello(
         );
     }
 
-    let pubkey = match VerifyingKey::from_bytes(&pubkey_bytes) {
+    let pubkey = {
+        let mut arr = [0u8; 32];
+        arr.copy_from_slice(&pubkey_bytes);
+        VerifyingKey::from_bytes(&arr)
+    };
+    let pubkey = match pubkey {
         Ok(pk) => pk,
         Err(_) => {
             return (
@@ -238,17 +243,9 @@ async fn handle_hello(
         );
     }
 
-    let signature = match Signature::try_from(&sig_bytes.try_into().map_err(|_| ()).unwrap()) {
-        Ok(sig) => sig,
-        Err(_) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({
-                    "error": "Invalid Ed25519 signature"
-                })),
-            )
-        }
-    };
+    let mut sig_arr = [0u8; 64];
+    sig_arr.copy_from_slice(&sig_bytes);
+    let signature = Signature::from_bytes(&sig_arr);
 
     // 6. Build canonical payload and verify signature
     let payload = format!("{}|{}|{}", from_node_id, ts_unix, nonce_hex);
@@ -690,8 +687,9 @@ async fn handle_getdata(
 /// Handle compact block reception (direct call from TCP P2P)
 pub async fn handle_compact_block_direct(
     compact: super::compact::CompactBlock,
+    peer_address: Option<String>,
 ) -> Result<(), String> {
-    let (status, response) = handle_compact_block(Json(compact)).await;
+    let (status, response) = handle_compact_block_with_peer(Json(compact), peer_address).await;
 
     if status.is_success() {
         Ok(())
@@ -706,10 +704,12 @@ pub async fn handle_compact_block_direct(
     }
 }
 
-/// Handle compact block reception (HTTP endpoint)
-pub async fn handle_compact_block(
+/// Handle compact block with peer tracking
+async fn handle_compact_block_with_peer(
     Json(compact): Json<super::compact::CompactBlock>,
+    peer_address: Option<String>,
 ) -> (StatusCode, Json<serde_json::Value>) {
+    let peer_str = peer_address.as_deref();
     tracing::info!(
         target: "p2p::compact",
         hash = %compact.header.hash,
@@ -763,7 +763,7 @@ pub async fn handle_compact_block(
                     let mut g = crate::CHAIN.lock();
                     let new_height = block.header.number;
 
-                    match crate::chain::accept::apply_block(&mut g, &block) {
+                    match crate::chain::accept::apply_block(&mut g, &block, peer_str) {
                         Ok(()) => {
                             drop(g);
 
@@ -781,17 +781,33 @@ pub async fn handle_compact_block(
                         }
                         Err(e) => {
                             drop(g);
+                            
+                            // Determine appropriate HTTP status code based on error type
+                            let (status_code, error_code) = if e.contains("pow_hash mismatch") || e.contains("digest") {
+                                (StatusCode::UNPROCESSABLE_ENTITY, "pow_validation_failed")
+                            } else if e.contains("parent") {
+                                (StatusCode::CONFLICT, "parent_mismatch")
+                            } else if e.contains("scope") || e.contains("chain") {
+                                (StatusCode::CONFLICT, "chain_mismatch")
+                            } else if e.contains("protocol") || e.contains("version") {
+                                (StatusCode::UPGRADE_REQUIRED, "protocol_mismatch")
+                            } else {
+                                (StatusCode::UNPROCESSABLE_ENTITY, "validation_failed")
+                            };
+                            
                             tracing::error!(
                                 target: "p2p::compact",
                                 error = %e,
+                                error_code = error_code,
                                 hash = %block.header.pow_hash,
                                 "Block rejected by validation"
                             );
                             return (
-                                StatusCode::BAD_REQUEST,
+                                status_code,
                                 Json(serde_json::json!({
                                     "status": "rejected",
                                     "error": e,
+                                    "code": error_code,
                                     "hash": block.header.pow_hash
                                 })),
                             );
@@ -810,7 +826,7 @@ pub async fn handle_compact_block(
                 Some(_) => {
                     // Block doesn't extend tip - let apply_block handle reorg if needed
                     let mut g = crate::CHAIN.lock();
-                    match crate::chain::accept::apply_block(&mut g, &block) {
+                    match crate::chain::accept::apply_block(&mut g, &block, peer_str) {
                         Ok(()) => {
                             drop(g);
 
@@ -855,7 +871,7 @@ pub async fn handle_compact_block(
                     // Empty chain
                     let mut g = crate::CHAIN.lock();
 
-                    match crate::chain::accept::apply_block(&mut g, &block) {
+                    match crate::chain::accept::apply_block(&mut g, &block, None) {
                         Ok(()) => {
                             drop(g);
 
@@ -869,17 +885,31 @@ pub async fn handle_compact_block(
                         }
                         Err(e) => {
                             drop(g);
+                            
+                            // Determine appropriate HTTP status code
+                            let (status_code, error_code) = if e.contains("pow_hash mismatch") || e.contains("digest") {
+                                (StatusCode::UNPROCESSABLE_ENTITY, "pow_validation_failed")
+                            } else if e.contains("parent") {
+                                (StatusCode::CONFLICT, "parent_mismatch")
+                            } else if e.contains("scope") || e.contains("chain") {
+                                (StatusCode::CONFLICT, "chain_mismatch")
+                            } else {
+                                (StatusCode::UNPROCESSABLE_ENTITY, "validation_failed")
+                            };
+                            
                             tracing::error!(
                                 target: "p2p::compact",
                                 error = %e,
+                                error_code = error_code,
                                 hash = %block.header.pow_hash,
                                 "Block rejected by validation"
                             );
                             (
-                                StatusCode::BAD_REQUEST,
+                                status_code,
                                 Json(serde_json::json!({
                                     "status": "rejected",
                                     "error": e,
+                                    "code": error_code,
                                     "hash": block.header.pow_hash
                                 })),
                             )
@@ -1027,7 +1057,7 @@ async fn handle_tx(Json(tx): Json<crate::Tx>) -> (StatusCode, Json<serde_json::V
     // Check if we already have this transaction
     let already_have = {
         let g = CHAIN.lock();
-        g.seen_txs.contains_key(&tx_hash)
+        g.seen_txs.contains(&tx_hash)
     };
 
     if already_have {
@@ -1066,7 +1096,7 @@ async fn handle_tx(Json(tx): Json<crate::Tx>) -> (StatusCode, Json<serde_json::V
     let mut g = CHAIN.lock();
 
     // Mark as seen
-    g.seen_txs.insert(tx_hash.clone(), ());
+    g.seen_txs.insert(tx_hash.clone());
 
     // Determine lane based on tip
     let critical_threshold = 1000;
@@ -1159,7 +1189,7 @@ async fn handle_block(Json(block): Json<crate::Block>) -> (StatusCode, Json<serd
 
             let mut g = crate::CHAIN.lock();
 
-            match crate::chain::accept::apply_block(&mut g, &block) {
+            match crate::chain::accept::apply_block(&mut g, &block, None) {
                 Ok(()) => {
                     drop(g);
 
@@ -1201,7 +1231,7 @@ async fn handle_block(Json(block): Json<crate::Block>) -> (StatusCode, Json<serd
             );
 
             let mut g = crate::CHAIN.lock();
-            match crate::chain::accept::apply_block(&mut g, &block) {
+            match crate::chain::accept::apply_block(&mut g, &block, None) {
                 Ok(()) => {
                     drop(g);
 
@@ -1250,7 +1280,7 @@ async fn handle_block(Json(block): Json<crate::Block>) -> (StatusCode, Json<serd
 
             let mut g = crate::CHAIN.lock();
 
-            match crate::chain::accept::apply_block(&mut g, &block) {
+            match crate::chain::accept::apply_block(&mut g, &block, None) {
                 Ok(()) => {
                     drop(g);
 
@@ -1334,6 +1364,9 @@ pub async fn send_compact_block_to_peer(
     // Defensive: trim trailing slash to prevent double slashes in URL
     let url = format!("{}/p2p/compact_block", base_url.trim_end_matches('/'));
 
+    // PATCH 3: Check if peer is currently connected in P2P manager before attempting HTTP fallback
+    let is_p2p_connected = crate::P2P_MANAGER.is_peer_connected(peer).await;
+
     tracing::debug!(
         target: "p2p::compact",
         peer = %peer,
@@ -1341,6 +1374,7 @@ pub async fn send_compact_block_to_peer(
         url = %url,
         hash = %compact.header.hash,
         height = compact.header.height,
+        is_p2p_connected = is_p2p_connected,
         "Attempting to send compact block via HTTP API"
     );
 
@@ -1362,12 +1396,21 @@ pub async fn send_compact_block_to_peer(
                 format!("Network error: {}", e)
             };
 
-            tracing::error!(
+            // PATCH 3: Enhanced logging - explain why HTTP fallback is needed
+            let context = if is_p2p_connected {
+                "peer is connected via P2P but HTTP fallback attempted"
+            } else {
+                "peer disconnected from P2P, attempting HTTP fallback"
+            };
+
+            tracing::warn!(
                 target: "p2p::compact",
                 peer = %peer,
                 url = %url,
                 error = %error_details,
-                "Failed to send compact block - detailed error"
+                context = context,
+                is_p2p_connected = is_p2p_connected,
+                "Failed to send compact block via HTTP fallback"
             );
 
             error_details
@@ -1385,8 +1428,21 @@ pub async fn send_compact_block_to_peer(
         Ok(())
     } else {
         let status = response.status();
-        let error_msg = format!("Peer returned error status: {}", status);
+        let body = response.text().await.unwrap_or_default();
+        let body_preview = if body.len() > 200 { &body[..200] } else { &body };
+        
+        tracing::error!(
+            target: "p2p::compact",
+            peer = %peer,
+            url = %url,
+            status = %status,
+            response_body = %body_preview,
+            hash = %compact.header.hash,
+            height = compact.header.height,
+            "Peer rejected compact block with error response"
+        );
 
+        let error_msg = format!("Peer returned error status {}: {}", status, body_preview);
         tracing::error!(
             target: "p2p::compact",
             peer = %peer,
@@ -1607,4 +1663,11 @@ async fn request_missing_block_txs(block_hash: String, indices: Vec<usize>) -> R
     // and send appropriate P2P message
 
     Ok(())
+}
+
+/// Handle compact block reception (HTTP endpoint)
+pub async fn handle_compact_block(
+    Json(compact): Json<super::compact::CompactBlock>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    handle_compact_block_with_peer(Json(compact), None).await
 }

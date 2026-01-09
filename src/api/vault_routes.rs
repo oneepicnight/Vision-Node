@@ -24,6 +24,10 @@ pub fn router() -> Router {
         .route("/vault/debug/balances", get(get_all_balances))
         .route("/vault/miners/addresses", get(get_miners_addresses))
         .route("/vault/miners/multisig", get(get_miners_multisig))
+        // Founder withdrawal endpoints
+        .route("/vault/withdrawal/status/:founder", get(get_withdrawal_status))
+        // TODO: Re-enable withdrawal endpoint after fixing handler trait issue
+        // .route("/vault/withdrawal", axum::routing::post(handle_process_withdrawal))
         // MAINNET LOCKDOWN: Seed operations moved to /admin namespace with security
         .route(
             "/admin/wallet/external/export",
@@ -59,11 +63,17 @@ async fn get_stats() -> Json<serde_json::Value> {
                     "BCH": balances.devops.bch.to_string(),
                     "DOGE": balances.devops.doge.to_string(),
                 },
-                "founders": {
-                    "LAND": balances.founders.land.to_string(),
-                    "BTC": balances.founders.btc.to_string(),
-                    "BCH": balances.founders.bch.to_string(),
-                    "DOGE": balances.founders.doge.to_string(),
+                "founder1": {
+                    "LAND": balances.founder1.land.to_string(),
+                    "BTC": balances.founder1.btc.to_string(),
+                    "BCH": balances.founder1.bch.to_string(),
+                    "DOGE": balances.founder1.doge.to_string(),
+                },
+                "founder2": {
+                    "LAND": balances.founder2.land.to_string(),
+                    "BTC": balances.founder2.btc.to_string(),
+                    "BCH": balances.founder2.bch.to_string(),
+                    "DOGE": balances.founder2.doge.to_string(),
                 }
             }
         })),
@@ -149,11 +159,17 @@ async fn get_all_balances() -> impl IntoResponse {
                     "BCH": balances.devops.bch.to_string(),
                     "DOGE": balances.devops.doge.to_string(),
                 },
-                "founders": {
-                    "LAND": balances.founders.land.to_string(),
-                    "BTC": balances.founders.btc.to_string(),
-                    "BCH": balances.founders.bch.to_string(),
-                    "DOGE": balances.founders.doge.to_string(),
+                "founder1": {
+                    "LAND": balances.founder1.land.to_string(),
+                    "BTC": balances.founder1.btc.to_string(),
+                    "BCH": balances.founder1.bch.to_string(),
+                    "DOGE": balances.founder1.doge.to_string(),
+                },
+                "founder2": {
+                    "LAND": balances.founder2.land.to_string(),
+                    "BTC": balances.founder2.btc.to_string(),
+                    "BCH": balances.founder2.bch.to_string(),
+                    "DOGE": balances.founder2.doge.to_string(),
                 }
             })),
         ),
@@ -400,7 +416,8 @@ async fn dev_reset_vault() -> impl IntoResponse {
     for bucket in &[
         VaultBucket::Miners,
         VaultBucket::DevOps,
-        VaultBucket::Founders,
+        VaultBucket::Founder1,
+        VaultBucket::Founder2,
     ] {
         for asset in &[
             QuoteAsset::Land,
@@ -456,11 +473,11 @@ async fn dev_simulate_trade(Json(req): Json<SimulateTradeRequest>) -> impl IntoR
             let miners_bal = store
                 .get_bucket_balance(VaultBucket::Miners, asset)
                 .unwrap_or(0);
-            let devops_bal = store
-                .get_bucket_balance(VaultBucket::DevOps, asset)
+            let founder1_bal = store
+                .get_bucket_balance(VaultBucket::Founder1, asset)
                 .unwrap_or(0);
-            let founders_bal = store
-                .get_bucket_balance(VaultBucket::Founders, asset)
+            let founder2_bal = store
+                .get_bucket_balance(VaultBucket::Founder2, asset)
                 .unwrap_or(0);
 
             (
@@ -470,8 +487,8 @@ async fn dev_simulate_trade(Json(req): Json<SimulateTradeRequest>) -> impl IntoR
                     "message": format!("Simulated trade: {} {}", req.amount, asset.as_str()),
                     "vault_after": {
                         "miners": miners_bal.to_string(),
-                        "devops": devops_bal.to_string(),
-                        "founders": founders_bal.to_string(),
+                        "founder1": founder1_bal.to_string(),
+                        "founder2": founder2_bal.to_string(),
                     }
                 })),
             )
@@ -508,6 +525,44 @@ async fn get_wallet_mode() -> Json<serde_json::Value> {
             "To enable signing: POST /api/wallet/external/import with a valid seed_hex"
         }
     }))
+}
+
+/// GET /api/vault/withdrawal/status/:founder - Get withdrawal status for a founder
+async fn get_withdrawal_status(
+    axum::extract::Path(founder): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    match crate::vault::withdrawals::get_withdrawal_status(&founder) {
+        Ok(status) => (axum::http::StatusCode::OK, Json(status)).into_response(),
+        Err(e) => (
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": e.to_string()
+            })),
+        ).into_response(),
+    }
+}
+
+/// POST /api/vault/withdrawal - Process a vault withdrawal
+async fn handle_process_withdrawal(
+    Json(req): Json<crate::vault::withdrawals::VaultWithdrawalRequest>,
+) -> impl IntoResponse {
+    match crate::vault::withdrawals::process_vault_withdrawal(req).await {
+        Ok(response) => (
+            axum::http::StatusCode::OK,
+            Json(serde_json::to_value(response).unwrap_or_else(|_| serde_json::json!({
+                "success": true,
+                "error": "Failed to serialize response"
+            }))),
+        ),
+        Err(e) => (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "success": false,
+                "error": e.to_string()
+            })),
+        ),
+    }
 }
 
 #[cfg(debug_assertions)]

@@ -130,6 +130,8 @@ pub struct BeaconState {
     pub peer_count: usize,
     pub mempool_size: usize,
     pub guardian_active: bool,
+    // Wallet/command center expects this for globe visualization
+    pub peers: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -182,7 +184,7 @@ pub async fn get_status() -> Json<StatusResponse> {
 
     // Transport selection for status UX
     let backbone_state = crate::control_plane::get_backbone_state();
-    let peer_floor = crate::mining_readiness::MAINNET_MIN_PEERS_FLOOR as usize;
+    let peer_floor = crate::mining_readiness::MAINNET_MIN_PEERS_FOR_MINING as usize;
     let transport = if peer_count >= peer_floor {
         "p2p".to_string()
     } else if backbone_state.connected {
@@ -540,6 +542,7 @@ pub async fn get_beacon_state() -> Json<BeaconState> {
         peer_count,
         mempool_size,
         guardian_active,
+        peers: vec![], // Empty for now, wallet uses peer_count
     })
 }
 
@@ -1087,4 +1090,138 @@ pub fn website_api_router() -> Router {
         // Analytics Endpoints
         .route("/api/downloads/visitors", get(get_downloads_visitors))
         .route("/api/snapshots/recent", get(get_snapshots_recent))
+        // Debug: Pre-DB → DB migration report
+        .route(
+            "/api/p2p/debug/predb_migration",
+            axum::routing::get(get_predb_migration_report),
+        )
+        // Debug: Peer store stats (counts only)
+        .route(
+            "/api/p2p/debug/peer_store_stats",
+            axum::routing::get(get_peer_store_stats),
+        )
+}
+
+/// GET /api/p2p/debug/predb_migration
+/// Returns the last migration report if available; otherwise 404.
+pub async fn get_predb_migration_report(
+    axum::extract::ConnectInfo(addr): axum::extract::ConnectInfo<std::net::SocketAddr>,
+    headers: axum::http::HeaderMap,
+) -> (axum::http::StatusCode, axum::Json<serde_json::Value>) {
+    let token = headers
+        .get("x-admin-token")
+        .and_then(|v| v.to_str().ok());
+    if let Err((_code, _msg)) = crate::api::security::verify_p2p_debug_access(&addr, token) {
+        return (
+            axum::http::StatusCode::NOT_FOUND,
+            axum::Json(serde_json::json!({ "error": "not found" })),
+        );
+    }
+
+    match crate::p2p::predb_migration_report::get_report() {
+        Some(report) => {
+            let val = serde_json::to_value(report).unwrap_or(serde_json::json!({
+                "error": "serialization_failed"
+            }));
+            (axum::http::StatusCode::OK, axum::Json(val))
+        }
+        None => (
+            axum::http::StatusCode::NOT_FOUND,
+            axum::Json(serde_json::json!({
+                "error": "no migration report yet"
+            })),
+        ),
+    }
+}
+
+#[derive(serde::Serialize)]
+pub struct PeerStoreStatsResponse {
+    pub db_total: u64,
+    pub mem_total: u64,
+    pub connected_peers: u64,
+    pub validated_peers: u64,
+    pub anchors: u64,
+    pub banned: u64,
+    pub hot: u64,
+    pub warm: u64,
+    pub cold: u64,
+    pub dial_failures: u64,
+}
+
+/// GET /api/p2p/debug/peer_store_stats
+/// Returns counts only; no peer identities leaked.
+pub async fn get_peer_store_stats(
+    axum::extract::ConnectInfo(addr): axum::extract::ConnectInfo<std::net::SocketAddr>,
+    headers: axum::http::HeaderMap,
+) -> (axum::http::StatusCode, axum::Json<serde_json::Value>) {
+    let token = headers
+        .get("x-admin-token")
+        .and_then(|v| v.to_str().ok());
+    if let Err((_code, _msg)) = crate::api::security::verify_p2p_debug_access(&addr, token) {
+        return (
+            axum::http::StatusCode::NOT_FOUND,
+            axum::Json(serde_json::json!({ "error": "not found" })),
+        );
+    }
+
+    // db_total via sled tree length
+    let db_total = match crate::CHAIN.lock().db.open_tree("constellation_memory") {
+        Ok(tree) => tree.len() as u64,
+        Err(_) => 0,
+    };
+
+    // mem_total via global CONSTELLATION_MEMORY
+    let mem_total = crate::CONSTELLATION_MEMORY.lock().peer_count() as u64;
+
+    // PeerManager counts
+    let peers = crate::PEER_MANAGER.get_all_peers().await;
+    let connected_peers = peers
+        .iter()
+        .filter(|p| p.state == crate::p2p::peer_manager::PeerState::Connected)
+        .count() as u64;
+    let hot = peers
+        .iter()
+        .filter(|p| p.bucket == crate::p2p::peer_manager::PeerBucket::Hot)
+        .count() as u64;
+    let warm = peers
+        .iter()
+        .filter(|p| p.bucket == crate::p2p::peer_manager::PeerBucket::Warm)
+        .count() as u64;
+    let cold = peers
+        .iter()
+        .filter(|p| p.bucket == crate::p2p::peer_manager::PeerBucket::Cold)
+        .count() as u64;
+
+    // anchors via ConstellationMemory
+    let anchors = crate::CONSTELLATION_MEMORY.lock().get_anchor_peers().len() as u64;
+
+    // banned via sled key prefix scan
+    let banned = crate::CHAIN
+        .lock()
+        .db
+        .scan_prefix("banned_")
+        .count() as u64;
+
+    // dial failures count
+    let dial_failures = crate::p2p::dial_tracker::get_dial_failures().len() as u64;
+
+    let resp = PeerStoreStatsResponse {
+        db_total,
+        mem_total,
+        connected_peers,
+        validated_peers: mem_total,
+        anchors,
+        banned,
+        hot,
+        warm,
+        cold,
+        dial_failures,
+    };
+
+    (
+        axum::http::StatusCode::OK,
+        axum::Json(serde_json::to_value(resp).unwrap_or(serde_json::json!({
+            "error": "serialization_failed"
+        }))),
+    )
 }

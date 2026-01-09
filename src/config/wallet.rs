@@ -84,7 +84,8 @@ fn generate_land_address() -> Result<String, String> {
     let chars = "023456789acdefghjklmnpqrstuvwxyz";
     let random_suffix: String = (0..38)
         .map(|_| {
-            let idx = rng.gen_range(0, chars.len());
+            // rand 0.8+ uses Range syntax for gen_range
+            let idx = rng.gen_range(0..chars.len());
             chars.chars().nth(idx).unwrap()
         })
         .collect();

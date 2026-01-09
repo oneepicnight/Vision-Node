@@ -36,3 +36,12 @@ pub fn wallet_has_deed(_db: &sled::Db, _address: &str) -> bool {
 pub fn all_deed_owners(_db: &sled::Db) -> Vec<String> {
     vec![]
 }
+
+// Compatibility wrappers used by market/deed_market
+pub fn get_owned_deed_id(_db: &sled::Db, _owner: &str) -> Result<Option<u64>, String> {
+    Ok(None)
+}
+
+pub fn check_and_auto_stock_next_tier(_db: &sled::Db) -> Result<(), String> {
+    Ok(())
+}

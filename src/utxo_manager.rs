@@ -217,8 +217,9 @@ impl UtxoManager {
         
         // Clone client to avoid holding lock across await
         let client = {
-            let clients = crate::EXTERNAL_RPC_CLIENTS.lock();
-            clients.get(chain)
+            let clients = crate::EXTERNAL_RPC_CLIENTS.lock()
+                .map_err(|e| anyhow!("Failed to lock RPC clients: {}", e))?;
+            clients.get(&chain)
                 .ok_or_else(|| anyhow!("RPC client not available for {}", chain.as_str()))?
                 .clone()
         }; // Lock dropped here

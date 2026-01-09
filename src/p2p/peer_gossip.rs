@@ -392,31 +392,22 @@ pub async fn process_gossip_message(
 
     if !new_peers.is_empty() {
         info!(
-            "[SWARM] 💥 BOOM! Discovered {} new peers from gossip - attempting connections",
+            "[SWARM] 💥 BOOM! Discovered {} new peers from gossip",
             new_peers.len()
         );
 
-        // 🌱 PURE SWARM: Auto-save discovered peers to seed_peers.json
-        // This builds a self-growing peer book that persists across restarts
-        tokio::task::spawn_blocking({
-            let peers_to_save = new_peers.clone();
-            move || {
-                let mut config = crate::p2p::seed_peers::SeedPeerConfig::load();
-                let added = config.add_peers(peers_to_save);
-
-                if added > 0 {
-                    if let Err(e) = config.save() {
-                        tracing::warn!("[SWARM] Failed to save seed peers: {}", e);
-                    } else {
-                        tracing::info!(
-                            "[SWARM] 💾 Saved {} new peers to seed_peers.json (total: {})",
-                            added,
-                            config.peers.len()
-                        );
-                    }
-                }
-            }
-        });
+        // 🚀 IMMEDIATE DIAL: Mark these peers as "fresh" priority for next maintainer cycle
+        // The connection maintainer will pick these up immediately on its next wake
+        for addr in &new_peers {
+            info!("[DIAL_QUEUE] 🎯 Queued BOOM peer for immediate dial: {}", addr);
+        }
+        
+        // ❌ REMOVED: No longer auto-save gossip peers to seed_peers.json
+        // Seeds should be curated, not "anyone who waved at us in traffic"
+        // Gossip peers stay in peer_store only (the messy club floor)
+        tracing::debug!(
+            "[SWARM] 🌱 Gossip peers saved to peer_store only (not promoted to seeds)"
+        );
     }
 
     new_peers

@@ -1,10 +1,21 @@
 #![allow(dead_code)]
 
 use std::sync::Arc;
+use once_cell::sync::Lazy;
 
 use axum::http::{HeaderValue, StatusCode};
 use axum::response::IntoResponse;
 use prometheus::{opts, Encoder, IntCounter, IntGauge, Registry, TextEncoder};
+
+/// Global atomic tx counters (shared across modules)
+pub static PROM_VISION_ATOMIC_TXS: Lazy<IntCounter> = Lazy::new(|| {
+    IntCounter::new("vision_atomic_txs", "Atomic tx attempts").expect("atomic tx counter")
+});
+
+pub static PROM_VISION_ATOMIC_FAILURES: Lazy<IntCounter> = Lazy::new(|| {
+    IntCounter::new("vision_atomic_failures", "Atomic tx failures")
+        .expect("atomic tx failure counter")
+});
 
 /// Wrapper around the sled database for shared access
 #[derive(Clone)]

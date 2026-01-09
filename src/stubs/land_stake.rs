@@ -37,10 +37,15 @@ pub fn total_stake(_db: &sled::Db) -> u128 {
     0
 }
 
+/// Total staking weight across all deed holders (stubbed to zero when staging is off)
+pub fn total_weight(_db: &sled::Db) -> u128 {
+    0
+}
+
 pub fn get_stake(_db: &sled::Db, _address: &str) -> u128 {
     0
 }
 
-pub fn rebuild_owner_weights(_db: &sled::Db) -> Result<(), String> {
+pub fn rebuild_owner_weights(_db: &sled::Db) -> anyhow::Result<()> {
     Ok(())
 }

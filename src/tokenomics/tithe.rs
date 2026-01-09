@@ -20,15 +20,15 @@ pub fn tithe_split_bps() -> (u16, u16, u16, u16) {
 
 /// Get foundation addresses from env vars (matching Tokenomics config)
 pub fn vault_addr() -> Result<String, String> {
-    Ok(vision_constants::VAULT_ADDRESS.to_string())
+    Ok(vision_constants::vault_address())
 }
 
 pub fn fund_addr() -> Result<String, String> {
-    Ok(vision_constants::FOUNDER_ADDRESS.to_string())
+    Ok(vision_constants::founder_address())
 }
 
 pub fn treasury_addr() -> Result<String, String> {
-    Ok(vision_constants::OPS_ADDRESS.to_string())
+    Ok(vision_constants::ops_address())
 }
 
 #[cfg(test)]

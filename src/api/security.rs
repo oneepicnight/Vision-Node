@@ -44,3 +44,36 @@ pub fn verify_secure_access(
 
     Ok(())
 }
+
+/// Check if P2P debug endpoints are enabled via env flag
+/// Truthy values: "1" | "true" | "yes" (case-insensitive)
+pub fn p2p_debug_enabled() -> bool {
+    match std::env::var("VISION_ENABLE_P2P_DEBUG") {
+        Ok(v) => {
+            let v = v.to_lowercase();
+            v == "1" || v == "true" || v == "yes"
+        }
+        Err(_) => false,
+    }
+}
+
+/// Verify access for P2P debug endpoints, returning 404 on any failure
+/// Conditions:
+/// - Debug flag enabled
+/// - Request from localhost
+/// - Valid admin token present
+pub fn verify_p2p_debug_access(
+    addr: &SocketAddr,
+    token: Option<&str>,
+) -> Result<(), (StatusCode, &'static str)> {
+    if !p2p_debug_enabled() {
+        return Err((StatusCode::NOT_FOUND, "not found"));
+    }
+    if !is_localhost(addr) {
+        return Err((StatusCode::NOT_FOUND, "not found"));
+    }
+    if !verify_admin_token(token) {
+        return Err((StatusCode::NOT_FOUND, "not found"));
+    }
+    Ok(())
+}

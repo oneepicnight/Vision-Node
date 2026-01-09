@@ -13,13 +13,27 @@ pub struct TokenAccountsCfg {
     pub treasury_pct: u32,
     pub founder1_pct: u32,
     pub founder2_pct: u32,
-    // Miners vault deposit addresses for fee settlement
+    // Miners vault deposit addresses for fee settlement (50% - auto-buy hot wallet)
     #[serde(default)]
     pub miners_btc_address: Option<String>,
     #[serde(default)]
     pub miners_bch_address: Option<String>,
     #[serde(default)]
     pub miners_doge_address: Option<String>,
+    // Founder 1 crypto addresses (25% of exchange fees)
+    #[serde(default)]
+    pub founder1_btc_address: Option<String>,
+    #[serde(default)]
+    pub founder1_bch_address: Option<String>,
+    #[serde(default)]
+    pub founder1_doge_address: Option<String>,
+    // Founder 2 crypto addresses (25% of exchange fees)
+    #[serde(default)]
+    pub founder2_btc_address: Option<String>,
+    #[serde(default)]
+    pub founder2_bch_address: Option<String>,
+    #[serde(default)]
+    pub founder2_doge_address: Option<String>,
 }
 
 impl TokenAccountsCfg {

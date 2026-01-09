@@ -113,7 +113,7 @@ pub fn try_payout_pending(
 
     // Directly transfer from Vault to user (consensus-safe, deterministic)
     // This happens when user sets their payout address
-    let vault_key = crate::acct_key(crate::vision_constants::VAULT_ADDRESS);
+    let vault_key = crate::acct_key(&crate::vision_constants::vault_address());
     let user_key = crate::acct_key(to_address);
 
     // Check Vault has sufficient balance

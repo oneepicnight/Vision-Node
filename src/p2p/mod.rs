@@ -76,6 +76,9 @@ pub mod seed_peers;
 // Connection maintainer - ensures minimum peer connections (PATCH 2)
 pub mod connection_maintainer;
 
+// Peer connection diagnostics and reporting
+pub mod peer_connect_report;
+
 // UPnP port forwarding for automatic public reachability
 pub mod upnp;
 
@@ -107,6 +110,9 @@ pub mod reachability; // ✅ NAT detection and reverse connection testing
 
 // Dial failure tracking for debugging P2P issues
 pub mod dial_tracker; // ✅ Track and report connection failures
+
+// Debug/reporting for pre-DB → DB migration (observability)
+pub mod predb_migration_report;
 
 // Test utilities for isolated unit testing
 #[cfg(test)]

@@ -62,10 +62,12 @@ impl LandAutoBuyer {
     }
 
     fn convert_asset_to_land(&self, asset: QuoteAsset, land_per_unit: f64) -> Result<()> {
-        let total_balance = self.store.total_vault_balance(asset)?;
+        // ONLY convert Miners bucket - Founder1/Founder2 crypto should NOT be auto-converted
+        // Their crypto accumulates for future withdrawal to their addresses
+        let miners_balance = self.store.get_bucket_balance(VaultBucket::Miners, asset)?;
 
         // Convert to satoshis for threshold check
-        let total_sats = total_balance.min(u64::MAX as u128) as u64;
+        let total_sats = miners_balance.min(u64::MAX as u128) as u64;
 
         if total_sats < VAULT_MIN_CONVERT_SATS {
             // Rate-limited: show why we're not converting yet
@@ -81,7 +83,7 @@ impl LandAutoBuyer {
         }
 
         // Calculate LAND amount: convert balance to f64, multiply by rate, then back to u128
-        let balance_f64 = total_balance as f64 / 100_000_000.0;
+        let balance_f64 = miners_balance as f64 / 100_000_000.0;
         let land_amount = balance_f64 * land_per_unit;
 
         if land_amount < 0.00000001 {
@@ -98,15 +100,15 @@ impl LandAutoBuyer {
         }
 
         tracing::info!(
-            "🔄 VAULT AUTO-BUY: Converting {:.8} {} → {:.2} LAND (rate: {:.2} per unit)",
+            "🔄 VAULT AUTO-BUY: Converting {:.8} {} → {:.2} LAND (rate: {:.2} per unit) [Miners bucket only]",
             balance_f64,
             asset.as_str(),
             land_amount,
             land_per_unit
         );
 
-        // Burn external asset balances from all buckets
-        self.store.burn_all_vault_balances_for_asset(asset)?;
+        // Burn ONLY Miners bucket - Founder1/Founder2 crypto is NOT converted (goes to their wallets)
+        self.store.debit_vault(VaultBucket::Miners, asset, miners_balance)?;
 
         // Convert LAND amount to u128 for split
         let land_units = (land_amount * 100_000_000.0) as u128;
@@ -116,34 +118,42 @@ impl LandAutoBuyer {
         let miners_land = split.miners as u128;
         let devops_land = split.devops as u128;
         let founders_land = split.founders as u128;
+        
+        // Split founders amount 50/50 between Founder1 and Founder2
+        let founder1_land = founders_land / 2;
+        let founder2_land = founders_land - founder1_land;
 
         self.store
             .credit_vault(VaultBucket::Miners, QuoteAsset::Land, miners_land)?;
         self.store
             .credit_vault(VaultBucket::DevOps, QuoteAsset::Land, devops_land)?;
         self.store
-            .credit_vault(VaultBucket::Founders, QuoteAsset::Land, founders_land)?;
+            .credit_vault(VaultBucket::Founder1, QuoteAsset::Land, founder1_land)?;
+        self.store
+            .credit_vault(VaultBucket::Founder2, QuoteAsset::Land, founder2_land)?;
 
         tracing::info!(
-            "✅ VAULT AUTO-BUY COMPLETE: Converted {:.8} {} → {:.2} LAND | Distributed: miners={} devops={} founders={}",
+            "✅ VAULT AUTO-BUY COMPLETE: Converted {:.8} {} → {:.2} LAND | Distributed: miners={} devops={} founder1={} founder2={}",
             balance_f64,
             asset.as_str(),
             land_amount,
             miners_land,
             devops_land,
-            founders_land
+            founder1_land,
+            founder2_land
         );
 
         // Write receipt for auditability (best effort - don't fail conversion if receipt fails)
         let memo = format!(
-            "Auto-buy: {} {} ({} sats) → {} LAND | Split: miners={}, devops={}, founders={} | Rate: {:.2} LAND per unit",
+            "Auto-buy: {} {} ({} sats) → {} LAND [Miners bucket only] | Split: miners={}, devops={}, founder1={}, founder2={} | Rate: {:.2} LAND per unit",
             balance_f64,
             asset.as_str(),
             total_sats,
             land_amount,
             miners_land,
             devops_land,
-            founders_land,
+            founder1_land,
+            founder2_land,
             land_per_unit
         );
 
@@ -151,10 +161,10 @@ impl LandAutoBuyer {
             id: String::new(), // will be filled by write_receipt
             ts_ms: 0,          // will be filled by write_receipt
             kind: "vault_autobuy".to_string(),
-            from: format!("vault:{}", asset.as_str()),
+            from: format!("vault:miners:{}", asset.as_str()),
             to: "vault:LAND".to_string(),
             amount: land_units.to_string(),
-            fee: total_balance.to_string(), // asset burned
+            fee: miners_balance.to_string(), // Only Miners bucket crypto burned
             memo: Some(memo),
             txid: None,
             ok: true,

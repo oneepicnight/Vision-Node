@@ -4,6 +4,7 @@
 //! guardian rotation, and peer recovery status.
 
 use axum::{extract::Json, response::IntoResponse};
+use crate::globals::{EBID_MANAGER, GUARDIAN_ROLE};
 
 /// GET /constellation/memory
 /// Returns constellation memory summary
@@ -48,7 +49,7 @@ pub async fn get_guardian_role() -> impl IntoResponse {
         .as_secs();
 
     let role_info = {
-        let role = crate::GUARDIAN_ROLE.lock();
+        let role = GUARDIAN_ROLE.lock();
 
         if let Some(state) = role.get_state() {
             serde_json::json!({
@@ -74,12 +75,12 @@ pub async fn get_guardian_role() -> impl IntoResponse {
 /// Returns overall immortality health snapshot
 pub async fn get_immortality_status() -> impl IntoResponse {
     let local_ebid = {
-        let mgr = crate::EBID_MANAGER.lock();
+        let mgr = EBID_MANAGER.lock();
         mgr.get_ebid().to_string()
     };
 
     let guardian_ebid = {
-        let role = crate::GUARDIAN_ROLE.lock();
+        let role = GUARDIAN_ROLE.lock();
         role.get_current_guardian()
     };
 
@@ -124,7 +125,7 @@ pub async fn get_immortality_status() -> impl IntoResponse {
 /// GET /ebid
 /// Returns local node's Eternal Broadcast ID
 pub async fn get_local_ebid() -> impl IntoResponse {
-    let mgr = crate::EBID_MANAGER.lock();
+    let mgr = EBID_MANAGER.lock();
     let full = mgr.get_full();
 
     Json(serde_json::json!({

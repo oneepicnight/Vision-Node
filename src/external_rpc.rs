@@ -5,7 +5,8 @@ use anyhow::{anyhow, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use once_cell::sync::Lazy;
 
 /// RPC client health status
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,6 +55,105 @@ pub struct ExternalRpcConfig {
     pub bch: Option<ChainRpcConfig>,
     pub doge: Option<ChainRpcConfig>,
 }
+
+impl ExternalRpcConfig {
+    /// Load config from environment variables or JSON file
+    /// Returns None if no configuration is found (scanner will be disabled)
+    pub fn from_env_or_file() -> Option<Self> {
+        // First try environment variables
+        let btc_from_env = Self::chain_from_env("BTC");
+        let bch_from_env = Self::chain_from_env("BCH");
+        let doge_from_env = Self::chain_from_env("DOGE");
+
+        // If any chain is configured via env, use env config
+        if btc_from_env.is_some() || bch_from_env.is_some() || doge_from_env.is_some() {
+            tracing::info!("[DEPOSITS] Loading RPC config from environment variables");
+            return Some(Self {
+                btc: btc_from_env,
+                bch: bch_from_env,
+                doge: doge_from_env,
+            });
+        }
+
+        // Try loading from JSON file
+        Self::from_file()
+    }
+
+    /// Load from external_rpc.json file
+    fn from_file() -> Option<Self> {
+        // Try multiple paths
+        let paths = vec![
+            std::path::PathBuf::from("external_rpc.json"),
+            std::path::PathBuf::from("config/external_rpc.json"),
+            std::path::PathBuf::from("./config/external_rpc.json"),
+        ];
+
+        for path in paths {
+            if path.exists() {
+                match std::fs::read_to_string(&path) {
+                    Ok(content) => match serde_json::from_str::<Self>(&content) {
+                        Ok(config) => {
+                            tracing::info!("[DEPOSITS] Loaded RPC config from {}", path.display());
+                            return Some(config);
+                        }
+                        Err(e) => {
+                            tracing::warn!("[DEPOSITS] Failed to parse {}: {}", path.display(), e);
+                        }
+                    },
+                    Err(e) => {
+                        tracing::debug!("[DEPOSITS] Could not read {}: {}", path.display(), e);
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Load single chain config from environment variables
+    fn chain_from_env(chain: &str) -> Option<ChainRpcConfig> {
+        let url_var = format!("VISION_RPC_{}_URL", chain);
+        let user_var = format!("VISION_RPC_{}_USER", chain);
+        let pass_var = format!("VISION_RPC_{}_PASS", chain);
+
+        if let Ok(rpc_url) = std::env::var(&url_var) {
+            Some(ChainRpcConfig {
+                rpc_url,
+                username: std::env::var(&user_var).ok(),
+                password: std::env::var(&pass_var).ok(),
+                timeout_ms: None,
+                max_retries: None,
+                fallback_urls: None,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Check if any chain is configured
+    pub fn has_any_chain(&self) -> bool {
+        self.btc.is_some() || self.bch.is_some() || self.doge.is_some()
+    }
+
+    /// Get list of configured chain names
+    pub fn configured_chains(&self) -> Vec<String> {
+        let mut chains = Vec::new();
+        if self.btc.is_some() {
+            chains.push("BTC".to_string());
+        }
+        if self.bch.is_some() {
+            chains.push("BCH".to_string());
+        }
+        if self.doge.is_some() {
+            chains.push("DOGE".to_string());
+        }
+        chains
+    }
+}
+
+/// Global registry of external RPC clients keyed by chain
+pub static EXTERNAL_RPC_CLIENTS: Lazy<Mutex<HashMap<ExternalChain, Arc<RpcClient>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 /// RPC client for a specific blockchain
 pub struct RpcClient {
@@ -322,6 +422,172 @@ impl RpcClients {
             }
         }
     }
+}
+
+/// Health check a single RPC endpoint
+pub async fn health_check_rpc(client: &RpcClient) -> Result<u64> {
+    let result = client.call_no_params("getblockcount").await?;
+    let block_count = result.as_u64().ok_or_else(|| anyhow!("Invalid block count response"))?;
+    Ok(block_count)
+}
+
+/// Redact sensitive parts of URL for logging
+fn redact_url(url: &str) -> String {
+    if let Some(pos) = url.find("go.getblock.io/") {
+        let after = pos + "go.getblock.io/".len();
+        if let Some(end) = url[after..].find('/') {
+            return format!("{}***{}", &url[..after], &url[after + end..]);
+        }
+    }
+    url.to_string()
+}
+
+/// Initialize global RPC clients from config with health checks
+pub async fn initialize_and_validate_rpc_clients(cfg: &ExternalRpcConfig) -> Result<(bool, bool, bool)> {
+    let mut btc_ok = false;
+    let mut bch_ok = false;
+    let mut doge_ok = false;
+
+    // BTC validation
+    if let Some(btc) = &cfg.btc {
+        if !btc.rpc_url.is_empty() {
+            match RpcClient::from_chain_cfg(ExternalChain::Btc, btc) {
+                Ok(client) => {
+                    let redacted = redact_url(&btc.rpc_url);
+                    let auth = if btc.username.is_some() && btc.password.is_some() {
+                        "basic"
+                    } else {
+                        "none"
+                    };
+                    tracing::info!("[EXT-RPC] BTC rpc_url={} auth={}", redacted, auth);
+                    
+                    match health_check_rpc(&client).await {
+                        Ok(height) => {
+                            tracing::info!("[EXT-RPC] BTC status=OK tip={}", height);
+                            let mut clients = EXTERNAL_RPC_CLIENTS.lock().unwrap();
+                            clients.insert(ExternalChain::Btc, Arc::new(client));
+                            btc_ok = true;
+                        }
+                        Err(e) => {
+                            tracing::error!("[EXT-RPC] BTC status=FAIL reason={}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("[EXT-RPC] BTC failed to create client: {}", e);
+                }
+            }
+        } else {
+            tracing::info!("[EXT-RPC] BTC disabled (empty rpc_url)");
+        }
+    } else {
+        tracing::info!("[EXT-RPC] BTC not configured");
+    }
+
+    // BCH validation
+    if let Some(bch) = &cfg.bch {
+        if !bch.rpc_url.is_empty() {
+            match RpcClient::from_chain_cfg(ExternalChain::Bch, bch) {
+                Ok(client) => {
+                    let redacted = redact_url(&bch.rpc_url);
+                    let auth = if bch.username.is_some() && bch.password.is_some() {
+                        "basic"
+                    } else {
+                        "none"
+                    };
+                    tracing::info!("[EXT-RPC] BCH rpc_url={} auth={}", redacted, auth);
+                    
+                    match health_check_rpc(&client).await {
+                        Ok(height) => {
+                            tracing::info!("[EXT-RPC] BCH status=OK tip={}", height);
+                            let mut clients = EXTERNAL_RPC_CLIENTS.lock().unwrap();
+                            clients.insert(ExternalChain::Bch, Arc::new(client));
+                            bch_ok = true;
+                        }
+                        Err(e) => {
+                            tracing::error!("[EXT-RPC] BCH status=FAIL reason={}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("[EXT-RPC] BCH failed to create client: {}", e);
+                }
+            }
+        } else {
+            tracing::info!("[EXT-RPC] BCH disabled (empty rpc_url)");
+        }
+    } else {
+        tracing::info!("[EXT-RPC] BCH not configured");
+    }
+
+    // DOGE validation (disabled for launch)
+    if let Some(doge) = &cfg.doge {
+        if !doge.rpc_url.is_empty() {
+            match RpcClient::from_chain_cfg(ExternalChain::Doge, doge) {
+                Ok(client) => {
+                    let redacted = redact_url(&doge.rpc_url);
+                    let auth = if doge.username.is_some() && doge.password.is_some() {
+                        "basic"
+                    } else {
+                        "none"
+                    };
+                    tracing::info!("[EXT-RPC] DOGE rpc_url={} auth={}", redacted, auth);
+                    
+                    match health_check_rpc(&client).await {
+                        Ok(height) => {
+                            tracing::info!("[EXT-RPC] DOGE status=OK tip={}", height);
+                            let mut clients = EXTERNAL_RPC_CLIENTS.lock().unwrap();
+                            clients.insert(ExternalChain::Doge, Arc::new(client));
+                            doge_ok = true;
+                        }
+                        Err(e) => {
+                            tracing::error!("[EXT-RPC] DOGE status=FAIL reason={}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("[EXT-RPC] DOGE failed to create client: {}", e);
+                }
+            }
+        } else {
+            tracing::info!("[EXT-RPC] DOGE disabled");
+        }
+    } else {
+        tracing::info!("[EXT-RPC] DOGE disabled");
+    }
+
+    Ok((btc_ok, bch_ok, doge_ok))
+}
+
+/// Initialize global RPC clients from config (legacy sync version)
+pub fn initialize_rpc_clients(cfg: &ExternalRpcConfig) -> Result<()> {
+    let mut clients = EXTERNAL_RPC_CLIENTS.lock().unwrap();
+    
+    if let Some(btc) = &cfg.btc {
+        if !btc.rpc_url.is_empty() {
+            let client = RpcClient::from_chain_cfg(ExternalChain::Btc, btc)?;
+            clients.insert(ExternalChain::Btc, Arc::new(client));
+            tracing::info!("✅ Bitcoin RPC configured: {}", btc.rpc_url);
+        }
+    }
+
+    if let Some(bch) = &cfg.bch {
+        if !bch.rpc_url.is_empty() {
+            let client = RpcClient::from_chain_cfg(ExternalChain::Bch, bch)?;
+            clients.insert(ExternalChain::Bch, Arc::new(client));
+            tracing::info!("✅ Bitcoin Cash RPC configured: {}", bch.rpc_url);
+        }
+    }
+
+    if let Some(doge) = &cfg.doge {
+        if !doge.rpc_url.is_empty() {
+            let client = RpcClient::from_chain_cfg(ExternalChain::Doge, doge)?;
+            clients.insert(ExternalChain::Doge, Arc::new(client));
+            tracing::info!("✅ Dogecoin RPC configured: {}", doge.rpc_url);
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

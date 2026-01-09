@@ -1,7 +1,7 @@
 use std::{fs, io::Write, path::PathBuf, str::FromStr};
 
 use clap::{Parser, Subcommand};
-use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
+use ed25519_dalek::{Signature, Signer, SigningKey};
 use hex::FromHex;
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};

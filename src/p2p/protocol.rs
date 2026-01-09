@@ -81,6 +81,13 @@ impl GetHeaders {
 impl LiteHeader {
     /// Convert from full Block to LiteHeader
     pub fn from_block(block: &crate::Block) -> Self {
+        // DIAGNOSTIC: Log what pow_hash we're copying from block to LiteHeader
+        tracing::debug!(
+            "[LITE-FROM-BLOCK] height={} copying pow_hash={} to LiteHeader.hash",
+            block.header.number,
+            block.header.pow_hash
+        );
+        
         Self {
             hash: block.header.pow_hash.clone(),
             prev: block.header.parent_hash.clone(),

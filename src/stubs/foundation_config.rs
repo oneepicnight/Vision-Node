@@ -28,3 +28,27 @@ pub fn miners_bch_address() -> Option<String> {
 pub fn miners_doge_address() -> Option<String> {
     None
 }
+
+pub fn founder1_btc_address() -> Option<String> {
+    None
+}
+
+pub fn founder1_bch_address() -> Option<String> {
+    None
+}
+
+pub fn founder1_doge_address() -> Option<String> {
+    None
+}
+
+pub fn founder2_btc_address() -> Option<String> {
+    None
+}
+
+pub fn founder2_bch_address() -> Option<String> {
+    None
+}
+
+pub fn founder2_doge_address() -> Option<String> {
+    None
+}

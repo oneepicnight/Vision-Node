@@ -1,7 +1,10 @@
 //! Stub implementation of guardian module when staging feature is disabled
 //! Non-custodial: provides safe stubs with no key access
 
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use sled;
 
 // Inline stubs for guardian submodules
 mod consciousness {
@@ -16,13 +19,26 @@ mod creator_config {
     use serde::{Deserialize, Serialize};
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct CreatorConfig {
-        pub address: String,
+        pub creator_address: String,
+        pub name: String,
+        pub title: String,
     }
-    pub fn is_creator_address(_addr: &str) -> bool {
+
+    impl Default for CreatorConfig {
+        fn default() -> Self {
+            Self {
+                creator_address: String::new(),
+                name: "".to_string(),
+                title: "".to_string(),
+            }
+        }
+    }
+
+    pub fn is_creator_address(_db: &sled::Db, _addr: &str) -> bool {
         false
     }
-    pub fn load_creator_config() -> Result<Option<CreatorConfig>, String> {
-        Ok(None)
+    pub fn load_creator_config(_db: &sled::Db) -> Result<CreatorConfig, String> {
+        Ok(CreatorConfig::default())
     }
 }
 
@@ -72,14 +88,25 @@ pub use role::{GuardianRole, GuardianRoleConfig};
 pub use rotation::{is_local_guardian, spawn_guardian_rotation_loop};
 pub use events::GuardianEvent;
 
-/// Stub guardian function - no-op
-pub fn guardian() -> Option<String> {
-    None
+/// Minimal stub guardian struct providing welcome/farewell hooks
+#[derive(Default)]
+pub struct GuardianStub;
+
+impl GuardianStub {
+    pub async fn welcome_star(&self, _peer_id: &str, _addr: Option<&str>, _region: Option<&str>) {}
+    pub async fn farewell_star(&self, _peer_id: &str, _addr: Option<&str>) {}
+}
+
+static GUARDIAN: Lazy<Arc<GuardianStub>> = Lazy::new(|| Arc::new(GuardianStub::default()));
+
+/// Stub guardian accessor
+pub fn guardian() -> &'static Arc<GuardianStub> {
+    &GUARDIAN
 }
 
 /// Stub init_guardian - no-op
 pub fn init_guardian() {
-    // No-op stub
+    let _ = GUARDIAN.as_ref();
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

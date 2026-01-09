@@ -85,9 +85,11 @@ pub enum TransactionStatus {
 
 /// Broadcast raw transaction to blockchain via external RPC
 pub async fn broadcast_raw_tx(chain: ExternalChain, hex: &str) -> Result<String> {
-    let clients = crate::EXTERNAL_RPC_CLIENTS.lock();
-    let client = clients.get(chain)
-        .ok_or_else(|| anyhow!("{} RPC not configured", chain.as_str()))?;
+    let clients = crate::EXTERNAL_RPC_CLIENTS.lock()
+        .map_err(|e| anyhow!("Failed to lock RPC clients: {}", e))?;
+    let client = clients.get(&chain)
+        .ok_or_else(|| anyhow!("{} RPC not configured", chain.as_str()))?
+        .clone();
     
     tracing::info!("Broadcasting {} transaction, hex length: {} bytes", chain.as_str(), hex.len());
     
@@ -192,8 +194,9 @@ fn validate_address(chain: ExternalChain, address: &str) -> Result<()> {
 pub async fn check_withdrawal_available(asset: &QuoteAsset) -> Result<bool> {
     let chain = asset_to_chain(asset)?;
     
-    let clients = crate::EXTERNAL_RPC_CLIENTS.lock();
-    Ok(clients.has(chain))
+    let clients = crate::EXTERNAL_RPC_CLIENTS.lock()
+        .map_err(|e| anyhow!("Failed to lock RPC clients: {}", e))?;
+    Ok(clients.contains_key(&chain))
 }
 
 /// Parse chain string to ExternalChain enum
@@ -322,8 +325,9 @@ pub async fn process_send(request: SendRequest) -> Result<SendResponse> {
     validate_address(chain, &request.to_address)?;
     
     // Check if RPC is configured and healthy
-    let clients = crate::EXTERNAL_RPC_CLIENTS.lock();
-    if !clients.has(chain) {
+    let clients = crate::EXTERNAL_RPC_CLIENTS.lock()
+        .map_err(|e| anyhow!("Failed to lock RPC clients: {}", e))?;
+    if !clients.contains_key(&chain) {
         return Ok(SendResponse {
             success: false,
             txid: None,

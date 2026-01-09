@@ -253,7 +253,7 @@ mod tests {
         // Generate a test keypair
 
         let keypair = SigningKey::generate(&mut rand::rngs::OsRng);
-        let pubkey_bytes = keypair.public.to_bytes();
+        let pubkey_bytes = keypair.verifying_key().to_bytes();
 
         // Derive node_id twice
         let id1 = node_id_from_pubkey(&pubkey_bytes);
@@ -269,11 +269,12 @@ mod tests {
 
     #[test]
     fn test_different_pubkeys_different_ids() {
+        let mut csprng = rand::rngs::OsRng;
         let keypair1 = SigningKey::generate(&mut csprng);
         let keypair2 = SigningKey::generate(&mut csprng);
 
-        let id1 = node_id_from_pubkey(&keypair1.public.to_bytes());
-        let id2 = node_id_from_pubkey(&keypair2.public.to_bytes());
+        let id1 = node_id_from_pubkey(&keypair1.verifying_key().to_bytes());
+        let id2 = node_id_from_pubkey(&keypair2.verifying_key().to_bytes());
 
         assert_ne!(id1, id2);
     }
@@ -281,7 +282,7 @@ mod tests {
     #[test]
     fn test_verify_node_id() {
         let keypair = SigningKey::generate(&mut rand::rngs::OsRng);
-        let pubkey_bytes = keypair.public.to_bytes();
+        let pubkey_bytes = keypair.verifying_key().to_bytes();
         let correct_id = node_id_from_pubkey(&pubkey_bytes);
 
         // Correct ID should verify
@@ -297,7 +298,7 @@ mod tests {
     #[test]
     fn test_node_identity_creation() {
         let keypair = SigningKey::generate(&mut rand::rngs::OsRng);
-        let pubkey_bytes = keypair.public.to_bytes();
+        let pubkey_bytes = keypair.verifying_key().to_bytes();
 
         let identity = NodeIdentity::from_keypair(keypair);
 

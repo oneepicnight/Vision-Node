@@ -120,7 +120,7 @@ pub async fn handle_inv(peer: String, inv: Inv) {
                 // Enterprise: Check if we have this TX in mempool or chain
                 let have_tx = {
                     let g = crate::CHAIN.lock();
-                    g.seen_txs.contains_key(&item.hash)
+                    g.seen_txs.contains(&item.hash)
                         || g.mempool_critical
                             .iter()
                             .any(|tx| hex::encode(crate::tx_hash(tx)) == item.hash)
@@ -310,7 +310,7 @@ fn check_have_block(_hash: &str) -> bool {
 
 async fn check_have_tx_async(hash: &str) -> bool {
     let g = crate::CHAIN.lock();
-    g.seen_txs.contains_key(&hash.to_string())
+    g.seen_txs.contains(&hash.to_string())
 }
 
 fn check_have_tx(_hash: &str) -> bool {

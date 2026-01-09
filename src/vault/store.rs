@@ -20,7 +20,8 @@ const VAULT_TREE: &str = "vault_balances";
 pub enum VaultBucket {
     Miners,
     DevOps,
-    Founders,
+    Founder1,  // 25% of exchange fees
+    Founder2,  // 25% of exchange fees
 }
 
 impl VaultBucket {
@@ -28,7 +29,8 @@ impl VaultBucket {
         match self {
             VaultBucket::Miners => "miners",
             VaultBucket::DevOps => "devops",
-            VaultBucket::Founders => "founders",
+            VaultBucket::Founder1 => "founder1",
+            VaultBucket::Founder2 => "founder2",
         }
     }
 }
@@ -72,7 +74,8 @@ impl BucketBalances {
 pub struct AllBucketBalances {
     pub miners: BucketBalances,
     pub devops: BucketBalances,
-    pub founders: BucketBalances,
+    pub founder1: BucketBalances,
+    pub founder2: BucketBalances,
 }
 
 /// Vault store backed by sled database
@@ -162,9 +165,10 @@ impl VaultStore {
     pub fn total_vault_balance(&self, asset: QuoteAsset) -> Result<u128> {
         let miners = self.read_balance(VaultBucket::Miners, asset)?;
         let devops = self.read_balance(VaultBucket::DevOps, asset)?;
-        let founders = self.read_balance(VaultBucket::Founders, asset)?;
+        let founder1 = self.read_balance(VaultBucket::Founder1, asset)?;
+        let founder2 = self.read_balance(VaultBucket::Founder2, asset)?;
 
-        Ok(miners.saturating_add(devops).saturating_add(founders))
+        Ok(miners.saturating_add(devops).saturating_add(founder1).saturating_add(founder2))
     }
 
     /// Get balance for a specific bucket and asset
@@ -178,7 +182,8 @@ impl VaultStore {
 
         self.write_balance(VaultBucket::Miners, asset, 0)?;
         self.write_balance(VaultBucket::DevOps, asset, 0)?;
-        self.write_balance(VaultBucket::Founders, asset, 0)?;
+        self.write_balance(VaultBucket::Founder1, asset, 0)?;
+        self.write_balance(VaultBucket::Founder2, asset, 0)?;
 
         tracing::info!("Vault burn: asset={} total={}", asset.as_str(), total);
 
@@ -192,7 +197,8 @@ impl VaultStore {
         for bucket in &[
             VaultBucket::Miners,
             VaultBucket::DevOps,
-            VaultBucket::Founders,
+            VaultBucket::Founder1,
+            VaultBucket::Founder2,
         ] {
             for asset in &[
                 QuoteAsset::Land,
@@ -204,7 +210,8 @@ impl VaultStore {
                 match bucket {
                     VaultBucket::Miners => balances.miners.set(*asset, balance),
                     VaultBucket::DevOps => balances.devops.set(*asset, balance),
-                    VaultBucket::Founders => balances.founders.set(*asset, balance),
+                    VaultBucket::Founder1 => balances.founder1.set(*asset, balance),
+                    VaultBucket::Founder2 => balances.founder2.set(*asset, balance),
                 }
             }
         }

@@ -604,8 +604,8 @@ mod tests {
     fn test_verify_transfer_signature_valid() {
         // Generate a test keypair
         let mut rng = rand::rngs::OsRng;
-        let keypair = Keypair::generate(&mut rng);
-        let public_key_hex = hex::encode(keypair.public.as_bytes());
+        let keypair = SigningKey::generate(&mut rng);
+        let public_key_hex = hex::encode(keypair.verifying_key().as_bytes());
 
         // Create a transfer request (without signature yet)
         let mut req = TransferReq {
@@ -637,8 +637,8 @@ mod tests {
     fn test_verify_transfer_signature_invalid_signature() {
         // Generate a test keypair
         let mut rng = rand::rngs::OsRng;
-        let keypair = Keypair::generate(&mut rng);
-        let public_key_hex = hex::encode(keypair.public.as_bytes());
+        let keypair = SigningKey::generate(&mut rng);
+        let public_key_hex = hex::encode(keypair.verifying_key().as_bytes());
 
         let req = TransferReq {
             from: public_key_hex.clone(),
@@ -661,11 +661,11 @@ mod tests {
     fn test_verify_transfer_signature_wrong_key() {
         // Generate two keypairs
         let mut rng = rand::rngs::OsRng;
-        let keypair1 = Keypair::generate(&mut rng);
-        let keypair2 = Keypair::generate(&mut rng);
+        let keypair1 = SigningKey::generate(&mut rng);
+        let keypair2 = SigningKey::generate(&mut rng);
 
-        let public_key1_hex = hex::encode(keypair1.public.as_bytes());
-        let public_key2_hex = hex::encode(keypair2.public.as_bytes());
+        let public_key1_hex = hex::encode(keypair1.verifying_key().as_bytes());
+        let public_key2_hex = hex::encode(keypair2.verifying_key().as_bytes());
 
         // Create request claiming to be from address 1
         let mut req = TransferReq {
@@ -694,8 +694,8 @@ mod tests {
     fn test_verify_transfer_signature_tampered_message() {
         // Generate a test keypair
         let mut rng = rand::rngs::OsRng;
-        let keypair = Keypair::generate(&mut rng);
-        let public_key_hex = hex::encode(keypair.public.as_bytes());
+        let keypair = SigningKey::generate(&mut rng);
+        let public_key_hex = hex::encode(keypair.verifying_key().as_bytes());
 
         // Create and sign a transfer
         let mut req = TransferReq {

@@ -38,6 +38,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use crate::globals::{EBID_MANAGER, GUARDIAN_ROLE, P2P_MANAGER};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
@@ -45,9 +46,9 @@ use tracing::{debug, error, info, warn};
 static CONNECTION_INSTANCE_ID: AtomicU64 = AtomicU64::new(1);
 
 fn is_public_seed_addr(addr: &std::net::SocketAddr) -> bool {
-    // Local test mode: ONLY allow loopback and RFC1918
+    // Local test mode: allow any local/loopback/RFC1918 address (any port)
     if crate::p2p::ip_filter::local_test_mode() {
-        return crate::p2p::ip_filter::is_local_allowed(addr) && addr.port() == 7072;
+        return crate::p2p::ip_filter::is_local_allowed(addr);
     }
 
     // Handshake seed peers MUST be public routable (no LAN/loopback/link-local).
@@ -298,6 +299,12 @@ pub struct HandshakeMessage {
     /// Curated seed peers (public routable P2P endpoints, ip:7072)
     #[serde(default)]
     pub seed_peers: Vec<String>,
+    
+    /// Economics fingerprint - cryptographic hash of vault addresses and reward splits
+    /// This MUST match across all nodes to prevent vault address tampering
+    /// Reject connections from peers with mismatched econ_hash
+    #[serde(default)]
+    pub econ_hash: String, // Hex string (32 bytes) - canonical economics fingerprint
 }
 
 /// Handshake v3 wire format (framed via `P2P_HANDSHAKE_VERSION = 3`).
@@ -354,6 +361,10 @@ struct HandshakeWireV3 {
     /// Curated seed peers (public routable P2P endpoints, ip:7072)
     #[serde(default)]
     pub seed_peers: Vec<String>,
+    
+    /// Economics fingerprint (vault addresses + splits consensus lock)
+    #[serde(default)]
+    pub econ_hash: Option<String>,
 }
 
 impl HandshakeWireV3 {
@@ -391,6 +402,7 @@ impl HandshakeWireV3 {
             bootstrap_prefix: h.bootstrap_prefix.clone(),
 
             seed_peers: h.seed_peers.clone(),
+            econ_hash: if h.econ_hash.is_empty() { None } else { Some(h.econ_hash.clone()) },
         }
     }
 
@@ -440,8 +452,8 @@ impl HandshakeWireV3 {
             bootstrap_checkpoint_height: self.bootstrap_checkpoint_height,
             bootstrap_checkpoint_hash: self.bootstrap_checkpoint_hash,
             bootstrap_prefix: self.bootstrap_prefix,
-
             seed_peers: self.seed_peers,
+            econ_hash: self.econ_hash.clone().unwrap_or_default(), // Economics fingerprint for vault consensus
         })
     }
 }
@@ -488,6 +500,50 @@ pub enum P2PMessage {
     },
     /// Peer gossip for discovery (Phase 10)
     PeerGossip(super::peer_gossip::PeerGossipMessage),
+    
+    // ===== CHAIN SYNC MESSAGES (P2P-based sync) =====
+    /// Request tip information from peer
+    GetTip,
+    /// Response with current chain tip
+    Tip {
+        height: u64,
+        hash: String,
+    },
+    /// Request headers starting from a locator
+    GetHeaders {
+        locator_hashes: Vec<String>,
+        max: u32,
+    },
+    /// Response with block headers
+    Headers {
+        headers: Vec<crate::BlockHeader>,
+    },
+    /// Request a specific block by hash
+    GetBlock {
+        hash: String,
+    },
+    /// Response with full block
+    Block {
+        block: crate::Block,
+    },
+    /// Request blocks by height range (convenience method)
+    GetBlocksByRange {
+        start_height: u64,
+        max: u32,
+    },
+    /// Response with multiple blocks
+    Blocks {
+        blocks: Vec<crate::Block>,
+    },
+    /// Request block hash at specific height (for fork detection)
+    GetBlockHash {
+        height: u64,
+    },
+    /// Response with block hash at height
+    BlockHash {
+        height: u64,
+        hash: Option<String>, // None if height doesn't exist
+    },
 }
 
 /// Peer information for exchange (P2P Robustness #3)
@@ -619,7 +675,7 @@ impl HandshakeMessage {
         let public_key = ""; // Public key verification removed
 
         // Get node ID from P2P manager
-        let node_id = crate::P2P_MANAGER.get_node_id().to_string();
+        let node_id = P2P_MANAGER.get_node_id().to_string();
 
         // Determine role
         let is_guardian_mode = std::env::var("VISION_GUARDIAN_MODE")
@@ -635,13 +691,13 @@ impl HandshakeMessage {
 
         // Phase 6: Get EBID from global manager
         let ebid = {
-            let mgr = crate::EBID_MANAGER.lock();
+            let mgr = EBID_MANAGER.lock();
             mgr.get_ebid().to_string()
         };
 
         // Phase 6: Check if we're the current guardian
         let is_guardian = {
-            let role_mgr = crate::GUARDIAN_ROLE.lock();
+            let role_mgr = GUARDIAN_ROLE.lock();
             if let Some(current_guardian) = role_mgr.get_current_guardian() {
                 current_guardian == ebid
             } else {
@@ -702,6 +758,9 @@ impl HandshakeMessage {
             bootstrap_prefix: crate::vision_constants::VISION_BOOTSTRAP_PREFIX.to_string(),
 
             seed_peers: Vec::new(),
+            
+            // Economics fingerprint - CRITICAL for vault consensus
+            econ_hash: crate::genesis::ECON_HASH.to_string(),
         })
     }
 
@@ -867,6 +926,28 @@ impl HandshakeMessage {
                 expected_genesis_hex,
                 hex::encode(peer_genesis)
             ));
+        }
+
+        // **CRITICAL: Economics fingerprint validation**
+        // Reject peers with mismatched vault addresses or reward splits
+        // This prevents nodes with tampered token_accounts.toml from participating
+        if !self.econ_hash.is_empty() {
+            let expected_econ_hash = crate::genesis::ECON_HASH;
+            if self.econ_hash != expected_econ_hash {
+                return Err(format!(
+                    "❌ HANDSHAKE REJECT: ECON_HASH mismatch. expected={} got={}\n\
+                     This peer is using different vault addresses or reward splits.\n\
+                     Vault address tampering detected - REJECTING CONNECTION.",
+                    expected_econ_hash,
+                    self.econ_hash
+                ));
+            }
+        } else {
+            // Peer didn't send econ_hash (old version) - warn but allow for compatibility
+            warn!(
+                "[P2P] Peer {} did not send econ_hash - old version? Allowing connection but cannot verify vault addresses",
+                self.node_tag
+            );
         }
 
         // Bootstrap checkpoint MUST match (first N blocks quarantine).
@@ -1091,6 +1172,7 @@ mod tests {
             bootstrap_checkpoint_hash: "".to_string(),
             bootstrap_prefix: "".to_string(),
             seed_peers: Vec::new(),
+            econ_hash: String::new(), // Empty for test (old version compatibility)
         };
         let res = h.validate();
         assert!(res.is_err());
@@ -1154,6 +1236,12 @@ impl P2PConnectionManager {
                     .unwrap_or_else(|_| addr.clone())
             })
             .collect()
+    }
+
+    /// PATCH 1: Check if a peer is currently connected by address
+    pub async fn is_peer_connected(&self, peer_addr: &str) -> bool {
+        let peers = self.peers.lock().await;
+        peers.contains_key(peer_addr)
     }
 
     /// Find lowest-scoring peer for eviction (P2P Robustness #4)
@@ -1303,23 +1391,35 @@ impl P2PConnectionManager {
             };
 
             let existing_direction = { existing_arc.lock().await.direction };
-            let keep_existing = match preferred_direction {
-                Some(pref) => existing_direction == pref && direction != pref,
-                None => true,
+            
+            // COLLISION HANDLING: Deterministic tie-breaking to avoid simultaneous dial issues
+            // Rule: Lower node_id keeps outbound, higher keeps inbound (prevents both sides from closing)
+            let local_node_id = crate::vision_constants::VISION_NETWORK_ID;
+            let remote_node_id = peer_id.as_str(); // Use peer_id string for comparison
+            
+            let should_keep_existing = if existing_direction == direction {
+                // Same direction duplicate - always keep existing
+                true
+            } else if local_node_id < remote_node_id {
+                // Lower ID keeps outbound
+                existing_direction == ConnectionDirection::Outbound
+            } else {
+                // Higher ID keeps inbound  
+                existing_direction == ConnectionDirection::Inbound
             };
 
-            if keep_existing {
+            if should_keep_existing {
                 info!(
-                    "[P2P] SKIP duplicate connection to {} (keeping {:?}, dropping {:?})",
-                    normalized_key, existing_direction, direction
+                    "[P2P] COLLISION: keeping {:?}, dropping {:?} for {} (tie-break: local_id vs remote)",
+                    existing_direction, direction, normalized_key
                 );
                 // Return existing peer; caller must NOT start a second message loop.
                 return (existing_arc, false);
             }
 
             info!(
-                "[P2P] REPLACE duplicate connection to {} (switching {:?} -> {:?})",
-                normalized_key, existing_direction, direction
+                "[P2P] COLLISION: replacing {:?} -> {:?} for {} (tie-break decided)",
+                existing_direction, direction, normalized_key
             );
         }
 
@@ -1669,9 +1769,12 @@ impl P2PConnectionManager {
         is_outbound: bool,
     ) -> Result<HandshakeMessage, String> {
         use tokio::time::{timeout, Duration};
+        use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 
         let backoff_ms = [0, 150, 300, 450, 600, 750]; // 5 retries: 0, 150ms, 300ms, 450ms, 600ms, 750ms
         let mut last_err = String::new();
+        // PATCH 1: Track if handshake succeeded to guard against false timeout logging
+        let handshake_done = Arc::new(AtomicBool::new(false));
 
         for (attempt, &delay_ms) in backoff_ms.iter().enumerate() {
             if attempt > 0 {
@@ -1698,6 +1801,7 @@ impl P2PConnectionManager {
                 }
             };
 
+            let done_flag = Arc::clone(&handshake_done);
             let result = match timeout(
                 Duration::from_millis(HANDSHAKE_TIMEOUT_MS),
                 handshake_future,
@@ -1706,37 +1810,50 @@ impl P2PConnectionManager {
             {
                 Ok(inner_result) => inner_result,
                 Err(_) => {
-                    warn!(
-                        "[P2P] ⏱️  Handshake timeout from {} (exceeded {}ms)",
-                        peer_addr, HANDSHAKE_TIMEOUT_MS
-                    );
+                    // PATCH 1: Guard against false timeout logging after successful handshake
+                    // Only log timeout if handshake hasn't succeeded yet
+                    if !done_flag.load(std::sync::atomic::Ordering::SeqCst) {
+                        warn!(
+                            "[P2P] ⏱️  Handshake timeout from {} (exceeded {}ms)",
+                            peer_addr, HANDSHAKE_TIMEOUT_MS
+                        );
 
-                    // ⭐ ROLLING MESH: Mark failure for timeout (if we can identify the peer)
-                    // Note: We don't have node_id yet since handshake failed, so mark by IP if peer exists
-                    {
-                        let chain = crate::CHAIN.lock();
-                        if let Ok(peer_store) = crate::p2p::peer_store::PeerStore::new(&chain.db) {
-                            let now = chrono::Utc::now().timestamp() as u64;
-                            // Try to find peer by IP address
-                            for peer in peer_store.all() {
-                                if let Some(ip) = &peer.ip_address {
-                                    if ip.starts_with(&peer_addr.ip().to_string()) {
-                                        let _ = peer_store.mark_peer_failure(&peer.node_id, now);
-                                        break;
+                        // ⭐ ROLLING MESH: Mark failure for timeout (if we can identify the peer)
+                        // Note: We don't have node_id yet since handshake failed, so mark by IP if peer exists
+                        {
+                            let chain = crate::CHAIN.lock();
+                            if let Ok(peer_store) = crate::p2p::peer_store::PeerStore::new(&chain.db) {
+                                let now = chrono::Utc::now().timestamp() as u64;
+                                // Try to find peer by IP address
+                                for peer in peer_store.all() {
+                                    if let Some(ip) = &peer.ip_address {
+                                        if ip.starts_with(&peer_addr.ip().to_string()) {
+                                            let _ = peer_store.mark_peer_failure(&peer.node_id, now);
+                                            break;
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    return Err(
-                        "Handshake timeout (non-Vision peer or slow connection)".to_string()
-                    );
+                        return Err(
+                            "Handshake timeout (non-Vision peer or slow connection)".to_string()
+                        );
+                    } else {
+                        // Handshake already succeeded - this is a spurious timeout, ignore it
+                        debug!(
+                            "[P2P] Ignoring spurious timeout from {} (handshake already completed)",
+                            peer_addr
+                        );
+                        return Err("Handshake timeout (non-Vision peer or slow connection)".to_string());
+                    }
                 }
             };
 
             match result {
                 Ok(handshake) => {
+                    // PATCH 1: Mark handshake as done to prevent false timeouts
+                    handshake_done.store(true, std::sync::atomic::Ordering::SeqCst);
                     info!(
                         "[P2P] ✅ Handshake success with peer {} at {} (protocol={}, chain_id={}, height={})",
                         if !handshake.node_tag.is_empty() { &handshake.node_tag } else { "unknown" },
@@ -2208,6 +2325,45 @@ impl P2PConnectionManager {
                 let _ = peer_store.mark_peer_success(&handshake.node_id, now);
             }
         }
+        
+        // 🔄 AUTO-SYNC TRIGGER: Check if we need to sync based on peer height
+        // Commented out temporarily due to Send trait issues - will fix in next iteration
+        /*
+        {
+            let chain = crate::CHAIN.lock();
+            let local_height = chain.blocks.len().saturating_sub(1) as u64;
+            let local_hash = chain.blocks.last()
+                .map(|b| b.header.pow_hash.clone())
+                .unwrap_or_else(|| String::from("0000000000000000"));
+            drop(chain); // Release lock immediately
+            
+            let connected_peers = self.connected_peer_count().await;
+            let peer_height = handshake.chain_height;
+            let peer_id_short = if handshake.node_tag.len() >= 8 {
+                &handshake.node_tag[..8]
+            } else {
+                &handshake.node_tag
+            };
+            
+            info!(
+                "[SYNC-CHECK] 🔍 Handshake complete: local_height={} local_hash={} peer_height={} peer={} connected={}",
+                local_height,
+                &local_hash[..16.min(local_hash.len())],
+                peer_height,
+                peer_id_short,
+                connected_peers
+            );
+            
+            // Call sync trigger decision
+            crate::maybe_trigger_sync(
+                "handshake",
+                peer_height,
+                &handshake.node_tag,
+                local_height,
+                connected_peers,
+            );
+        }
+        */
 
         // Duplicate connection handling is performed in `register_peer`.
         let address = normalized_addr.clone();
@@ -2287,6 +2443,10 @@ impl P2PConnectionManager {
         // If this was a duplicate, do not start a second message loop and do not
         // mutate peer state (the existing connection remains authoritative).
         if !registered {
+            // FIX: Explicitly close the duplicate connection to prevent half-open sockets
+            // This is critical to prevent OS error 10053 on the remote peer
+            drop(reader);  // Explicitly drop reader to ensure socket is closed
+            info!(peer = %address, "Duplicate inbound connection rejected and closed");
             return Ok(());
         }
 
@@ -2298,7 +2458,7 @@ impl P2PConnectionManager {
 
         let connection_id = { peer_arc.lock().await.connection_id };
 
-        // Update state to Connected and set height
+        // Update state to Connected and set height (use ebid, not socket address!)
         crate::PEER_MANAGER
             .update_peer_state(&ebid, crate::p2p::PeerState::Connected)
             .await;
@@ -2418,9 +2578,14 @@ impl P2PConnectionManager {
         info!(peer = %address, normalized = %dial_addr, "Connecting to peer");
 
         // PATCH 5: Enhanced connection failure logging with detailed reasons
-        let stream = match TcpStream::connect(&dial_addr).await {
-            Ok(s) => s,
-            Err(e) => {
+        // PATCH 6: Increase connection timeout from 5s to 10s
+        // Home NAT + busy routers + cold sockets need more time than speed dating
+        use tokio::time::{timeout, Duration};
+        let connect_result = timeout(Duration::from_secs(10), TcpStream::connect(&dial_addr)).await;
+        let stream = match connect_result {
+            Ok(Ok(s)) => s,
+            Ok(Err(e)) => {
+                // Connection attempt failed (not timeout)
                 let reason = match e.kind() {
                     std::io::ErrorKind::ConnectionRefused => "connection_refused",
                     std::io::ErrorKind::TimedOut => "timeout",
@@ -2448,6 +2613,22 @@ impl P2PConnectionManager {
                 );
 
                 return Err(format!("Connection failed ({}): {}", reason, e));
+            }
+            Err(_) => {
+                // Connection timeout (10 seconds elapsed)
+                warn!(
+                    target: "p2p::connect",
+                    peer = %address,
+                    "Connection attempt timed out after 10 seconds"
+                );
+
+                crate::p2p::dial_tracker::record_dial_failure(
+                    address.to_string(),
+                    "connection_timeout_10s".to_string(),
+                    "direct".to_string(),
+                );
+
+                return Err(format!("Connection timeout after 10 seconds"));
             }
         };
 
@@ -2591,6 +2772,44 @@ impl P2PConnectionManager {
                 let _ = peer_store.mark_peer_success(&peer_handshake.node_id, now);
             }
         }
+        
+        // 🔄 AUTO-SYNC TRIGGER: Check if we need to sync based on peer height (outbound)
+        // Commented out temporarily due to Send trait issues - will fix in next iteration
+        /*
+        {
+            let chain = crate::CHAIN.lock();
+            let local_height = chain.blocks.len().saturating_sub(1) as u64;
+            let local_hash = chain.blocks.last()
+                .map(|b| b.header.pow_hash.clone())
+                .unwrap_or_else(|| String::from("0000000000000000"));
+            drop(chain);
+            
+            let connected_peers = self.connected_peer_count().await;
+            let peer_height = peer_handshake.chain_height;
+            let peer_id_short = if peer_handshake.node_tag.len() >= 8 {
+                &peer_handshake.node_tag[..8]
+            } else {
+                &peer_handshake.node_tag
+            };
+            
+            info!(
+                "[SYNC-CHECK] 🔍 Outbound handshake complete: local_height={} local_hash={} peer_height={} peer={} connected={}",
+                local_height,
+                &local_hash[..16.min(local_hash.len())],
+                peer_height,
+                peer_id_short,
+                connected_peers
+            );
+            
+            crate::maybe_trigger_sync(
+                "handshake_outbound",
+                peer_height,
+                &peer_handshake.node_tag,
+                local_height,
+                connected_peers,
+            );
+        }
+        */
 
         // Phase 10: Test peer reachability if they advertised an address
         if let Some(advertised_ip) = peer_handshake.advertised_ip.as_ref() {
@@ -2669,6 +2888,10 @@ impl P2PConnectionManager {
         // If this was a duplicate, do not start a second message loop and do not
         // mutate peer state (the existing connection remains authoritative).
         if !registered {
+            // FIX: Explicitly close the duplicate connection to prevent half-open sockets
+            // This is critical to prevent OS error 10053 on the remote peer
+            drop(reader);  // Explicitly drop reader to ensure socket is closed
+            info!(peer = %normalized_addr, "Duplicate outbound connection rejected and closed");
             return Ok(());
         }
 
@@ -2680,12 +2903,12 @@ impl P2PConnectionManager {
 
         let connection_id = { peer_arc.lock().await.connection_id };
 
-        // Update PEER_MANAGER with successful connection
+        // Update PEER_MANAGER with successful connection (use ebid, not socket address!)
         crate::PEER_MANAGER
-            .update_peer_state(&peer_handshake.ebid, crate::p2p::PeerState::Connected)
+            .update_peer_state(&ebid, crate::p2p::PeerState::Connected)
             .await;
         crate::PEER_MANAGER
-            .update_peer_height(&peer_handshake.ebid, peer_height)
+            .update_peer_height(&ebid, peer_height)
             .await;
 
         // Update chain identity fields from handshake
@@ -2697,7 +2920,7 @@ impl P2PConnectionManager {
         );
         crate::PEER_MANAGER
             .update_peer_chain_identity(
-                &peer_handshake.ebid,
+                &ebid,
                 hex::encode(peer_handshake.chain_id),
                 peer_handshake.bootstrap_prefix.clone(),
                 peer_handshake.protocol_version,
@@ -2881,8 +3104,8 @@ impl P2PConnectionManager {
                     "Received compact block from peer"
                 );
 
-                // Handle compact block (existing logic)
-                if let Err(e) = super::routes::handle_compact_block_direct(compact).await {
+                // Handle compact block with peer tracking
+                if let Err(e) = super::routes::handle_compact_block_direct(compact, Some(address.to_string())).await {
                     // Treat certain errors as hard incompatibility and fast-disconnect.
                     let is_incompatible = e.contains("No common ancestor")
                         || e.contains("Attempted reorg past bootstrap checkpoint")
@@ -2921,13 +3144,27 @@ impl P2PConnectionManager {
                 match self.integrate_received_block(block.clone(), address).await {
                     Ok(integrated) => {
                         if integrated {
-                            info!(
-                                peer = %address,
-                                hash = %block.header.pow_hash,
-                                height = block.header.number,
-                                "Block successfully integrated into chain"
-                            );
-                            self.update_peer_height(address, block.header.number).await;
+                            // Check if block is ACTUALLY in main chain (not just accepted/orphaned)
+                            let is_in_main_chain = {
+                                let g = crate::CHAIN.lock();
+                                g.blocks.iter().any(|b| &b.header.pow_hash == &block.header.pow_hash)
+                            };
+                            
+                            if is_in_main_chain {
+                                info!(
+                                    peer = %address,
+                                    hash = %block.header.pow_hash,
+                                    height = block.header.number,
+                                    "✅ Block INTEGRATED into main chain"
+                                );
+                                self.update_peer_height(address, block.header.number).await;
+                            } else {
+                                debug!(
+                                    peer = %address,
+                                    hash = %block.header.pow_hash,
+                                    "Block accepted but orphaned (waiting for parents)"
+                                );
+                            }
                         } else {
                             debug!(
                                 peer = %address,
@@ -3148,7 +3385,150 @@ impl P2PConnectionManager {
             P2PMessage::Handshake { .. } => {
                 warn!(peer = %address, "Received unexpected handshake after connection established");
             }
+            // ===== CHAIN SYNC MESSAGE HANDLERS =====
+            P2PMessage::GetTip => {
+                debug!(peer = %address, "[SYNC] -> GetTip received");
+                let (height, hash) = {
+                    let chain = crate::CHAIN.lock();
+                    let height = chain.blocks.len() as u64;
+                    let hash = chain.blocks.last()
+                        .map(|b| b.header.pow_hash.clone())
+                        .unwrap_or_default();
+                    (height, hash)
+                };
+                self.send_to_peer(address, P2PMessage::Tip { height, hash }).await?;
+            }
+            P2PMessage::Tip { height, hash } => {
+                debug!(peer = %address, height = height, hash = %hash, "[SYNC] <- Tip received");
+                // Update peer height for sync selection
+                self.update_peer_height(address, height).await;
+            }
+            P2PMessage::GetHeaders { locator_hashes, max } => {
+                debug!(peer = %address, locators = locator_hashes.len(), max = max, "[SYNC] -> GetHeaders received");
+                // Find common ancestor and send headers
+                let headers = {
+                    let chain = crate::CHAIN.lock();
+                    let mut result = Vec::new();
+                    
+                    // Find first locator that matches our chain
+                    let start_idx = locator_hashes.iter()
+                        .find_map(|hash| {
+                            chain.blocks.iter().position(|b| &b.header.pow_hash == hash)
+                        })
+                        .unwrap_or(0);
+                    
+                    // Send up to 'max' headers starting from common ancestor + 1
+                    for block in chain.blocks.iter().skip(start_idx + 1).take(max as usize) {
+                        result.push(block.header.clone());
+                    }
+                    result
+                };
+                self.send_to_peer(address, P2PMessage::Headers { headers }).await?;
+            }
+            P2PMessage::Headers { headers } => {
+                debug!(peer = %address, count = headers.len(), "[SYNC] <- Headers received");
+                // TODO: Validate header chain and request missing blocks
+                // For now, just log (full implementation requires sync state machine)
+            }
+            P2PMessage::GetBlock { hash } => {
+                debug!(peer = %address, hash = %hash, "[SYNC] -> GetBlock received");
+                let block = {
+                    let chain = crate::CHAIN.lock();
+                    chain.blocks.iter()
+                        .find(|b| b.header.pow_hash == hash)
+                        .cloned()
+                };
+                if let Some(block) = block {
+                    self.send_to_peer(address, P2PMessage::Block { block }).await?;
+                } else {
+                    debug!(peer = %address, hash = %hash, "[SYNC] Block not found");
+                }
+            }
+            P2PMessage::Block { block } => {
+                debug!(peer = %address, hash = %block.header.pow_hash, height = block.header.number, "[SYNC] <- Block received");
+                // Integrate block (same as FullBlock handler)
+                match self.integrate_received_block(block.clone(), address).await {
+                    Ok(integrated) => {
+                        if integrated {
+                            info!(
+                                peer = %address,
+                                hash = %block.header.pow_hash,
+                                height = block.header.number,
+                                "Sync block successfully integrated"
+                            );
+                            self.update_peer_height(address, block.header.number).await;
+                        }
+                    }
+                    Err(e) => {
+                        warn!(
+                            peer = %address,
+                            hash = %block.header.pow_hash,
+                            error = %e,
+                            "Failed to integrate sync block"
+                        );
+                    }
+                }
+            }
+            P2PMessage::GetBlocksByRange { start_height, max } => {
+                debug!(peer = %address, start = start_height, max = max, "[SYNC] -> GetBlocksByRange received");
+                let blocks = {
+                    let chain = crate::CHAIN.lock();
+                    let start_idx = start_height.saturating_sub(1) as usize;
+                    chain.blocks.iter()
+                        .skip(start_idx)
+                        .take(max as usize)
+                        .cloned()
+                        .collect()
+                };
+                self.send_to_peer(address, P2PMessage::Blocks { blocks }).await?;
+            }
+            P2PMessage::Blocks { blocks } => {
+                debug!(peer = %address, count = blocks.len(), "[SYNC] <- Blocks received");
+                // Integrate blocks sequentially
+                for block in blocks {
+                    if let Err(e) = self.integrate_received_block(block.clone(), address).await {
+                        warn!(
+                            peer = %address,
+                            hash = %block.header.pow_hash,
+                            error = %e,
+                            "Failed to integrate bulk sync block"
+                        );
+                        break; // Stop on first failure
+                    }
+                }
+            }
+            P2PMessage::GetBlockHash { height } => {
+                info!(peer = %address, height = height, "[SYNC-FORK] -> GetBlockHash REQUEST received from peer");
+                let hash = {
+                    let chain = crate::CHAIN.lock();
+                    if height == 0 || height as usize > chain.blocks.len() {
+                        warn!(peer = %address, height = height, "[SYNC-FORK] Height not in our chain (have {} blocks)", chain.blocks.len());
+                        None
+                    } else {
+                        let idx = (height - 1) as usize;
+                        chain.blocks.get(idx).map(|b| {
+                            crate::canon_hash(&b.header.pow_hash)
+                        })
+                    }
+                };
+                info!(peer = %address, height = height, hash = ?hash, "[SYNC-FORK] -> Sending BlockHash RESPONSE");
+                self.send_to_peer(address, P2PMessage::BlockHash { height, hash }).await?;
+            }
+            P2PMessage::BlockHash { height, hash } => {
+                info!(peer = %address, height = height, hash = ?hash, "[SYNC-FORK] <- BlockHash RESPONSE received, storing in cache");
+                // This is handled by the sync logic in auto_sync.rs
+                // Store in a temporary cache for retrieval
+                if let Some(ref h) = hash {
+                    let mut cache = crate::SYNC_HASH_CACHE.lock();
+                    let key = (address.to_string(), height);
+                    cache.insert(key, h.clone());
+                    info!(peer = %address, height = height, "[SYNC-FORK] Cached hash for peer (cache size: {})", cache.len());
+                } else {
+                    warn!(peer = %address, height = height, "[SYNC-FORK] Peer sent None hash (height doesn't exist on their chain)");
+                }
+            }
         }
+
 
         Ok(())
     }
@@ -3234,7 +3614,7 @@ impl P2PConnectionManager {
             Some(tip_hash) if block.header.parent_hash == tip_hash => {
                 // Block extends tip - add it
                 let mut g = crate::CHAIN.lock();
-                match crate::chain::accept::apply_block(&mut g, &block) {
+                match crate::chain::accept::apply_block(&mut g, &block, Some(peer_address)) {
                     Ok(()) => {
                         info!(
                             hash = %block_hash,
@@ -3287,22 +3667,81 @@ impl P2PConnectionManager {
 
                 let result = {
                     let mut g = crate::CHAIN.lock();
-                    crate::chain::accept::apply_block(&mut g, &block)
+                    crate::chain::accept::apply_block(&mut g, &block, Some(peer_address))
                 };
 
                 match result {
                     Ok(()) => {
-                        info!(
-                            target = "p2p::connection",
-                            peer = %peer_address,
-                            hash = %block_hash,
-                            "Block accepted (may have triggered reorg)"
-                        );
+                        // Check if block is ACTUALLY in main chain (not just orphaned)
+                        let is_in_main_chain = {
+                            let g = crate::CHAIN.lock();
+                            g.blocks.iter().any(|b| crate::canon_hash(&b.header.pow_hash) == block_hash)
+                        };
+                        
+                        if is_in_main_chain {
+                            info!(
+                                target = "p2p::connection",
+                                peer = %peer_address,
+                                hash = %block_hash,
+                                height = block_height,
+                                "✅ Block INTEGRATED into main chain"
+                            );
+                        } else {
+                            debug!(
+                                target = "p2p::connection",
+                                peer = %peer_address,
+                                hash = %block_hash,
+                                "Block accepted but orphaned (waiting for parents)"
+                            );
+                        }
+                        
+                        // Drain orphan pool with safety cap (max 512 per insert)
+                        let orphans_resolved = {
+                            let mut g = crate::CHAIN.lock();
+                            let mut total_processed = 0;
+                            const MAX_ORPHAN_DRAIN: usize = 512;
+                            
+                            // Start with the block we just inserted
+                            let mut to_check = vec![block_hash.clone()];
+                            
+                            while !to_check.is_empty() && total_processed < MAX_ORPHAN_DRAIN {
+                                let parent_hash = to_check.pop().unwrap();
+                                let processed = crate::chain::accept::process_orphans(&mut g, &parent_hash);
+                                
+                                if processed > 0 {
+                                    tracing::info!(
+                                        parent_hash = %parent_hash,
+                                        processed = processed,
+                                        total = total_processed + processed,
+                                        "[ORPHAN-DRAIN] resolved children"
+                                    );
+                                    total_processed += processed;
+                                }
+                            }
+                            
+                            if total_processed >= MAX_ORPHAN_DRAIN {
+                                tracing::warn!(
+                                    "[ORPHAN-DRAIN] hit safety cap of {} orphans per insert",
+                                    MAX_ORPHAN_DRAIN
+                                );
+                            }
+                            
+                            total_processed
+                        };
+                        
+                        if orphans_resolved > 0 {
+                            info!(
+                                orphans_resolved = orphans_resolved,
+                                "[ORPHAN-DRAIN] cascade integration complete"
+                            );
+                        }
+                        
                         Ok(true)
                     }
                     Err(e) => {
-                        let is_incompatible = e.contains("missing parent")
-                            || e.contains("bootstrap checkpoint")
+                        // Only disconnect for truly incompatible chains (wrong network or huge reorg)
+                        // Don't disconnect for "missing parent" - that's normal during sync (orphan pool handles it)
+                        let is_incompatible = e.contains("bootstrap checkpoint")
                             || e.contains("reorg too large");
                         if is_incompatible {
                             warn!(peer = %peer_address, error = %e, "Incompatible chain detected; disconnecting peer");
@@ -3324,7 +3763,7 @@ impl P2PConnectionManager {
             None => {
                 // Genesis case
                 let mut g = crate::CHAIN.lock();
-                match crate::chain::accept::apply_block(&mut g, &block) {
+                match crate::chain::accept::apply_block(&mut g, &block, Some(peer_address)) {
                     Ok(()) => {
                         info!(hash = %block_hash, "Genesis block integrated");
                         Ok(true)
@@ -3356,7 +3795,7 @@ impl P2PConnectionManager {
         // 1. Check if we already have this transaction
         {
             let g = crate::CHAIN.lock();
-            if g.seen_txs.contains_key(&tx_hash) {
+            if g.seen_txs.contains(&tx_hash) {
                 debug!(tx_hash = %tx_hash, "Transaction already seen");
                 return Ok(false);
             }
@@ -3376,7 +3815,7 @@ impl P2PConnectionManager {
         // 3. Add to mempool (bulk queue - lower priority for P2P received)
         let mut g = crate::CHAIN.lock();
         g.mempool_bulk.push_back(tx.clone());
-        g.seen_txs.insert(tx_hash.clone(), ());
+        g.seen_txs.insert(tx_hash.clone());
 
         debug!(
             tx_hash = %tx_hash,

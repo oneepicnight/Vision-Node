@@ -36,6 +36,12 @@ pub static FOUNDATION_CONFIG: Lazy<Result<TokenAccountsCfg>> = Lazy::new(|| {
             miners_btc_address: None,
             miners_bch_address: None,
             miners_doge_address: None,
+            founder1_btc_address: None,
+            founder1_bch_address: None,
+            founder1_doge_address: None,
+            founder2_btc_address: None,
+            founder2_bch_address: None,
+            founder2_doge_address: None,
         })
     })?;
 
@@ -107,6 +113,54 @@ pub fn miners_doge_address() -> Option<String> {
         .as_ref()
         .ok()
         .and_then(|c| c.miners_doge_address.clone())
+}
+
+/// Get founder1 BTC address
+pub fn founder1_btc_address() -> Option<String> {
+    FOUNDATION_CONFIG
+        .as_ref()
+        .ok()
+        .and_then(|c| c.founder1_btc_address.clone())
+}
+
+/// Get founder1 BCH address
+pub fn founder1_bch_address() -> Option<String> {
+    FOUNDATION_CONFIG
+        .as_ref()
+        .ok()
+        .and_then(|c| c.founder1_bch_address.clone())
+}
+
+/// Get founder1 DOGE address
+pub fn founder1_doge_address() -> Option<String> {
+    FOUNDATION_CONFIG
+        .as_ref()
+        .ok()
+        .and_then(|c| c.founder1_doge_address.clone())
+}
+
+/// Get founder2 BTC address
+pub fn founder2_btc_address() -> Option<String> {
+    FOUNDATION_CONFIG
+        .as_ref()
+        .ok()
+        .and_then(|c| c.founder2_btc_address.clone())
+}
+
+/// Get founder2 BCH address
+pub fn founder2_bch_address() -> Option<String> {
+    FOUNDATION_CONFIG
+        .as_ref()
+        .ok()
+        .and_then(|c| c.founder2_bch_address.clone())
+}
+
+/// Get founder2 DOGE address
+pub fn founder2_doge_address() -> Option<String> {
+    FOUNDATION_CONFIG
+        .as_ref()
+        .ok()
+        .and_then(|c| c.founder2_doge_address.clone())
 }
 
 /// Validate miners addresses are properly formatted

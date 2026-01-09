@@ -286,19 +286,33 @@ fn build_mempool_index(txs: &[Tx], compact: &CompactBlock) -> HashMap<u64, Tx> {
 
 /// Convert LiteHeader back to full BlockHeader
 fn reconstruct_header(lite: &crate::p2p::protocol::LiteHeader) -> BlockHeader {
-    BlockHeader {
+    // DIAGNOSTIC: Log what we're reconstructing
+    tracing::debug!(
+        "[RECONSTRUCT-HEADER] height={} lite.hash={} -> creating BlockHeader.pow_hash",
+        lite.height,
+        lite.hash
+    );
+    
+    let header = BlockHeader {
         number: lite.height,
         parent_hash: lite.prev.clone(),
         timestamp: lite.time,
         pow_hash: lite.hash.clone(),
         difficulty: lite.difficulty,
         nonce: lite.nonce,
-        state_root: String::new(),
+        state_root: "0".repeat(64),
         tx_root: lite.merkle.clone(),
-        receipts_root: String::new(),
+        receipts_root: "0".repeat(64),
         da_commitment: None,
         base_fee_per_gas: 0,
-    }
+    };
+    
+    tracing::debug!(
+        "[RECONSTRUCT-HEADER] Reconstructed header.pow_hash={}",
+        header.pow_hash
+    );
+    
+    header
 }
 
 fn verify_liteheader_pow_hash_valid(lite: &crate::p2p::protocol::LiteHeader) -> Result<(), String> {
