@@ -11,12 +11,11 @@ use crate::vision_constants::MAX_MINING_LAG_BLOCKS;
 
 /// Mainnet floor: MINING requires at least this many peers.
 /// This prevents "seed prints all blocks" scenario and ensures mainnet stability.
-/// SYNC does NOT use this floor - it only needs 1 peer to start syncing.
 pub const MAINNET_MIN_PEERS_FOR_MINING: u32 = 3;
 
-/// Minimum peers required for SYNC to start (separate from mining)
-/// Sync is how you earn readiness - allow it to run with just 1 peer.
-pub const MIN_PEERS_FOR_SYNC: u32 = 1;
+/// Minimum peers required for SYNC to start (mainnet safety: 3 peers)
+/// Raised to 3 for production stability - ensures nodes sync from established network.
+pub const MIN_PEERS_FOR_SYNC: u32 = 3;
 
 /// Max allowed desync for mining (in blocks).
 /// For 2-second blocks, 5 blocks = 10 seconds behind network estimate.
@@ -56,7 +55,7 @@ pub fn is_mining_eligible() -> bool {
     let min_peers: u32 = std::env::var("VISION_MIN_PEERS_FOR_MINING")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(1);
+        .unwrap_or(3);
 
     // Mainnet launch hardening: enforce minimum 3 peers FOR MINING (not sync)
     // Sync is allowed to start with just 1 peer (MIN_PEERS_FOR_SYNC = 1)
@@ -173,7 +172,7 @@ pub fn mining_status_message(snapshot: &SyncHealthSnapshot) -> String {
     let min_peers: u32 = std::env::var("VISION_MIN_PEERS_FOR_MINING")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(1);
+        .unwrap_or(3);
 
     if min_peers != 0 && snapshot.peer_count() < min_peers as usize {
         return format!(

@@ -198,6 +198,7 @@ mod tests {
                 tx_root: "".to_string(),
                 receipts_root: "".to_string(),
                 da_commitment: None,
+                miner: "miner".to_string(),
                 base_fee_per_gas: 0,
             },
             txs: vec![
@@ -275,6 +276,7 @@ mod tests {
                 tx_root: "".to_string(),
                 receipts_root: "".to_string(),
                 da_commitment: None,
+                miner: "miner".to_string(),
                 base_fee_per_gas: 0,
             },
             txs: vec![

@@ -109,7 +109,7 @@ export default function CommandCenter() {
     const fetchBlockchainStats = async () => {
       try {
         // Fetch node status for block height and mempool
-        const statusResponse = await fetch('http://127.0.0.1:7070/api/website/status')
+        const statusResponse = await fetch('http://127.0.0.1:7070/api/status')
         if (statusResponse.ok) {
           const statusData = await statusResponse.json()
           setBlockHeight(statusData.height || 0)
@@ -311,6 +311,68 @@ export default function CommandCenter() {
 
       {/* Content wrapper with z-index */}
       <div style={{ position: 'relative', zIndex: 1 }}>
+        {/* Page Header */}
+        <div style={{ 
+          marginBottom: '2.5rem',
+          padding: '3rem 2rem',
+          background: 'linear-gradient(135deg, rgba(17, 24, 39, 0.95) 0%, rgba(30, 27, 75, 0.95) 50%, rgba(17, 24, 39, 0.95) 100%)',
+          borderRadius: '1.5rem',
+          border: '1px solid rgba(138, 92, 255, 0.2)',
+          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5), 0 0 100px rgba(138, 92, 255, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+          textAlign: 'center',
+          position: 'relative',
+          overflow: 'hidden'
+        }}>
+          {/* Subtle animated gradient background */}
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'radial-gradient(circle at 50% 50%, rgba(138, 92, 255, 0.15) 0%, transparent 70%)',
+            opacity: 0.6,
+            zIndex: 0
+          }} />
+          
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            <h1 style={{ 
+              fontSize: '4rem', 
+              fontWeight: 900, 
+              background: 'linear-gradient(135deg, #c4b5fd 0%, #a78bfa 25%, #8b5cf6 50%, #7c3aed 75%, #6d28d9 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              marginBottom: '1rem',
+              letterSpacing: '-0.03em',
+              textTransform: 'uppercase',
+              filter: 'drop-shadow(0 0 30px rgba(139, 92, 246, 0.5))'
+            }}>
+              ⚡ Command Center
+            </h1>
+            <div style={{
+              height: '3px',
+              width: '120px',
+              background: 'linear-gradient(90deg, transparent 0%, #8b5cf6 50%, transparent 100%)',
+              margin: '0 auto 1.5rem',
+              borderRadius: '3px',
+              boxShadow: '0 0 20px rgba(139, 92, 246, 0.6)'
+            }} />
+            <p style={{ 
+              fontSize: '1.15rem', 
+              color: 'rgba(229, 231, 235, 0.9)', 
+              lineHeight: '1.8',
+              maxWidth: '700px',
+              margin: '0 auto',
+              fontWeight: 400,
+              textShadow: '0 2px 10px rgba(0, 0, 0, 0.3)'
+            }}>
+              Your central hub for node operations, mining controls, wallet management, and real-time network monitoring. 
+              Link your wallet, configure mining, and track your node's performance all in one place.
+            </p>
+          </div>
+        </div>
+
         {/* Blockchain Stats - Above Node Approval */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
         <div className="cc-panel" style={{ margin: 0 }}>

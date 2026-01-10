@@ -520,8 +520,12 @@ impl ActiveMiner {
                 "[LOCAL_TEST_MODE] Mining job with max target (easy)"
             );
         }
-        let chain_tip_height = height.saturating_sub(1);
-        let chain_tip_hash = format!("0x{}", hex::encode(prev_hash));
+        
+        // 🎯 UNIFIED TIP SOURCE: Use canonical_head() for consistent tip across all subsystems
+        let (chain_tip_height, chain_tip_hash, chain_tip_work) = {
+            let chain = crate::CHAIN.lock();
+            chain.canonical_head()
+        };
         
         // 🔍 SPLIT BRAIN DIAGNOSTIC: Log DB path and tip for comparison with sync
         let db_path = std::env::var("VISION_PORT")
@@ -539,6 +543,7 @@ impl ActiveMiner {
             chain_db_path = %db_path,
             chain_tip_height = chain_tip_height,
             chain_tip_hash = %chain_tip_hash,
+            chain_tip_work = chain_tip_work,
             job_parent_hash = %chain_tip_hash,
             job_height = height,
             chain_db_scope = crate::vision_constants::VISION_NETWORK_ID,
@@ -549,7 +554,7 @@ impl ActiveMiner {
             seed0 = ?seed0,
             target0 = ?target0,
             message_bytes_len = message_bytes.len(),
-            "[MINER-JOB] Created mining job from CHAIN.lock()"
+            "[MINER-JOB] Created mining job from canonical_head()"
         );
 
         // Avoid job spam/reset when nothing materially changed

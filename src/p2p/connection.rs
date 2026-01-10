@@ -3104,6 +3104,9 @@ impl P2PConnectionManager {
                     "Received compact block from peer"
                 );
 
+                // Update peer's reported height in PeerManager
+                crate::PEER_MANAGER.note_peer_height(&address.to_string(), height).await;
+
                 // Handle compact block with peer tracking
                 if let Err(e) = super::routes::handle_compact_block_direct(compact, Some(address.to_string())).await {
                     // Treat certain errors as hard incompatibility and fast-disconnect.

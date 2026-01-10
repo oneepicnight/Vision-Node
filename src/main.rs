@@ -1405,6 +1405,65 @@ async fn miner_stop() -> (StatusCode, Json<serde_json::Value>) {
 }
 
 #[derive(serde::Deserialize)]
+struct MinerUpdateReq {
+    threads: Option<usize>,
+    simd_batch_size: Option<u64>,
+    profile: Option<String>,
+}
+
+async fn miner_update(
+    Json(req): Json<MinerUpdateReq>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let max_threads = num_cpus::get() * 2;
+    
+    // Update threads if provided
+    if let Some(threads) = req.threads {
+        let clamped_threads = threads.min(max_threads).max(1);
+        ACTIVE_MINER.set_threads(clamped_threads);
+        eprintln!("🔧 [MINER-UPDATE] Updated threads to {}", clamped_threads);
+    }
+    
+    // Update config file with new settings
+    if req.simd_batch_size.is_some() || req.profile.is_some() {
+        match crate::config::miner::MinerConfig::load_or_create("miner.json") {
+            Ok(mut config) => {
+                if let Some(batch_size) = req.simd_batch_size {
+                    config.simd_batch_size = Some(batch_size);
+                    eprintln!("🔧 [MINER-UPDATE] Updated SIMD batch size to {}", batch_size);
+                }
+                if let Some(profile) = req.profile {
+                    config.mining_profile = Some(profile.clone());
+                    eprintln!("🔧 [MINER-UPDATE] Updated profile to {}", profile);
+                }
+                
+                if let Err(e) = config.save("miner.json") {
+                    eprintln!("⚠️  Failed to save miner config: {}", e);
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(serde_json::json!({
+                            "ok": false,
+                            "error": "Failed to save config"
+                        })),
+                    );
+                }
+            }
+            Err(e) => {
+                eprintln!("⚠️  Failed to load miner config: {}", e);
+            }
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "ok": true,
+            "threads": ACTIVE_MINER.get_threads(),
+            "status": "updated"
+        })),
+    )
+}
+
+#[derive(serde::Deserialize)]
 struct MinerConfigureReq {
     wallet: String,
 }
@@ -3162,6 +3221,7 @@ pub struct BlockHeader {
     pub tx_root: String,
     pub receipts_root: String,
     pub da_commitment: Option<String>,
+    pub miner: String,
     /// EIP-1559 style base fee per gas (dynamic fee market)
     #[serde(default)]
     pub base_fee_per_gas: u128,
@@ -3624,6 +3684,28 @@ impl Chain {
         if new != old {
             tracing::info!(old_height = old, new_height = new, context = %context, "chain height changed");
         }
+    }
+
+    /// Single source of truth for canonical chain tip
+    /// Returns (height, hash, total_work)
+    /// 
+    /// This MUST be used by:
+    /// - Miner job creation
+    /// - /status endpoint
+    /// - auto_sync best local height
+    /// - Any subsystem that needs "current tip"
+    /// 
+    /// Using different sources causes split-brain (miner on old tip, status shows new tip)
+    pub fn canonical_head(&self) -> (u64, String, u128) {
+        let tip = self.blocks.last().unwrap();
+        let height = tip.header.number;
+        let hash = tip.header.pow_hash.clone();
+        let total_work = self
+            .cumulative_work
+            .get(&canon_hash(&hash))
+            .cloned()
+            .unwrap_or(0);
+        (height, hash, total_work)
     }
 }
 
@@ -4331,6 +4413,7 @@ fn genesis_block() -> Block {
         tx_root: "0".repeat(64),
         receipts_root: "0".repeat(64),
         da_commitment: None,
+        miner: "network_miner".to_string(),
         base_fee_per_gas: initial_base_fee(),
     };
     Block {
@@ -5464,6 +5547,7 @@ fn build_app(tok_accounts: crate::accounts::TokenAccountsCfg) -> Router {
                         tx_root,
                         receipts_root: receipts_root,
                         da_commitment: None,
+                        miner: MINER_ADDRESS.lock().clone(),
                         base_fee_per_gas: calculate_next_base_fee(
                             &parent.header,
                             selected_txs.len(),
@@ -6154,6 +6238,7 @@ fn build_app(tok_accounts: crate::accounts::TokenAccountsCfg) -> Router {
         .route("/miner/threads", post(miner_set_threads))
         .route("/miner/start", post(miner_start))
         .route("/miner/stop", post(miner_stop))
+        .route("/miner/update", post(miner_update))
         .route("/miner/wallet", post(miner_configure)) // set miner wallet address
         .route("/miner/wallet", get(miner_get_config)) // get current wallet address
         .route("/balance/:addr", get(get_balance))
@@ -10458,6 +10543,7 @@ fn execute_and_mine(
         // fill receipts_root after exec results and pow are available
         receipts_root: parent.header.receipts_root.clone(),
         da_commitment: None,
+        miner: miner_addr.to_string(),
         base_fee_per_gas: calculate_next_base_fee(
             &parent.header,
             txs.len(),
@@ -10801,7 +10887,7 @@ fn apply_block_from_peer(g: &mut Chain, blk: &Block) -> Result<(), String> {
             let mut balances = g.balances.clone();
             let mut nonces = g.nonces.clone();
             let mut gm = g.gamemaster.clone();
-            let miner_key = acct_key("miner");
+            let miner_key = acct_key(&blk.header.miner);
             balances.entry(miner_key.clone()).or_insert(0);
             nonces.entry(miner_key.clone()).or_insert(0);
             let mut exec_results: BTreeMap<String, Result<(), String>> = BTreeMap::new();
@@ -11303,6 +11389,7 @@ mod reorg_tests {
                 tx_root: parent.header.tx_root.clone(),
                 receipts_root: parent.header.receipts_root.clone(),
                 da_commitment: None,
+                miner: "miner".to_string(),
                 base_fee_per_gas: parent.header.base_fee_per_gas,
             };
             loop {
@@ -11389,6 +11476,7 @@ mod reorg_tests {
                 tx_root: parent.header.tx_root.clone(),
                 receipts_root: parent.header.receipts_root.clone(),
                 da_commitment: None,
+                miner: "miner".to_string(),
                 base_fee_per_gas: parent.header.base_fee_per_gas,
             };
             loop {
@@ -11443,6 +11531,7 @@ mod reorg_tests {
                 tx_root: parent.header.tx_root.clone(),
                 receipts_root: parent.header.receipts_root.clone(),
                 da_commitment: None,
+                miner: "miner".to_string(),
                 base_fee_per_gas: parent.header.base_fee_per_gas,
             };
             loop {

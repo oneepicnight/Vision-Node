@@ -178,6 +178,7 @@ mod tests {
                 tx_root: "0".repeat(64),
                 receipts_root: "0".repeat(64),
                 da_commitment: None,
+                miner: "miner".to_string(),
                 base_fee_per_gas: 0,
             },
             txs: vec![],

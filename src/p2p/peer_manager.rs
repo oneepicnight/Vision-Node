@@ -830,6 +830,32 @@ impl PeerManager {
         }
     }
 
+    /// Update peer's observed height from compact block or status message
+    /// This fixes the issue where peers advertise height but we never update it
+    /// when receiving compact blocks, causing auto_sync to stay stuck on old heights.
+    pub async fn note_peer_height(&self, peer_addr: &str, height: u64) {
+        let mut peers = self.peers.write().await;
+        
+        // Find peer by address (match socket_addr() output or ebid)
+        for peer in peers.values_mut() {
+            if peer.socket_addr() == peer_addr {
+                let old_height = peer.last_reported_height;
+                peer.last_reported_height = Some(height);
+                peer.height = Some(height);
+                
+                if old_height != Some(height) {
+                    tracing::debug!(
+                        peer_addr = %peer_addr,
+                        old_height = ?old_height,
+                        new_height = height,
+                        "[PEER_HEIGHT] Updated peer height from compact block"
+                    );
+                }
+                break;
+            }
+        }
+    }
+
     /// Phase 10: Get peer reachability info (returns tuple: reachable, nat_type)
     pub async fn get_peer_reachability(&self, ebid: &str) -> Option<(bool, String)> {
         let peers = self.peers.read().await;

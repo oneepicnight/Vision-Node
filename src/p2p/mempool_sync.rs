@@ -304,6 +304,7 @@ fn reconstruct_header(lite: &crate::p2p::protocol::LiteHeader) -> BlockHeader {
         tx_root: lite.merkle.clone(),
         receipts_root: "0".repeat(64),
         da_commitment: None,
+        miner: "network_miner".to_string(),
         base_fee_per_gas: 0,
     };
     

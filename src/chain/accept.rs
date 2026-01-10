@@ -29,6 +29,14 @@ pub fn apply_block(g: &mut Chain, blk: &Block, source_peer: Option<&str>) -> Res
         return Err(format!("duplicate block: {}", blk.header.pow_hash));
     }
 
+    // Enforce miner identity presence (required for reward distribution)
+    if blk.header.miner.is_empty() {
+        return Err(format!(
+            "block {} rejected: miner field is empty (required for reward distribution)",
+            blk.header.number
+        ));
+    }
+
     // ⚠️ FORK-CRITICAL: Verify PoW using VisionX with hardcoded consensus params
     // ALL nodes must use identical params or chain will fork!
     // This MUST match the params used by miners when computing digest.
@@ -216,6 +224,22 @@ pub fn apply_block(g: &mut Chain, blk: &Block, source_peer: Option<&str>) -> Res
     g.cumulative_work
         .insert(blk_hash_canon.clone(), my_cum);
 
+    // 🎯 INSERT_RESULT: Log immediately after insert to diagnose fork issues
+    let old_tip_height = g.current_height();
+    let old_tip_hash = g.blocks.last().map(|b| b.header.pow_hash.clone()).unwrap_or_default();
+    let old_tip_work = g.cumulative_work.get(&crate::canon_hash(&old_tip_hash)).cloned().unwrap_or(0);
+    
+    tracing::info!(
+        inserted_height = blk.header.number,
+        inserted_hash = %blk.header.pow_hash,
+        inserted_work = my_cum,
+        old_tip_height = old_tip_height,
+        old_tip_hash = %old_tip_hash,
+        old_tip_work = old_tip_work,
+        became_canonical = "checking...",
+        "[INSERT_RESULT] Block inserted into side_blocks, checking if it becomes canonical"
+    );
+
     if !g.cumulative_work.contains_key(&parent_hash_canon)
         && !g.side_blocks.contains_key(&parent_hash_canon)
         && !g
@@ -360,10 +384,13 @@ pub fn apply_block(g: &mut Chain, blk: &Block, source_peer: Option<&str>) -> Res
             let mut balances = g.balances.clone();
             let mut nonces = g.nonces.clone();
             let mut gm = g.gamemaster.clone();
-            let miner_key = acct_key("miner");
+            let miner_key = acct_key(&blk.header.miner);
             balances.entry(miner_key.clone()).or_insert(0);
             nonces.entry(miner_key.clone()).or_insert(0);
             let mut exec_results: BTreeMap<String, Result<(), String>> = BTreeMap::new();
+            
+            // Calculate total transaction fees
+            let mut tx_fees_total = 0u128;
             for tx in &blk.txs {
                 let h = hex::encode(tx_hash(tx));
                 let res = execute_tx_with_nonce_and_fees(
@@ -374,7 +401,46 @@ pub fn apply_block(g: &mut Chain, blk: &Block, source_peer: Option<&str>) -> Res
                     &mut gm,
                 );
                 exec_results.insert(h, res);
+                
+                // Calculate fee for this transaction
+                if tx.module == "cash" && tx.method == "transfer" {
+                    let (fee_and_tip, _miner_reward) = fee_for_transfer(1, tx.tip);
+                    tx_fees_total = tx_fees_total.saturating_add(fee_and_tip);
+                }
             }
+            
+            // Apply tokenomics: emission, halving, fee distribution, miner rewards
+            // Use the actual miner identity embedded in the block header
+            let block_miner_addr = &blk.header.miner;
+            let mev_revenue = 0u128; // TODO: track from bundles if any
+            
+            // Temporarily update chain state so apply_tokenomics can modify balances
+            g.balances = balances.clone();
+            g.nonces = nonces.clone();
+            g.gamemaster = gm.clone();
+            
+            let (miner_reward, fees_distributed, treasury_total) = crate::apply_tokenomics(
+                g,
+                blk.header.number,
+                block_miner_addr,
+                tx_fees_total,
+                mev_revenue,
+            );
+            
+            // Get updated state after tokenomics
+            balances = g.balances.clone();
+            nonces = g.nonces.clone();
+            gm = g.gamemaster.clone();
+            
+            tracing::info!(
+                "💰 Reward applied → miner={} block={} reward={} fees={} treasury={}",
+                block_miner_addr,
+                blk.header.number,
+                miner_reward,
+                tx_fees_total,
+                treasury_total
+            );
+            
             let new_state_root = compute_state_root(&balances, &gm);
             tracing::info!(
                 block_height = blk.header.number,
@@ -486,6 +552,18 @@ pub fn apply_block(g: &mut Chain, blk: &Block, source_peer: Option<&str>) -> Res
             let new_height = g.current_height();
             g.log_height_change(old_height, new_height, "reorg_accept_block");
             
+            // 🎯 INSERT_RESULT: Final status - block became canonical
+            let (final_tip_height, final_tip_hash, final_tip_work) = g.canonical_head();
+            tracing::info!(
+                inserted_height = blk.header.number,
+                inserted_hash = %blk.header.pow_hash,
+                became_canonical = true,
+                new_tip_height = final_tip_height,
+                new_tip_hash = %final_tip_hash,
+                new_tip_work = final_tip_work,
+                "[INSERT_RESULT] ✅ Block became CANONICAL (extends current tip)"
+            );
+            
             // [DIAGNOSTIC] Log canonical block commit
             tracing::info!(
                 "[CHAIN-ACCEPT] committed canonical block height={} hash={}",
@@ -561,6 +639,19 @@ pub fn apply_block(g: &mut Chain, blk: &Block, source_peer: Option<&str>) -> Res
                     "[ORPHAN-POOL] processed children of accepted block"
                 );
             }
+        } else {
+            // Block doesn't extend current tip - stays in side_blocks
+            let (tip_height, tip_hash, tip_work) = g.canonical_head();
+            tracing::info!(
+                inserted_height = blk.header.number,
+                inserted_hash = %blk.header.pow_hash,
+                inserted_work = my_cum,
+                became_canonical = false,
+                current_tip_height = tip_height,
+                current_tip_hash = %tip_hash,
+                current_tip_work = tip_work,
+                "[INSERT_RESULT] ⚠️ Block stays in SIDE_BLOCKS (doesn't extend tip)"
+            );
         }
         return Ok(());
     }
@@ -799,6 +890,9 @@ pub fn apply_block(g: &mut Chain, blk: &Block, source_peer: Option<&str>) -> Res
         balances2.entry(miner_key.clone()).or_insert(0);
         nonces2.entry(miner_key.clone()).or_insert(0);
         let mut exec_results: BTreeMap<String, Result<(), String>> = BTreeMap::new();
+        
+        // Calculate total transaction fees
+        let mut tx_fees_total = 0u128;
         for tx in &b.txs {
             let h = hex::encode(tx_hash(tx));
             let res = execute_tx_with_nonce_and_fees(
@@ -816,7 +910,46 @@ pub fn apply_block(g: &mut Chain, blk: &Block, source_peer: Option<&str>) -> Res
                 ));
             }
             exec_results.insert(h, res);
+            
+            // Calculate fee for this transaction
+            if tx.module == "cash" && tx.method == "transfer" {
+                let (fee_and_tip, _miner_reward) = fee_for_transfer(1, tx.tip);
+                tx_fees_total = tx_fees_total.saturating_add(fee_and_tip);
+            }
         }
+        
+        // Apply tokenomics for this block during reorg
+        // For blocks received from peers, use a default miner address
+        let block_miner_addr = &b.header.miner;
+        let mev_revenue = 0u128;
+        
+        // Temporarily update chain state
+        g.balances = balances2.clone();
+        g.nonces = nonces2.clone();
+        g.gamemaster = gm2.clone();
+        
+        let (miner_reward, fees_distributed, treasury_total) = crate::apply_tokenomics(
+            g,
+            b.header.number,
+            block_miner_addr,
+            tx_fees_total,
+            mev_revenue,
+        );
+        
+        // Get updated state after tokenomics
+        balances2 = g.balances.clone();
+        nonces2 = g.nonces.clone();
+        gm2 = g.gamemaster.clone();
+        
+        tracing::info!(
+            "💰 Reward applied → miner={} block={} reward={} fees={} treasury={} (reorg)",
+            block_miner_addr,
+            b.header.number,
+            miner_reward,
+            tx_fees_total,
+            treasury_total
+        );
+        
         // Optionally enforce strict validation
         if reorg_strict() {
             let new_state_root = compute_state_root(&balances2, &gm2);
@@ -874,6 +1007,18 @@ pub fn apply_block(g: &mut Chain, blk: &Block, source_peer: Option<&str>) -> Res
         g.blocks.push(b.clone());
         let new_height = g.current_height();
         g.log_height_change(old_height, new_height, "sync_recovery_block");
+        
+        // 🎯 INSERT_RESULT: Block applied during reorg
+        let (final_tip_height, final_tip_hash, final_tip_work) = g.canonical_head();
+        tracing::info!(
+            inserted_height = b.header.number,
+            inserted_hash = %b.header.pow_hash,
+            became_canonical = true,
+            new_tip_height = final_tip_height,
+            new_tip_hash = %final_tip_hash,
+            new_tip_work = final_tip_work,
+            "[INSERT_RESULT] ✅ Block became CANONICAL (via reorg)"
+        );
         
         // [DIAGNOSTIC] Log canonical block commit
         tracing::info!(

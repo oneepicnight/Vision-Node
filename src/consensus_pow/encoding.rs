@@ -16,11 +16,12 @@ pub fn pow_message_bytes(h: &BlockHeader) -> Result<Vec<u8>, String> {
     let parent = hex32_strict("parent_hash", &h.parent_hash)?;
     let tx_root = hex32_strict("tx_root", &h.tx_root)?;
 
-    // Stable binary encoding to match genesis_block format:
-    // MAGIC + VERSION + parent + number + timestamp + difficulty + nonce + tx_root
+    // Stable binary encoding including miner identity:
+    // MAGIC + VERSION + parent + number + timestamp + difficulty + nonce + tx_root + miner
     // NOTE: state_root, receipts_root, da_commitment, base_fee_per_gas are NOT part of PoW message
     // They are post-mining computed values and must not affect proof of work!
-    let mut out = Vec::with_capacity(4 + 4 + 32 + 8 + 8 + 8 + 8 + 32);
+    let miner_bytes = h.miner.as_bytes();
+    let mut out = Vec::with_capacity(4 + 4 + 32 + 8 + 8 + 8 + 8 + 32 + 4 + miner_bytes.len());
 
     out.extend_from_slice(b"VPOW"); // magic
     out.extend_from_slice(&1u32.to_le_bytes()); // version
@@ -31,6 +32,8 @@ pub fn pow_message_bytes(h: &BlockHeader) -> Result<Vec<u8>, String> {
     out.extend_from_slice(&h.difficulty.to_le_bytes());
     out.extend_from_slice(&h.nonce.to_be_bytes());
     out.extend_from_slice(&tx_root);
+    out.extend_from_slice(&(miner_bytes.len() as u32).to_le_bytes()); // miner length
+    out.extend_from_slice(miner_bytes); // miner address
 
     Ok(out)
 }
@@ -53,6 +56,7 @@ mod tests {
             tx_root: format!("0x{}", "33".repeat(32)),
             receipts_root: format!("0x{}", "44".repeat(32)),
             da_commitment: None,
+            miner: "pow_miner".to_string(),
             base_fee_per_gas: 1_000_000_000_000u128,
         };
 
@@ -64,13 +68,15 @@ mod tests {
         // Check version (little-endian u32 = 1)
         assert_eq!(&msg[4..8], &1u32.to_le_bytes(), "version must be 1 LE");
 
-        // Verify expected size: 4(magic) + 4(version) + 32(parent) + 8(number) + 8(timestamp) + 8(difficulty) + 8(nonce) + 32(tx_root)
-        // = 104 bytes
-        let expected_size = 4 + 4 + 32 + 8 + 8 + 8 + 8 + 32;
+        // Verify expected size: 4(magic) + 4(version) + 32(parent) + 8(number) + 8(timestamp) + 8(difficulty) + 8(nonce) + 32(tx_root) + 4(miner_len) + miner_bytes
+        // With miner="pow_miner" (9 bytes): 104 + 4 + 9 = 117 bytes
+        let miner_len = h.miner.as_bytes().len();
+        let expected_size = 4 + 4 + 32 + 8 + 8 + 8 + 8 + 32 + 4 + miner_len;
         assert_eq!(
             msg.len(),
             expected_size,
-            "size must be 104 bytes, got {}",
+            "size must be {} bytes (with miner), got {}",
+            expected_size,
             msg.len()
         );
     }
@@ -90,6 +96,7 @@ mod tests {
             tx_root: format!("0x{}", "cc".repeat(32)),
             receipts_root: format!("0x{}", "dd".repeat(32)),
             da_commitment: None,
+            miner: "pow_miner".to_string(),
             base_fee_per_gas: 1_000_000_000_000u128,
         };
 

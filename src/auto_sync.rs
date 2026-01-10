@@ -50,7 +50,7 @@ impl SyncHealthSnapshot {
         let min_peers: u32 = std::env::var("VISION_MIN_PEERS_FOR_MINING")
             .ok()
             .and_then(|v| v.parse().ok())
-            .unwrap_or(1);
+            .unwrap_or(3);
         let genesis_mode = min_peers == 0;
 
         tracing::debug!(
@@ -279,7 +279,7 @@ impl SyncHealthSnapshot {
         let min_peers: u32 = std::env::var("VISION_MIN_PEERS_FOR_MINING")
             .ok()
             .and_then(|v| v.parse().ok())
-            .unwrap_or(1);
+            .unwrap_or(3);
         let genesis_mode = min_peers == 0;
 
         if genesis_mode {

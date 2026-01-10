@@ -19,6 +19,7 @@ export default function MiningControls({ onStatusChange }: MiningControlsProps) 
   const [maxThreads] = useState(navigator.hardwareConcurrency?.toString() || '--')
   const [currentHashrate, setCurrentHashrate] = useState('0 H/s')
   const [miningStatus, setMiningStatus] = useState('--')
+  const [miningBlockedReason, setMiningBlockedReason] = useState<string | null>(null)
   
   // Pool settings
   const [poolName, setPoolName] = useState('')
@@ -41,23 +42,39 @@ export default function MiningControls({ onStatusChange }: MiningControlsProps) 
   useEffect(() => {
     // Fetch initial mining status
     fetchMiningStatus()
-    const interval = setInterval(fetchMiningStatus, 5000)
+    fetchConstellationStatus()
+    const interval = setInterval(() => {
+      fetchMiningStatus()
+      fetchConstellationStatus()
+    }, 5000)
     return () => clearInterval(interval)
   }, [])
 
   const fetchMiningStatus = async () => {
     try {
-      const response = await fetch('http://127.0.0.1:7070/api/miner/stats')
+      const response = await fetch('http://127.0.0.1:7070/api/miner/status')
       if (response.ok) {
         const data = await response.json()
-        setMiningActive(data.active || false)
+        setMiningActive(data.enabled || false)
         setCurrentThreads(data.threads?.toString() || '--')
         setCurrentHashrate(data.average_hashrate ? `${(data.average_hashrate / 1000000).toFixed(2)} MH/s` : '0 H/s')
-        setMiningStatus(data.active ? 'Active' : 'Idle')
-        onStatusChange?.(data.active || false)
+        setMiningStatus(data.enabled ? 'Active' : 'Idle')
+        onStatusChange?.(data.enabled || false)
       }
     } catch (error) {
       console.debug('Failed to fetch mining status:', error)
+    }
+  }
+
+  const fetchConstellationStatus = async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:7070/api/constellation/status')
+      if (response.ok) {
+        const data = await response.json()
+        setMiningBlockedReason(data.mining_blocked_reason || null)
+      }
+    } catch (error) {
+      console.debug('Failed to fetch constellation status:', error)
     }
   }
 
@@ -66,14 +83,12 @@ export default function MiningControls({ onStatusChange }: MiningControlsProps) 
     
     try {
       setFansActive(true)
+      const threads = miningThreads ? parseInt(miningThreads) : (navigator.hardwareConcurrency || 4)
       const response = await fetch('http://127.0.0.1:7070/api/miner/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          mode: miningMode,
-          profile: miningProfile,
-          threads: miningThreads ? parseInt(miningThreads) : undefined,
-          simd_batch_size: parseInt(simdBatchSize)
+          threads: threads
         })
       })
       
@@ -98,6 +113,26 @@ export default function MiningControls({ onStatusChange }: MiningControlsProps) 
       await fetchMiningStatus()
     } catch (error) {
       console.error('Failed to stop mining:', error)
+    }
+  }
+
+  const handleApplySettings = async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:7070/api/miner/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          threads: miningThreads ? parseInt(miningThreads) : undefined,
+          simd_batch_size: parseInt(simdBatchSize),
+          profile: miningProfile
+        })
+      })
+      
+      if (!response.ok) throw new Error('Failed to update mining settings')
+      
+      await fetchMiningStatus()
+    } catch (error) {
+      console.error('Failed to update mining settings:', error)
     }
   }
 
@@ -173,13 +208,35 @@ export default function MiningControls({ onStatusChange }: MiningControlsProps) 
             Higher hashrate increases your chances of mining blocks and earning rewards.
           </p>
           
+          {/* Show blocking reason if present */}
+          {miningBlockedReason && !fansActive && (
+            <div style={{
+              padding: '0.75rem',
+              marginBottom: '1rem',
+              background: 'rgba(251, 191, 36, 0.1)',
+              border: '1px solid rgba(251, 191, 36, 0.3)',
+              borderRadius: '8px',
+              color: '#fbbf24',
+              fontSize: '0.9rem',
+              fontWeight: '500'
+            }}>
+              {miningBlockedReason}
+            </div>
+          )}
+          
           {!fansActive ? (
             <button 
               className="btn-fans-brr"
               onClick={handleMakeFansGoBrr}
+              disabled={!!miningBlockedReason}
+              style={{
+                opacity: miningBlockedReason ? 0.5 : 1,
+                cursor: miningBlockedReason ? 'not-allowed' : 'pointer'
+              }}
+              title={miningBlockedReason || 'Start mining'}
             >
               <span>💨</span>
-              <span>Make Fans Go BRRRR!</span>
+              <span>{miningBlockedReason ? 'Mining Blocked' : 'Make Fans Go BRRRR!'}</span>
             </button>
           ) : (
             <button 
@@ -266,6 +323,33 @@ export default function MiningControls({ onStatusChange }: MiningControlsProps) 
           />
           <small>How many nonces to process per inner loop (1-1024)</small>
         </div>
+
+        {/* Apply Settings Button */}
+        {fansActive && (
+          <button 
+            className="btn-apply-settings"
+            onClick={handleApplySettings}
+            style={{ 
+              width: '100%', 
+              marginTop: '1rem',
+              padding: '0.75rem',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: '600',
+              fontSize: '0.95rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem'
+            }}
+          >
+            <span>✓</span>
+            Apply Settings to Active Miner
+          </button>
+        )}
 
         <div className="mining-stats">
           <div>

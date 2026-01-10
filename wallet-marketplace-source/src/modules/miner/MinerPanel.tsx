@@ -60,7 +60,7 @@ export function MinerPanel() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await fetch('/miner/status');
+        const response = await fetch('/api/miner/status');
         if (response.ok) {
           const data = await response.json();
           // Map the API response to our interface
@@ -153,13 +153,13 @@ export function MinerPanel() {
     try {
       if (stats?.enabled) {
         // Stop mining
-        const response = await fetch('/miner/stop', { method: 'POST' });
+        const response = await fetch('/api/miner/stop', { method: 'POST' });
         if (!response.ok) {
           throw new Error('Failed to stop mining');
         }
       } else {
         // Start mining
-        const response = await fetch('/miner/start', {
+        const response = await fetch('/api/miner/start', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ threads })
@@ -184,7 +184,7 @@ export function MinerPanel() {
     try {
       // Stop current mining
       if (stats?.enabled) {
-        await fetch('/miner/stop', { method: 'POST' });
+        await fetch('/api/miner/stop', { method: 'POST' });
       }
 
       // Stop pool if hosting

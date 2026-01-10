@@ -199,10 +199,10 @@ pub async fn get_status() -> Json<StatusResponse> {
         "normal".to_string()
     };
 
-    // Local chain height
-    let chain_height = {
+    // Local chain height - use canonical_head() for consistent tip across all subsystems
+    let (chain_height, chain_tip_hash, chain_tip_work) = {
         let chain = CHAIN.lock();
-        chain.blocks.len().saturating_sub(1) as u64
+        chain.canonical_head()
     };
 
     let warmup_active = chain_height < crate::vision_constants::WARMUP_BLOCKS;
