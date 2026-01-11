@@ -1,0 +1,16 @@
+{
+  "btc": {
+    "rpc_url": "https://go.getblock.io/f96a4d328d724568acdcaeaae033720c/",
+    "username": "",
+    "password": "",
+    "timeout_ms": 10000,
+    "max_retries": 3
+  },
+  "bch": {
+    "rpc_url": "https://go.getblock.io/abf1aac1fbbb48bea79cab1b3031af4b/",
+    "username": "",
+    "password": "",
+    "timeout_ms": 10000,
+    "max_retries": 3
+  }
+}

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vision Wallet</title>
+    
+    <!-- 3D Globe Libraries (from panel.html) -->
+    <script src="https://unpkg.com/three@0.158.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/globe.gl@2.27.2/dist/globe.gl.min.js"></script>
+    <script>
+      // Critical polyfills that MUST run before any module code
+      (function() {
+        // 1. Ensure global exists
+        if (typeof window.global === 'undefined') {
+          window.global = window;
+        }
+        
+        // 2. Ensure process.env exists (some libraries expect this)
+        if (typeof window.process === 'undefined') {
+          window.process = { 
+            env: {},
+            version: '',
+            versions: {},
+            browser: true
+          };
+        }
+        
+        // 3. Mock Fetch API classes for axios adapter detection
+        // Axios checks for these at module initialization
+        if (typeof window.Request === 'undefined') {
+          window.Request = class Request {
+            constructor(input, init) {
+              this.url = typeof input === 'string' ? input : input.url;
+              this.method = (init && init.method) || 'GET';
+            }
+          };
+        }
+        if (typeof window.Response === 'undefined') {
+          window.Response = class Response {
+            constructor(body, init) {
+              this.body = body;
+              this.status = (init && init.status) || 200;
+            }
+          };
+        }
+        if (typeof window.Headers === 'undefined') {
+          window.Headers = class Headers {
+            constructor(init) {
+              this.map = new Map();
+              if (init) {
+                Object.keys(init).forEach(key => {
+                  this.map.set(key.toLowerCase(), init[key]);
+                });
+              }
+            }
+            get(name) { return this.map.get(name.toLowerCase()); }
+            set(name, value) { this.map.set(name.toLowerCase(), value); }
+            has(name) { return this.map.has(name.toLowerCase()); }
+          };
+        }
+        
+        // 4. Ensure fetch API exists (modern browsers have these)
+        if (typeof window.fetch === 'undefined') {
+          console.warn('fetch API not available - axios will use XHR adapter');
+        }
+      })();
+    </script>
+    <script type="module" crossorigin src="/app/assets/index-01c6e0f5.js"></script>
+    <link rel="stylesheet" href="/app/assets/index-b729ad01.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    
+  </body>
+</html>

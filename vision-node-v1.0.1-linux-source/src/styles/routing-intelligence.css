@@ -1,0 +1,567 @@
+/**
+ * Routing Intelligence Dashboard Styles
+ * 
+ * Cyberpunk-themed styles for live swarm monitoring.
+ * Integrates with existing command-center.css theme.
+ */
+
+/* ============================================================================
+   CONTAINER & LAYOUT
+   ============================================================================ */
+
+.routing-intel-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background: rgba(10, 10, 30, 0.8);
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+}
+
+.ri-grid {
+  display: grid;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+.ri-grid--top {
+  grid-template-columns: 1fr;
+}
+
+.ri-grid--middle {
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.ri-grid--bottom {
+  grid-template-columns: 2fr 1fr;
+  gap: 1.5rem;
+}
+
+@media (max-width: 1200px) {
+  .ri-grid--middle,
+  .ri-grid--bottom {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================================
+   CARDS
+   ============================================================================ */
+
+.ri-card {
+  background: rgba(15, 15, 40, 0.9);
+  border: 1px solid rgba(0, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: 0 4px 12px rgba(0, 255, 255, 0.1);
+}
+
+.ri-card__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  border-bottom: 1px solid rgba(0, 255, 255, 0.2);
+  padding-bottom: 0.75rem;
+}
+
+.ri-card__header h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #00ffff;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ri-card__hint {
+  font-size: 0.85rem;
+  color: rgba(0, 255, 255, 0.6);
+  font-style: italic;
+}
+
+.ri-card__footer {
+  border-top: 1px solid rgba(0, 255, 255, 0.1);
+  padding-top: 0.75rem;
+  margin-top: auto;
+}
+
+.ri-footnote {
+  font-size: 0.8rem;
+  color: rgba(0, 255, 255, 0.5);
+  font-style: italic;
+}
+
+/* ============================================================================
+   CLUSTER HEALTH
+   ============================================================================ */
+
+.ri-health-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.ri-health-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(0, 255, 255, 0.15);
+  border-radius: 6px;
+}
+
+.ri-health-block--wide {
+  grid-column: 1 / -1;
+}
+
+.ri-label {
+  font-size: 0.75rem;
+  color: rgba(0, 255, 255, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.ri-health-metric {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.ri-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #00ffff;
+  font-family: 'Courier New', monospace;
+}
+
+.ri-sub {
+  font-size: 0.9rem;
+  color: rgba(0, 255, 255, 0.6);
+}
+
+.ri-health-inline {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.ri-health-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.ri-health-status__row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+@media (max-width: 768px) {
+  .ri-health-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================================
+   BADGES & PILLS
+   ============================================================================ */
+
+.ri-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ri-badge--good {
+  background: rgba(0, 255, 0, 0.2);
+  color: #00ff00;
+  border: 1px solid rgba(0, 255, 0, 0.4);
+}
+
+.ri-badge--ok {
+  background: rgba(0, 255, 255, 0.2);
+  color: #00ffff;
+  border: 1px solid rgba(0, 255, 255, 0.4);
+}
+
+.ri-badge--warn {
+  background: rgba(255, 255, 0, 0.2);
+  color: #ffff00;
+  border: 1px solid rgba(255, 255, 0, 0.4);
+}
+
+.ri-badge--bad {
+  background: rgba(255, 0, 0, 0.2);
+  color: #ff0000;
+  border: 1px solid rgba(255, 0, 0, 0.4);
+}
+
+.ri-badge--neutral {
+  background: rgba(128, 128, 128, 0.2);
+  color: #aaaaaa;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+}
+
+.ri-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ri-pill--trusted {
+  background: rgba(0, 255, 0, 0.2);
+  color: #00ff00;
+  border: 1px solid rgba(0, 255, 0, 0.4);
+}
+
+.ri-pill--normal {
+  background: rgba(0, 255, 255, 0.15);
+  color: #00ffff;
+  border: 1px solid rgba(0, 255, 255, 0.3);
+}
+
+.ri-pill--probation {
+  background: rgba(255, 165, 0, 0.2);
+  color: #ffaa00;
+  border: 1px solid rgba(255, 165, 0, 0.4);
+}
+
+.ri-pill--gray {
+  background: rgba(128, 128, 128, 0.2);
+  color: #aaaaaa;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+}
+
+.ri-pill--banned {
+  background: rgba(255, 0, 0, 0.2);
+  color: #ff0000;
+  border: 1px solid rgba(255, 0, 0, 0.4);
+}
+
+/* ============================================================================
+   CHIPS (Ring/Role indicators)
+   ============================================================================ */
+
+.ri-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ri-chip--inner {
+  background: rgba(0, 255, 0, 0.15);
+  color: #00ff00;
+  border: 1px solid rgba(0, 255, 0, 0.3);
+}
+
+.ri-chip--middle {
+  background: rgba(0, 255, 255, 0.15);
+  color: #00ffff;
+  border: 1px solid rgba(0, 255, 255, 0.3);
+}
+
+.ri-chip--outer {
+  background: rgba(255, 0, 255, 0.15);
+  color: #ff00ff;
+  border: 1px solid rgba(255, 0, 255, 0.3);
+}
+
+.ri-chip--guardian {
+  background: rgba(255, 215, 0, 0.15);
+  color: #ffd700;
+  border: 1px solid rgba(255, 215, 0, 0.3);
+}
+
+.ri-chip--anchor {
+  background: rgba(138, 43, 226, 0.15);
+  color: #ba55d3;
+  border: 1px solid rgba(138, 43, 226, 0.3);
+}
+
+/* ============================================================================
+   TABLES
+   ============================================================================ */
+
+.ri-table-wrapper {
+  overflow-x: auto;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 255, 255, 0.15);
+}
+
+.ri-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.ri-table thead {
+  background: rgba(0, 255, 255, 0.1);
+}
+
+.ri-table th {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  color: #00ffff;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.75rem;
+  border-bottom: 1px solid rgba(0, 255, 255, 0.2);
+}
+
+.ri-table td {
+  padding: 0.75rem 1rem;
+  color: rgba(255, 255, 255, 0.9);
+  border-bottom: 1px solid rgba(0, 255, 255, 0.1);
+}
+
+.ri-table tbody tr {
+  transition: background-color 0.2s ease;
+}
+
+.ri-table tbody tr:hover {
+  background: rgba(0, 255, 255, 0.05);
+}
+
+.ri-table--compact td {
+  padding: 0.5rem 0.75rem;
+}
+
+.ri-row--banned {
+  background: rgba(255, 0, 0, 0.1) !important;
+}
+
+.ri-row--gray {
+  background: rgba(128, 128, 128, 0.1) !important;
+}
+
+.ri-row--probation {
+  background: rgba(255, 165, 0, 0.1) !important;
+}
+
+.ri-node {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.ri-node__tag {
+  font-weight: 600;
+  color: #00ffff;
+}
+
+.ri-node__id {
+  font-size: 0.75rem;
+  color: rgba(0, 255, 255, 0.5);
+  font-family: 'Courier New', monospace;
+}
+
+/* ============================================================================
+   EVENTS TIMELINE
+   ============================================================================ */
+
+.ri-events {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.ri-events::-webkit-scrollbar {
+  width: 6px;
+}
+
+.ri-events::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 3px;
+}
+
+.ri-events::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 255, 0.3);
+  border-radius: 3px;
+}
+
+.ri-event {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  border-radius: 6px;
+  border-left: 3px solid;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.ri-event--info {
+  border-left-color: #00ffff;
+  background: rgba(0, 255, 255, 0.05);
+}
+
+.ri-event--warn {
+  border-left-color: #ffaa00;
+  background: rgba(255, 165, 0, 0.05);
+}
+
+.ri-event--bad {
+  border-left-color: #ff0000;
+  background: rgba(255, 0, 0, 0.05);
+}
+
+.ri-event__meta {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.ri-event__time {
+  font-size: 0.75rem;
+  color: rgba(0, 255, 255, 0.6);
+  font-family: 'Courier New', monospace;
+}
+
+.ri-event__level {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 8px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.ri-event--info .ri-event__level {
+  background: rgba(0, 255, 255, 0.2);
+  color: #00ffff;
+}
+
+.ri-event--warn .ri-event__level {
+  background: rgba(255, 165, 0, 0.2);
+  color: #ffaa00;
+}
+
+.ri-event--bad .ri-event__level {
+  background: rgba(255, 0, 0, 0.2);
+  color: #ff0000;
+}
+
+.ri-event__msg {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.4;
+}
+
+/* ============================================================================
+   TREND SNAPSHOT
+   ============================================================================ */
+
+.ri-trend-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.ri-trend-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(0, 255, 255, 0.15);
+  border-radius: 6px;
+  text-align: center;
+}
+
+.ri-trend-footnote {
+  grid-column: 1 / -1;
+  font-size: 0.8rem;
+  color: rgba(0, 255, 255, 0.5);
+  font-style: italic;
+  text-align: center;
+  padding: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  .ri-trend-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================================
+   MISC
+   ============================================================================ */
+
+.ri-empty {
+  text-align: center;
+  padding: 2rem;
+  color: rgba(0, 255, 255, 0.4);
+  font-style: italic;
+  font-size: 0.9rem;
+}
+
+.ri-meta {
+  font-size: 0.8rem;
+  color: rgba(0, 255, 255, 0.6);
+}
+
+.ri-meta--loading {
+  color: #ffaa00;
+  font-weight: 600;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ============================================================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  .routing-intel-panel {
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  .ri-card {
+    padding: 1rem;
+  }
+
+  .ri-table {
+    font-size: 0.75rem;
+  }
+
+  .ri-table th,
+  .ri-table td {
+    padding: 0.5rem;
+  }
+
+  .ri-value {
+    font-size: 1.2rem;
+  }
+}

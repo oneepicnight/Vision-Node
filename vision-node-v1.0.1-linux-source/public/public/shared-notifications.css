@@ -1,0 +1,132 @@
+/* Shared Notification Styles for Vision Node */
+
+.vision-notification-bell {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    width: 60px;
+    height: 60px;
+    background: linear-gradient(to right, #8a5cff, #4ad1ff);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(138, 92, 255, 0.4);
+    transition: all 0.3s;
+    z-index: 999;
+}
+
+.vision-notification-bell:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 20px rgba(138, 92, 255, 0.6);
+}
+
+.vision-notification-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #ef4444;
+    color: white;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.vision-notification-panel {
+    position: fixed;
+    bottom: 100px;
+    right: 2rem;
+    width: 400px;
+    max-height: 600px;
+    background: radial-gradient(circle at top, rgba(60, 47, 140, 0.95), rgba(12, 8, 33, 0.98));
+    border: 1px solid rgba(162, 145, 255, 0.3);
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+    display: none;
+    flex-direction: column;
+    z-index: 998;
+    backdrop-filter: blur(10px);
+}
+
+.vision-notification-panel.show {
+    display: flex;
+}
+
+.vision-notification-panel-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid rgba(162, 145, 255, 0.2);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.vision-notification-panel-header h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #fff;
+    margin: 0;
+}
+
+.vision-notification-panel-body {
+    padding: 1rem;
+    overflow-y: auto;
+    max-height: 500px;
+}
+
+.vision-notification-item {
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    margin-bottom: 0.5rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    border: 1px solid transparent;
+}
+
+.vision-notification-item:hover {
+    background: rgba(138, 92, 255, 0.2);
+    border-color: rgba(138, 92, 255, 0.4);
+}
+
+.vision-notification-item.unread {
+    border-left: 3px solid #8a5cff;
+    background: rgba(138, 92, 255, 0.1);
+}
+
+.vision-notification-item-title {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    color: #fff;
+}
+
+.vision-notification-item-message {
+    font-size: 0.9rem;
+    color: #b7b0e6;
+}
+
+.vision-notification-item-time {
+    font-size: 0.75rem;
+    color: #9aa3c7;
+    margin-top: 0.5rem;
+}
+
+.vision-notification-mark-read-btn {
+    padding: 4px 12px;
+    background: rgba(138, 92, 255, 0.2);
+    border: 1px solid rgba(138, 92, 255, 0.3);
+    color: #8a5cff;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.vision-notification-mark-read-btn:hover {
+    background: rgba(138, 92, 255, 0.3);
+}

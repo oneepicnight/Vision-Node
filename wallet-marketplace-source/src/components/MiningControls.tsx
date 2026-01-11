@@ -55,11 +55,13 @@ export default function MiningControls({ onStatusChange }: MiningControlsProps) 
       const response = await fetch('http://127.0.0.1:7070/api/miner/status')
       if (response.ok) {
         const data = await response.json()
-        setMiningActive(data.enabled || false)
+        const isEnabled = data.enabled || false
+        setMiningActive(isEnabled)
+        setFansActive(isEnabled) // Sync fansActive with backend status
         setCurrentThreads(data.threads?.toString() || '--')
         setCurrentHashrate(data.average_hashrate ? `${(data.average_hashrate / 1000000).toFixed(2)} MH/s` : '0 H/s')
-        setMiningStatus(data.enabled ? 'Active' : 'Idle')
-        onStatusChange?.(data.enabled || false)
+        setMiningStatus(isEnabled ? 'Active' : 'Idle')
+        onStatusChange?.(isEnabled)
       }
     } catch (error) {
       console.debug('Failed to fetch mining status:', error)

@@ -1,0 +1,92 @@
+﻿# Vision Node v1.0 - Windows Mainnet Release
+
+## Release Date
+January 6, 2026 (Launch Day)
+
+## Package Contents
+- vision-node.exe - Optimized mainnet binary (~34 MB)
+- start.bat - Quick launcher script
+- config/external_rpc.json - GetBlock.io BTC/BCH deposit integration
+- public/ - Web wallet and dashboard UI
+- keys.json.example - Node identity configuration template
+- p2p.json - P2P network configuration
+- miner.json - Mining configuration
+- README.md - Project documentation
+- NOTICE - Legal notices
+
+## Quick Start
+
+### First Time Setup
+1. Copy keys.json.example to keys.json
+2. Edit keys.json with your node configuration
+3. Double-click start.bat
+
+### Accessing the Interface
+- Web Wallet: http://localhost:7070/app
+- Dashboard: http://localhost:7070/panel.html
+- Mining Panel: http://localhost:7070/panel.html
+- API: http://localhost:7070/api/
+
+## System Requirements
+- Windows 10/11 or Windows Server 2019+
+- 8GB RAM minimum (16GB recommended)
+- 50GB free disk space for blockchain data
+- Stable internet connection for P2P sync
+
+## Features
+✅ Full blockchain validation and consensus
+✅ VisionX PoW mining support (optimized)
+✅ P2P network with 7 genesis seed peers
+✅ Complete HTTP API for integrations
+✅ Built-in web wallet and dashboard
+✅ Market settlement and trading system
+✅ External RPC deposit monitoring (BTC/BCH via GetBlock.io)
+✅ Guardian role support for governance
+✅ Real-time transaction processing
+✅ Deposit scanner with 30s interval
+
+## Genesis Seed Peers (Mainnet)
+This release connects to the decentralized mainnet seed network:
+- 35.151.236.81:7072
+- 16.163.123.221:7072
+- 69.173.206.211:7072
+- 69.173.207.135:7072
+- 75.128.156.69:7072
+- 98.97.137.74:7072
+- 182.106.66.15:7072
+
+## Build Information
+- Compiler: rustc 1.x (release profile)
+- Optimizations: Full release optimizations enabled
+- Built: January 5, 2026
+- Target: x86_64-pc-windows-msvc
+- Features: full build (all features enabled)
+
+## Security Notes
+ This is production mainnet software
+- Keep your keys.json file secure and backed up
+- Configure firewall to allow P2P port (default 7072)
+- Do not share your private keys
+- Regularly backup your blockchain data
+
+## Data Directory
+The node stores blockchain data in:
+- Windows: .\vision_data_7070\
+
+## Firewall Configuration
+If running a public node, allow inbound connections on:
+- Port 7070 (HTTP API/Web UI)
+- Port 7072 (P2P network)
+
+## Support & Documentation
+For issues, updates, and documentation:
+- Check README.md for detailed setup
+- Review configuration files for available options
+- Visit project repository for latest information
+
+## License
+See NOTICE file for license and attribution information
+
+---
+Vision Node - Decentralized Blockchain Infrastructure
+Mainnet v1.0 - Production Ready

@@ -1,0 +1,163 @@
+﻿# Vision Node v1.0.1 - Windows Mainnet Release
+
+## Release Date
+January 10, 2026
+
+## What's New in v1.0.1
+🔧 **Critical Fixes:**
+- Fixed miner rewards not being distributed for peer-received blocks
+- Fixed tokenomics application in block acceptance and reorg paths
+- All blocks now properly credit emission, tithe, and fee distributions
+
+✨ **New Features:**
+- Command Center dashboard for real-time node monitoring
+- Mini Command Center widget on all pages
+- Enhanced mining status indicators
+- Guardian status tracking and visualization
+- System mood/health monitoring
+- Real-time event logging
+
+## Package Contents
+- vision-node.exe - Optimized mainnet binary (~34 MB)
+- start.bat - Quick launcher script
+- config/external_rpc.json - GetBlock.io BTC/BCH deposit integration
+- public/ - Web wallet and dashboard UI with Command Center
+- keys.json.example - Node identity configuration template
+- p2p.json - P2P network configuration
+- miner.json - Mining configuration
+- README.md - Project documentation
+- NOTICE - Legal notices
+
+## Quick Start
+
+### First Time Setup
+1. Copy keys.json.example to keys.json
+2. Edit keys.json with your node configuration
+3. Double-click start.bat
+
+### Accessing the Interface
+- **Command Center**: http://localhost:7070/app (login, then click Command Center)
+- Web Wallet: http://localhost:7070/app
+- Dashboard: http://localhost:7070/panel.html
+- Mining Panel: http://localhost:7070/panel.html
+- API: http://localhost:7070/api/
+
+## System Requirements
+- Windows 10/11 or Windows Server 2019+
+- 8GB RAM minimum (16GB recommended)
+- 50GB free disk space for blockchain data
+- Stable internet connection for P2P sync
+
+## Features
+✅ Full blockchain validation and consensus
+✅ VisionX PoW mining support (optimized)
+✅ **Command Center** - Real-time node monitoring dashboard
+✅ **Mini Command Center** - Always-visible status widget
+✅ P2P network with 7 genesis seed peers
+✅ Complete HTTP API for integrations
+✅ Built-in web wallet and dashboard
+✅ Market settlement and trading system
+✅ External RPC deposit monitoring (BTC/BCH via GetBlock.io)
+✅ Guardian role support for governance
+✅ Real-time transaction processing
+✅ System mood/health monitoring
+✅ Deposit scanner with 30s interval
+✅ Miner reward distribution (FIXED in v1.0.1)
+
+## Genesis Seed Peers (Mainnet)
+This release connects to the decentralized mainnet seed network:
+- 35.151.236.81:7072
+- 16.163.123.221:7072
+- 69.173.206.211:7072
+- 69.173.207.135:7072
+- 75.128.156.69:7072
+- 98.97.137.74:7072
+- 182.106.66.15:7072
+10, 2026
+- Target: x86_64-pc-windows-msvc
+- Features: full build (all features enabled)
+
+## Command Center
+The new Command Center provides a comprehensive real-time overview:
+- **Node Status**: Connection state, block height, sync progress
+- **Mining Status**: Active/inactive, hashrate, blocks mined
+- **Wallet Balances**: LAND, CASH, and GAME token balances
+- **Guardian Status**: Connection to beacon, role information
+- **System Mood**: Network health and node performance metrics
+- **Event Log**: Real-time system events and notifications
+
+Access via the web wallet at http://localhost:7070/app → Command Center
+
+The Mini Command Center appears at the top of every page showing:
+- Node online/offline status with block height
+- Mining status and recent blocks found
+- Current wallet balances
+- Guardian connection status
+
+Click the Mini Command Center to open the full dashboard.
+- Optimizations: Full release optimizations enabled
+- Built: January 5, 2026
+- Target: x86_64-pc-windows-msvc
+- Features: full build (all features enabled)
+
+## Security Notes
+ This is production mainnet software
+- Keep your keys.json file secure and backed up
+- Configure firewall to allow P2P port (default 7072)
+- Do not share your private keys
+- Regularly backup your blockchain data
+
+## Data Directory
+The node stores blockchain data in:
+- Windows: .\vision_data_7070\
+
+## Firewall Configuration
+If running a public node, allow inbound connections on:
+- Port 7070 (HTTP API/Web UI)
+- Port 7072 (P2P network)
+
+## Support & Documentation
+For issues, updates, and documentation:
+- Check README.md for detailed setup
+- Review configuration files for available options
+- Visit project repository for latest information
+
+## License
+See NOTICE file for license and attribution information
+
+---
+
+## Version History
+
+### v1.0.1 (January 10, 2026)
+**Critical Fixes:**
+- Fixed miner rewards not being credited for peer-received blocks
+- Added apply_tokenomics() calls to block acceptance paths (normal & reorg)
+- Blocks now properly distribute emission, tithe, and transaction fees
+- Rewards credited to "network_miner" address for peer blocks
+
+**New Features:**
+- Command Center - Comprehensive real-time monitoring dashboard
+- Mini Command Center - Always-visible status widget on all pages
+- System mood/health indicators
+- Enhanced event logging and activity tracking
+- Guardian status visualization
+
+**Technical:**
+- Fixed tokenomics in src/chain/accept.rs apply_block()
+- Transaction fee calculation for all accepted blocks
+- Proper state synchronization during tokenomics application
+- Added logging: "💰 Applied tokenomics to received block"
+
+### v1.0 (January 6, 2026)
+- Initial mainnet release
+- Full blockchain validation and consensus
+- VisionX PoW mining support
+- P2P network with genesis seed peers
+- Complete HTTP API
+- Built-in web wallet
+- Guardian role support
+
+---
+Vision Node - Decentralized Blockchain Infrastructure
+Mainnet v1.0.1 - Production Ready
