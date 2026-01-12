@@ -24,9 +24,9 @@ const TipButton: React.FC<TipButtonProps> = () => {
 
   // Real donation addresses
   const addresses = {
-    BTC: "bc1qfxpwq5x8g5el2q9jhg38yy9vzg0n5zxhd7lfr9",
-    BCH: "bitcoincash:qqlz5xn7ytn763xsgjrk95sggsqdhkp9w5926w0jsa",
-    DOGE: "Coming Soon"
+    BTC: "bc1q3swmre3zk3jepfv36mus2s05tc8vaw2gy4w9k7",
+    BCH: "qe75x4s8ral8jaqgqewrg4avqll58kxgc5eal9u5t",
+    DOGE: "DRsWAUD1PkU5pTCxwybngAC6tUkYfBF9Mr"
   };
 
   console.log("[TipButton] Rendered, profile:", profile, "status:", status);
@@ -80,7 +80,6 @@ const TipButton: React.FC<TipButtonProps> = () => {
 
   const handleCopyAddress = async () => {
     const address = addresses[coin];
-    if (address === "Coming Soon") return;
     
     try {
       await navigator.clipboard.writeText(address);
@@ -117,7 +116,7 @@ const TipButton: React.FC<TipButtonProps> = () => {
           >
             <option value="BTC">Bitcoin (BTC)</option>
             <option value="BCH">Bitcoin Cash (BCH)</option>
-            <option value="DOGE" disabled style={{ opacity: 0.5 }}>DOGE (Coming Soon)</option>
+            <option value="DOGE">Dogecoin (DOGE)</option>
           </select>
           <button
             onClick={() => setShowAddresses(!showAddresses)}
@@ -136,24 +135,17 @@ const TipButton: React.FC<TipButtonProps> = () => {
               <div className="text-[10px] text-yellow-300/60 mb-1 uppercase tracking-wide">
                 {coin} Address
               </div>
-              <div className={`font-mono text-xs break-all ${coin === "DOGE" ? "opacity-40 cursor-not-allowed" : "text-yellow-100"}`}>
+              <div className="font-mono text-xs break-all text-yellow-100">
                 {addresses[coin]}
               </div>
-              {coin === "DOGE" && (
-                <div className="text-[10px] text-yellow-400/60 mt-1">
-                  🚧 DOGE support coming soon
-                </div>
-              )}
             </div>
-            {coin !== "DOGE" && (
-              <button
-                onClick={handleCopyAddress}
-                className="px-3 py-1.5 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-500/40 transition-all flex-shrink-0"
-                title="Copy address"
-              >
-                <span className="text-xs">📋 Copy</span>
-              </button>
-            )}
+            <button
+              onClick={handleCopyAddress}
+              className="px-3 py-1.5 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-500/40 transition-all flex-shrink-0"
+              title="Copy address"
+            >
+              <span className="text-xs">📋 Copy</span>
+            </button>
           </div>
         </div>
       )}

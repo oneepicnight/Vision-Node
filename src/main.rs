@@ -75,6 +75,7 @@ mod consensus;
 mod consensus_pow;
 mod fees;
 mod identity;
+mod log_capture; // WebSocket log streaming
 mod market; // Core vault fee routing
 mod mempool;
 mod metrics;
@@ -1180,6 +1181,10 @@ static WS_MEMPOOL_TX: Lazy<tokio::sync::broadcast::Sender<String>> = Lazy::new(|
 });
 static WS_EVENTS_TX: Lazy<tokio::sync::broadcast::Sender<String>> = Lazy::new(|| {
     let (tx, _rx) = tokio::sync::broadcast::channel(100);
+    tx
+});
+static WS_LOGS_TX: Lazy<tokio::sync::broadcast::Sender<String>> = Lazy::new(|| {
+    let (tx, _rx) = tokio::sync::broadcast::channel(500); // Larger buffer for logs
     tx
 });
 
@@ -2475,6 +2480,35 @@ async fn handle_ws_events(mut socket: WebSocket) {
     }
 }
 
+/// WebSocket handler for real-time log streaming
+async fn ws_logs_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
+    ws.on_upgrade(handle_ws_logs)
+}
+
+async fn handle_ws_logs(mut socket: WebSocket) {
+    let mut rx = WS_LOGS_TX.subscribe();
+
+    let _ = socket
+        .send(axum::extract::ws::Message::Text(
+            serde_json::json!({
+                "type": "connected",
+                "stream": "logs",
+                "message": "Real-time log streaming active"
+            }).to_string(),
+        ))
+        .await;
+
+    while let Ok(msg) = rx.recv().await {
+        if socket
+            .send(axum::extract::ws::Message::Text(msg))
+            .await
+            .is_err()
+        {
+            break;
+        }
+    }
+}
+
 // =================== Config / Constants ===================
 
 // Centralized runtime limits loaded from environment (FIX21)
@@ -2590,11 +2624,11 @@ fn load_tokenomics_cfg() -> TokenomicsCfg {
             .and_then(|s| s.parse().ok())
             .unwrap_or(720),
         decimals: 9,
-        vault_addr: parse_hex_address("VISION_TOK_VAULT_ADDR", "vault_address_placeholder"),
-        fund_addr: parse_hex_address("VISION_TOK_FUND_ADDR", "fund_address_placeholder"),
+        vault_addr: parse_hex_address("VISION_TOK_VAULT_ADDR", "0xb977c16e539670ddfecc0ac902fcb916ec4b944e"),
+        fund_addr: parse_hex_address("VISION_TOK_FUND_ADDR", "0x8bb8edcd4cdbcb132cc5e88ff90ba48cebf11cbd"),
         treasury_addr: parse_hex_address(
             "VISION_TOK_TREASURY_ADDR",
-            "treasury_address_placeholder",
+            "0xdf7a79291bb96e9dd1c77da089933767999eabf0",
         ),
     }
 }
@@ -3748,12 +3782,14 @@ fn apply_tokenomics(
 
             chain.add_supply(miner_emission);
 
-            tracing::debug!(
-                "tokenomics emission: height={}, halvings={}, emission={}, miner_bal={}",
-                height,
-                halvings,
-                miner_emission,
-                new_miner_bal
+            // Robust miner payout logging - always visible at INFO level
+            tracing::info!(
+                block = height,
+                miner = %miner_addr,
+                reward = miner_emission,
+                halvings = halvings,
+                new_balance = new_miner_bal,
+                "[PAYOUT] Block mined - miner rewarded"
             );
         }
     }
@@ -4755,7 +4791,16 @@ async fn main() {
     let filter = std::env::var("VISION_LOG")
         .unwrap_or_else(|_| std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()));
     let env_filter = EnvFilter::try_new(filter).unwrap_or_else(|_| EnvFilter::new("info"));
-    tracing_subscriber::fmt().with_env_filter(env_filter).init();
+    
+    // Initialize tracing with log capture for WebSocket streaming
+    use tracing_subscriber::layer::SubscriberExt;
+    let subscriber = tracing_subscriber::fmt()
+        .with_env_filter(env_filter)
+        .finish()
+        .with(log_capture::LogCaptureLayer::new());
+    tracing::subscriber::set_global_default(subscriber)
+        .expect("Failed to set tracing subscriber");
+    
     info!(admin_token = %_admin_token_mask, "Vision node starting up");
 
     // Initialize sharding system
@@ -5154,7 +5199,43 @@ async fn main() {
             let mut g = CHAIN.lock();
             match chain::accept::apply_block(&mut g, &block, None) {
                 Ok(()) => {
+                    let chain_id = crate::vision_constants::VISION_NETWORK_ID;
+                    let pow_fp = &crate::p2p::connection::compute_pow_params_hash()[..8];
+                    let block_hash = block.header.pow_hash.clone();
+                    let block_height = block.header.number;
+                    let miner = block.header.miner.clone();
+                    
+                    // Check if block became canonical (should be true immediately for local blocks)
+                    let is_canonical = {
+                        let chain = CHAIN.lock();
+                        chain.blocks.last().map(|tip| tip.header.pow_hash == block_hash).unwrap_or(false)
+                    };
+                    
                     drop(g);
+                    
+                    if is_canonical {
+                        tracing::info!(
+                            height = block_height,
+                            hash = %block_hash,
+                            miner = %miner,
+                            confirmations = 1,
+                            chain_id = %chain_id,
+                            pow_fp = %pow_fp,
+                            "[CANON] ✅ LOCAL BLOCK BECAME CANONICAL - REWARD CONFIRMED"
+                        );
+                        eprintln!("✅ [CANON] Block #{} accepted and became CANONICAL (reward confirmed)", block_height);
+                    } else {
+                        tracing::warn!(
+                            height = block_height,
+                            hash = %block_hash,
+                            miner = %miner,
+                            chain_id = %chain_id,
+                            pow_fp = %pow_fp,
+                            "[ORPHAN] ⚠️  LOCAL BLOCK ACCEPTED BUT ORPHANED"
+                        );
+                        eprintln!("⚠️  [ORPHAN] Block #{} accepted but NOT canonical (possible reorg)", block_height);
+                    }
+                    
                     eprintln!("✅ Block #{} accepted and integrated", block.header.number);
                     
                     // Broadcast to peers
@@ -5170,7 +5251,27 @@ async fn main() {
                 }
                 Err(e) => {
                     drop(g);
-                    eprintln!("❌ Block #{} rejected: {}", block.header.number, e);
+                    
+                    let chain_id = crate::vision_constants::VISION_NETWORK_ID;
+                    let pow_fp = &crate::p2p::connection::compute_pow_params_hash()[..8];
+                    
+                    // PANIC LEVEL: Local mined block rejected
+                    tracing::error!(
+                        height = block.header.number,
+                        miner = %block.header.miner,
+                        hash = %block.header.pow_hash,
+                        parent = %block.header.parent_hash,
+                        difficulty = block.header.difficulty,
+                        chain_id = %chain_id,
+                        pow_fp = %pow_fp,
+                        reason = %e,
+                        "[REJECT] 🚨 LOCAL MINED BLOCK REJECTED - PANIC LEVEL"
+                    );
+                    eprintln!("❌ [REJECT] Local mined block #{} REJECTED: {}", block.header.number, e);
+                    eprintln!("   This is CRITICAL - you found a block but it was rejected!");
+                    eprintln!("   Reason: {}", e);
+                    eprintln!("   Miner: {}", block.header.miner);
+                    eprintln!("   Chain: {}, POW: {}", chain_id, pow_fp);
                 }
             }
         }
@@ -6370,6 +6471,7 @@ fn build_app(tok_accounts: crate::accounts::TokenAccountsCfg) -> Router {
         .route("/ws/transactions", get(ws_transactions_handler))
         .route("/ws/mempool", get(ws_mempool_handler))
         .route("/ws/events", get(ws_events_handler))
+        .route("/ws/logs", get(ws_logs_handler))
         // Dev-only tools (enabled by VISION_DEV=1 and X-Dev-Token or ?dev_token=)
         .route("/dev/faucet_mint", post(dev_faucet_mint))
         .route("/dev/spam_txs", post(dev_spam_txs));
@@ -10677,13 +10779,17 @@ fn execute_and_mine(
         mev_revenue,
     );
 
-    tracing::debug!(
-        height = parent.header.number + 1,
+    // Log full tokenomics breakdown at INFO level for visibility
+    tracing::info!(
+        block = parent.header.number + 1,
+        miner = %miner_addr,
         miner_reward = miner_reward,
+        fees_collected = tx_fees_total,
         fees_distributed = fees_distributed,
         treasury_total = treasury_total,
-        tx_fees = tx_fees_total,
-        "tokenomics applied (fees split 50/30/20 to Vault/Fund/Treasury)"
+        "[PAYOUT] Tokenomics applied - miner received {} units ({}+fees)",
+        miner_reward,
+        miner_reward.saturating_sub(tx_fees_total)
     );
 
     // Update balances after tokenomics
@@ -10966,7 +11072,22 @@ fn apply_block_from_peer(g: &mut Chain, blk: &Block) -> Result<(), String> {
             let _ = g.db.flush();
             g.blocks.push(blk.clone());
             g.seen_blocks.insert(blk.header.pow_hash.clone());
-            info!(block = %blk.header.pow_hash, height = blk.header.number, "accepted block");
+            
+            let chain_id = crate::vision_constants::VISION_NETWORK_ID;
+            let pow_fp = &crate::p2p::connection::compute_pow_params_hash()[..8];
+            
+            // Robust block acceptance log showing miner who produced the block
+            tracing::info!(
+                block = blk.header.number,
+                hash = %blk.header.pow_hash,
+                miner = %blk.header.miner,
+                parent = %blk.header.parent_hash,
+                txs = blk.txs.len(),
+                difficulty = blk.header.difficulty,
+                chain_id = %chain_id,
+                pow_fp = %pow_fp,
+                "[ACCEPT] Block accepted from peer - added to chain"
+            );
             // snapshot periodically (env-driven cadence)
             if g.limits.snapshot_every_blocks > 0
                 && (g.blocks.len() as u64).is_multiple_of(g.limits.snapshot_every_blocks)

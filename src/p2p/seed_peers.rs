@@ -14,14 +14,12 @@ use crate::globals::P2P_MANAGER;
 /// All seeds on port 7072 (P2P port)
 /// v1.0.0 MAINNET LAUNCH - Decentralized Mainnet Seeds
 pub const INITIAL_SEEDS: &[(&str, u16)] = &[
-    ("35.151.236.81", 7072),  // Seed 1
-    ("16.163.123.221", 7072), // Seed 2
-    ("69.173.206.211", 7072), // Seed 3
-    ("75.128.156.69", 7072),  // Seed 4
-    ("98.97.137.74", 7072),   // Seed 5
-    ("182.106.66.15", 7072),  // Seed 6
-    ("69.173.206.46", 7072),  // Seed 7 (new)
-    ("68.142.62.22", 7072),   // Seed 8 (new)
+    ("69.173.206.211", 7072), // Seed 1
+    ("75.128.156.69", 7072),  // Seed 2
+    ("69.173.206.46", 7072),  // Seed 3
+    ("68.142.62.22", 7072),   // Seed 4
+    ("66.227.245.188", 7072), // Seed 5
+    ("75.128.152.160", 7072), // Seed 6
 ];
 
 /// Get default anchor seeds for 7070 HTTP control plane
@@ -50,13 +48,12 @@ impl Default for SeedPeerConfig {
             description: "Vision v1.0.0 Mainnet Seeds - Decentralized Launch".to_string(),
             // v1.0.0 MAINNET LAUNCH - Decentralized Mainnet Seeds
             peers: vec![
-                "35.151.236.81:7072".to_string(),
-                "16.163.123.221:7072".to_string(),
                 "69.173.206.211:7072".to_string(),
-                "69.173.207.135:7072".to_string(),
                 "75.128.156.69:7072".to_string(),
-                "98.97.137.74:7072".to_string(),
-                "182.106.66.15:7072".to_string(),
+                "69.173.206.46:7072".to_string(),
+                "68.142.62.22:7072".to_string(),
+                "66.227.245.188:7072".to_string(),
+                "75.128.152.160:7072".to_string(),
             ],
         }
     }
