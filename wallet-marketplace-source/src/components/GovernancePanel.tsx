@@ -51,14 +51,14 @@ export default function GovernancePanel() {
   const fetchGovernanceData = async () => {
     try {
       // Fetch stats
-      const statsResponse = await fetch('http://127.0.0.1:7070/gov/stats')
+      const statsResponse = await fetch('http://127.0.0.1:7070/api/gov/stats')
       if (statsResponse.ok) {
         const statsData = await statsResponse.json()
         setStats(statsData)
       }
 
       // Fetch active proposals
-      const proposalsResponse = await fetch('http://127.0.0.1:7070/gov/proposals?status=open')
+      const proposalsResponse = await fetch('http://127.0.0.1:7070/api/gov/proposals?status=open')
       if (proposalsResponse.ok) {
         const proposalsData = await proposalsResponse.json()
         setActiveProposals(proposalsData)
@@ -74,7 +74,7 @@ export default function GovernancePanel() {
     if (!profile?.address) return
 
     try {
-      const response = await fetch('http://127.0.0.1:7070/gov/vote', {
+      const response = await fetch('http://127.0.0.1:7070/api/gov/vote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

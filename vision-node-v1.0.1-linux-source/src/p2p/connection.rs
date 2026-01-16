@@ -2742,11 +2742,8 @@ impl P2PConnectionManager {
         }
 
         // Phase 10: Register peer with stable P2P identity (prefer advertised port)
-        let dial_port = dial_addr
-            .parse::<std::net::SocketAddr>()
-            .map(|sa| sa.port())
-            .unwrap_or(7072);
-        let peer_port = peer_handshake.advertised_port.unwrap_or(dial_port);
+        // CRITICAL: Always default to P2P port 7072, never HTTP port 7070
+        let peer_port = peer_handshake.advertised_port.unwrap_or(7072);
         let peer_p2p_addr = format!("{}:{}", sock_addr.ip(), peer_port);
 
         {

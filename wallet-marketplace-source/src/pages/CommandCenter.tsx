@@ -10,6 +10,7 @@ import { VaultStatusDashboard } from '../components/VaultStatusDashboard'
 import MiningControls from '../components/MiningControls'
 import VisionGlobe from '../components/VisionGlobe'
 import GovernancePanel from '../components/GovernancePanel'
+import LogsPanel from '../components/LogsPanel'
 import '../styles/command-center.css'
 import '../styles/routing-intelligence.css'
 
@@ -1005,6 +1006,11 @@ export default function CommandCenter() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Live Logs Panel */}
+      <div style={{ marginBottom: '1.5rem', height: '600px' }}>
+        <LogsPanel />
       </div>
 
       {/* Governance Panel */}

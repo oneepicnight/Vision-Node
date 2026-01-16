@@ -201,6 +201,24 @@ impl Peer {
         }
     }
 
+    /// Parse semantic version loosely (strips v/V prefix, handles missing parts)
+    fn parse_semver_loose(s: &str) -> Option<(u64, u64, u64)> {
+        let s = s.trim().trim_start_matches(|c| c == 'v' || c == 'V');
+        let mut it = s.split('.');
+        let major = it.next()?.parse().ok()?;
+        let minor = it.next().unwrap_or("0").parse().ok()?;
+        let patch = it.next().unwrap_or("0").parse().ok()?;
+        Some((major, minor, patch))
+    }
+
+    /// Compare semantic versions: returns true if got >= expected_min
+    fn semver_gte(got: &str, expected_min: &str) -> bool {
+        match (Self::parse_semver_loose(got), Self::parse_semver_loose(expected_min)) {
+            (Some(g), Some(e)) => g >= e,
+            _ => false, // if parsing fails, treat as incompatible
+        }
+    }
+
     /// Check if this peer is compatible with our chain
     pub fn is_chain_compatible(
         &self,
@@ -213,24 +231,86 @@ impl Peer {
         // Chain id and prefix must match exactly
         match (&self.chain_id, &self.bootstrap_prefix) {
             (Some(cid), Some(prefix)) if cid == chain_id && prefix == bootstrap_prefix => {}
-            _ => return false,
+            (Some(cid), Some(prefix)) => {
+                tracing::warn!(
+                    "[COMPAT] ❌ {}:{} INCOMPATIBLE: chain_id mismatch | expected chain_id={} prefix={} | got chain_id={} prefix={}",
+                    self.ip, self.port, chain_id, bootstrap_prefix, cid, prefix
+                );
+                return false;
+            }
+            (Some(cid), None) => {
+                tracing::warn!(
+                    "[COMPAT] ❌ {}:{} INCOMPATIBLE: missing bootstrap_prefix | expected={} | got chain_id={} prefix=None",
+                    self.ip, self.port, bootstrap_prefix, cid
+                );
+                return false;
+            }
+            (None, Some(prefix)) => {
+                tracing::warn!(
+                    "[COMPAT] ❌ {}:{} INCOMPATIBLE: missing chain_id | expected={} | got chain_id=None prefix={}",
+                    self.ip, self.port, chain_id, prefix
+                );
+                return false;
+            }
+            (None, None) => {
+                tracing::warn!(
+                    "[COMPAT] ❌ {}:{} INCOMPATIBLE: missing chain identity | expected chain_id={} prefix={} | got chain_id=None prefix=None",
+                    self.ip, self.port, chain_id, bootstrap_prefix
+                );
+                return false;
+            }
         }
 
         // Protocol version must be present and within range
         if let Some(pv) = self.protocol_version {
             if pv < min_proto || pv > max_proto {
+                tracing::warn!(
+                    "[COMPAT] ❌ {}:{} INCOMPATIBLE: protocol_version out of range | expected {}-{} | got {}",
+                    self.ip, self.port, min_proto, max_proto, pv
+                );
                 return false;
             }
         } else {
+            tracing::warn!(
+                "[COMPAT] ❌ {}:{} INCOMPATIBLE: missing protocol_version | expected {}-{}",
+                self.ip, self.port, min_proto, max_proto
+            );
             return false;
         }
 
-        // Node version check (string compare is fine if you already use semver elsewhere)
+        // Node version check (semantic version comparison)
         if let Some(ver) = &self.node_version {
-            if ver.as_str() < min_node_version {
+            // Try to parse both versions
+            if !Self::semver_gte(ver.as_str(), min_node_version) {
+                // Check if it's a parse failure or genuinely too old
+                match (Self::parse_semver_loose(ver.as_str()), Self::parse_semver_loose(min_node_version)) {
+                    (None, _) => {
+                        tracing::warn!(
+                            "[COMPAT] ❌ {}:{} INCOMPATIBLE: could not parse node_version | expected >={} | got {} (invalid format)",
+                            self.ip, self.port, min_node_version, ver
+                        );
+                    }
+                    (Some(_), None) => {
+                        // Our min version is invalid? Shouldn't happen but log it
+                        tracing::warn!(
+                            "[COMPAT] ❌ {}:{} INCOMPATIBLE: internal error parsing min_node_version | expected >={} | got {}",
+                            self.ip, self.port, min_node_version, ver
+                        );
+                    }
+                    (Some(g), Some(e)) => {
+                        tracing::warn!(
+                            "[COMPAT] ❌ {}:{} INCOMPATIBLE: node_version too old | expected >={} ({:?}) | got {} ({:?})",
+                            self.ip, self.port, min_node_version, e, ver, g
+                        );
+                    }
+                }
                 return false;
             }
         } else {
+            tracing::warn!(
+                "[COMPAT] ❌ {}:{} INCOMPATIBLE: missing node_version | expected >={}",
+                self.ip, self.port, min_node_version
+            );
             return false;
         }
 
@@ -784,6 +864,18 @@ impl PeerManager {
             } else {
                 incompatible_peers += 1;
             }
+        }
+
+        // Log expected requirements once per quorum check (for debugging)
+        if compatible_peers == 0 && incompatible_peers > 0 {
+            tracing::warn!(
+                "[QUORUM] Expected requirements: chain_id={} prefix={} protocol={}-{} node_version>={}",
+                &expected_chain_id[..16], // First 16 chars of chain_id
+                VISION_BOOTSTRAP_PREFIX,
+                VISION_MIN_PROTOCOL_VERSION,
+                VISION_MAX_PROTOCOL_VERSION,
+                VISION_MIN_NODE_VERSION
+            );
         }
 
         ConsensusQuorum {

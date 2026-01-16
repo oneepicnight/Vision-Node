@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Logs Test</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #fff; }
+        #status { padding: 10px; margin-bottom: 20px; border-radius: 4px; }
+        .connected { background: #22c55e; }
+        .reconnecting { background: #f59e0b; }
+        .disconnected { background: #ef4444; }
+        #logs { background: #2a2a2a; padding: 15px; border-radius: 8px; max-height: 600px; overflow-y: auto; }
+        .log { padding: 8px; margin: 4px 0; background: #333; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Logs Test</h1>
+    <div id="status" class="disconnected">Status: Disconnected</div>
+    <button onclick="connect()">Connect</button>
+    <button onclick="disconnect()">Disconnect</button>
+    <button onclick="clearLogs()">Clear Logs</button>
+    <div id="logs"></div>
+
+    <script>
+        let ws = null;
+        const statusEl = document.getElementById('status');
+        const logsEl = document.getElementById('logs');
+
+        function updateStatus(status, className) {
+            statusEl.textContent = `Status: ${status}`;
+            statusEl.className = className;
+        }
+
+        function addLog(message, isError = false) {
+            const div = document.createElement('div');
+            div.className = 'log';
+            div.style.color = isError ? '#fca5a5' : '#86efac';
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logsEl.insertBefore(div, logsEl.firstChild);
+        }
+
+        function connect() {
+            if (ws) {
+                addLog('Already connected or connecting');
+                return;
+            }
+
+            updateStatus('Connecting...', 'reconnecting');
+            addLog('Connecting to ws://127.0.0.1:7070/ws/logs');
+
+            ws = new WebSocket('ws://127.0.0.1:7070/ws/logs');
+
+            ws.onopen = () => {
+                updateStatus('Connected', 'connected');
+                addLog('✅ Connected!');
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'connected') {
+                        addLog(`Server: ${data.message}`);
+                    } else if (data.type === 'log') {
+                        addLog(`[${data.category}] ${data.message}`);
+                    }
+                } catch (e) {
+                    addLog(`Error parsing: ${e.message}`, true);
+                }
+            };
+
+            ws.onerror = (error) => {
+                addLog(`❌ WebSocket error: ${error}`, true);
+                updateStatus('Error', 'disconnected');
+            };
+
+            ws.onclose = () => {
+                addLog('🔌 Connection closed');
+                updateStatus('Disconnected', 'disconnected');
+                ws = null;
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+            }
+        }
+
+        function clearLogs() {
+            logsEl.innerHTML = '';
+        }
+
+        // Auto-connect on load
+        setTimeout(connect, 500);
+    </script>
+</body>
+</html>

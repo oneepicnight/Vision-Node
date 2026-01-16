@@ -19,7 +19,7 @@ pub const VISION_NETWORK_ID: &str = "mainnet";
 
 /// Canonical software version for this build (MAINNET).
 /// Single source of truth for version across HTTP status, banners, and P2P handshake.
-pub const VISION_VERSION: &str = "v1.0.1";
+pub const VISION_VERSION: &str = "v1.0.3";
 
 /// Chain ID derivation version. Bump only if the derivation algorithm changes.
 pub const CHAIN_ID_VERSION: u32 = 1;
@@ -75,7 +75,7 @@ pub const VISION_MAX_PROTOCOL_VERSION: u32 = 2;
 
 /// Minimum node binary version string that is allowed to talk to this network.
 /// Compare lexicographically or with semver parsing where you already do.
-pub const VISION_MIN_NODE_VERSION: &str = "v1.0.0";
+pub const VISION_MIN_NODE_VERSION: &str = "v1.0.3";
 
 // ============================
 // Node Role & Mining Eligibility

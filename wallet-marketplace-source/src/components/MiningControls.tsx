@@ -80,46 +80,24 @@ export default function MiningControls({ onStatusChange }: MiningControlsProps) 
     }
   }
 
-  const handleMakeFansGoBrr = async () => {
-    if (fansActive) return
-    
-    try {
-      setFansActive(true)
-      const threads = miningThreads ? parseInt(miningThreads) : (navigator.hardwareConcurrency || 4)
-      const response = await fetch('http://127.0.0.1:7070/api/miner/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          threads: threads
-        })
-      })
-      
-      if (!response.ok) throw new Error('Failed to start mining')
-      
-      await fetchMiningStatus()
-    } catch (error) {
-      console.error('Failed to start mining:', error)
-      setFansActive(false)
-    }
-  }
-
-  const handleStopFans = async () => {
-    try {
-      const response = await fetch('http://127.0.0.1:7070/api/miner/stop', {
-        method: 'POST'
-      })
-      
-      if (!response.ok) throw new Error('Failed to stop mining')
-      
-      setFansActive(false)
-      await fetchMiningStatus()
-    } catch (error) {
-      console.error('Failed to stop mining:', error)
-    }
-  }
-
   const handleApplySettings = async () => {
     try {
+      // If mining is not active, start it first
+      if (!fansActive) {
+        const threads = miningThreads ? parseInt(miningThreads) : (navigator.hardwareConcurrency || 4)
+        const startResponse = await fetch('http://127.0.0.1:7070/api/miner/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            threads: threads
+          })
+        })
+        
+        if (!startResponse.ok) throw new Error('Failed to start mining')
+        setFansActive(true)
+      }
+      
+      // Apply settings
       const response = await fetch('http://127.0.0.1:7070/api/miner/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -134,7 +112,7 @@ export default function MiningControls({ onStatusChange }: MiningControlsProps) 
       
       await fetchMiningStatus()
     } catch (error) {
-      console.error('Failed to update mining settings:', error)
+      console.error('Failed to apply mining settings:', error)
     }
   }
 
@@ -199,59 +177,44 @@ export default function MiningControls({ onStatusChange }: MiningControlsProps) 
           </ul>
         </div>
 
-        {/* Fans Go Brr Section */}
+        {/* Fans Go Brr Section - Now an Indicator */}
         <div className="fans-section">
           <div className="fans-header">
-            <span style={{ fontSize: '1.2rem' }}>🔥</span>
-            <strong>Want to hear your fans?</strong>
+            <span style={{ fontSize: '1.2rem' }}>{fansActive ? '🔥' : '❄️'}</span>
+            <strong>Mining Status</strong>
           </div>
-          <p className="fans-description">
-            Start active mining to dedicate CPU power to finding new blocks.
-            Higher hashrate increases your chances of mining blocks and earning rewards.
-          </p>
           
-          {/* Show blocking reason if present */}
-          {miningBlockedReason && !fansActive && (
-            <div style={{
-              padding: '0.75rem',
-              marginBottom: '1rem',
-              background: 'rgba(251, 191, 36, 0.1)',
-              border: '1px solid rgba(251, 191, 36, 0.3)',
-              borderRadius: '8px',
-              color: '#fbbf24',
-              fontSize: '0.9rem',
-              fontWeight: '500'
-            }}>
-              {miningBlockedReason}
-            </div>
-          )}
+          {/* Status Indicator */}
+          <div style={{
+            padding: '1rem',
+            marginBottom: '0.75rem',
+            background: fansActive 
+              ? 'rgba(76, 175, 80, 0.15)' 
+              : 'rgba(244, 67, 54, 0.15)',
+            border: `2px solid ${fansActive ? '#4caf50' : '#f44336'}`,
+            borderRadius: '8px',
+            textAlign: 'center',
+            fontWeight: '600',
+            fontSize: '1.1rem',
+            color: fansActive ? '#4caf50' : '#f44336',
+            transition: 'all 0.3s ease'
+          }}>
+            {fansActive ? '💨 Fans are BRRRING!' : '😰 Uh Oh! Fans are NOT brrring'}
+          </div>
           
-          {!fansActive ? (
-            <button 
-              className="btn-fans-brr"
-              onClick={handleMakeFansGoBrr}
-              disabled={!!miningBlockedReason}
-              style={{
-                opacity: miningBlockedReason ? 0.5 : 1,
-                cursor: miningBlockedReason ? 'not-allowed' : 'pointer'
-              }}
-              title={miningBlockedReason || 'Start mining'}
-            >
-              <span>💨</span>
-              <span>{miningBlockedReason ? 'Mining Blocked' : 'Make Fans Go BRRRR!'}</span>
-            </button>
-          ) : (
-            <button 
-              className="btn-stop-fans"
-              onClick={handleStopFans}
-            >
-              <span>🛑</span>
-              <span>Stop Mining (fans will quiet down)</span>
-            </button>
-          )}
-          
-          <div className="fan-status">
-            Status: <strong>{fansActive ? 'Mining Active 🔥' : 'Quiet (no mining)'}</strong>
+          {/* Detailed Reason */}
+          <div style={{
+            padding: '0.5rem',
+            background: 'rgba(0, 0, 0, 0.3)',
+            borderRadius: '8px',
+            fontSize: '0.85rem',
+            color: '#a0a0a0',
+            textAlign: 'center',
+            marginBottom: '0.5rem'
+          }}>
+            {fansActive 
+              ? '✅ All systems go!' 
+              : (miningBlockedReason || '⚙️ Configure wallet and start mining')}
           </div>
         </div>
       </div>
@@ -326,32 +289,30 @@ export default function MiningControls({ onStatusChange }: MiningControlsProps) 
           <small>How many nonces to process per inner loop (1-1024)</small>
         </div>
 
-        {/* Apply Settings Button */}
-        {fansActive && (
-          <button 
-            className="btn-apply-settings"
-            onClick={handleApplySettings}
-            style={{ 
-              width: '100%', 
-              marginTop: '1rem',
-              padding: '0.75rem',
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontWeight: '600',
-              fontSize: '0.95rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.5rem'
-            }}
-          >
-            <span>✓</span>
-            Apply Settings to Active Miner
-          </button>
-        )}
+        {/* Apply Settings Button - Always Visible */}
+        <button 
+          className="btn-apply-settings"
+          onClick={handleApplySettings}
+          style={{ 
+            width: '100%', 
+            marginTop: '1rem',
+            padding: '0.75rem',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontWeight: '600',
+            fontSize: '0.95rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.5rem'
+          }}
+        >
+          <span>✓</span>
+          {fansActive ? 'Apply Settings to Active Miner' : 'Start Mining with These Settings'}
+        </button>
 
         <div className="mining-stats">
           <div>

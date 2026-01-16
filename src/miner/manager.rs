@@ -13,6 +13,7 @@ use crate::pow::visionx::{PowJob, VisionXMiner, VisionXParams};
 use crate::util::cpu_info::{detect_cpu_summary, CpuSummary};
 use crate::BlockHeader;
 use std::collections::VecDeque;
+use tracing::warn;
 use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
     Arc, Mutex,
@@ -539,6 +540,31 @@ impl ActiveMiner {
             chain.blocks.len()
         };
         
+        // CRITICAL: Verify job target matches the ACTUAL difficulty used (not header's original)
+        // Note: In LOCAL_TEST_MODE, difficulty may be overridden, so compare against what we calculated
+        let expected_target = crate::pow::u256_from_difficulty(difficulty);
+        let targets_match = pow_job.target == expected_target;
+        
+        if !targets_match {
+            tracing::error!(
+                height = height,
+                difficulty = difficulty,
+                expected_target = hex::encode(expected_target),
+                job_target = hex::encode(pow_job.target),
+                "[MINER-ERROR] 🚨 TARGET MISMATCH - refusing to mine (algorithm drift detected)"
+            );
+            eprintln!("🚨 [MINER-ERROR] CRITICAL: Target mismatch detected!");
+            eprintln!("   Difficulty: {}", difficulty);
+            eprintln!("   Expected target: {}", hex::encode(expected_target));
+            eprintln!("   Job target: {}", hex::encode(pow_job.target));
+            eprintln!("   This means miner and validator are using different rules!");
+            eprintln!("   Refusing to mine to prevent guaranteed rejection.");
+            return; // Abort job creation
+        }
+        
+        let chain_id = crate::vision_constants::VISION_NETWORK_ID;
+        let pow_fp = &crate::p2p::connection::compute_pow_params_hash()[..8];
+        
         tracing::info!(
             chain_db_path = %db_path,
             chain_tip_height = chain_tip_height,
@@ -550,11 +576,14 @@ impl ActiveMiner {
             blocks_in_memory = blocks_in_memory,
             height = height,
             difficulty = difficulty,
+            target_match = targets_match,
             epoch = epoch,
             seed0 = ?seed0,
             target0 = ?target0,
             message_bytes_len = message_bytes.len(),
-            "[MINER-JOB] Created mining job from canonical_head()"
+            chain_id = %chain_id,
+            pow_fp = %pow_fp,
+            "[JOB-CHECK] ✅ Mining job created - target verified"
         );
 
         // Avoid job spam/reset when nothing materially changed
@@ -936,7 +965,13 @@ impl ActiveMiner {
                     static JOB_LOG_STATE: std::sync::Mutex<Option<(u64, Instant)>> =
                         std::sync::Mutex::new(None);
                     let should_log = {
-                        let mut state = JOB_LOG_STATE.lock().unwrap();
+                        let mut state = match JOB_LOG_STATE.lock() {
+                            Ok(guard) => guard,
+                            Err(poisoned) => {
+                                warn!("⚠️ Job log state lock poisoned, recovering");
+                                poisoned.into_inner()
+                            }
+                        };
                         let should = match *state {
                             Some((last_height, last_time)) => {
                                 job.header.number != last_height

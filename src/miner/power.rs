@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use sysinfo::System;
+use tracing::warn;
 
 /// System power state
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -103,13 +104,27 @@ impl PowerMonitor {
             Err(_) => PowerState::Unknown,
         };
 
-        *self.last_state.lock().unwrap() = state;
+        let mut guard = match self.last_state.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                warn!("⚠️ PowerMonitor state lock poisoned, recovering");
+                poisoned.into_inner()
+            }
+        };
+        *guard = state;
         state
     }
 
     /// Get last detected power state without re-polling
     pub fn get_state(&self) -> PowerState {
-        *self.last_state.lock().unwrap()
+        let guard = match self.last_state.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                warn!("⚠️ PowerMonitor state lock poisoned, recovering");
+                poisoned.into_inner()
+            }
+        };
+        *guard
     }
 
     /// Apply battery caps to thread count
@@ -167,7 +182,13 @@ impl PowerMonitor {
     /// Get mutable access to state (for testing)
     #[cfg(test)]
     pub fn get_state_mut(&mut self) -> std::sync::MutexGuard<PowerState> {
-        self.last_state.lock().unwrap()
+        match self.last_state.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                warn!("⚠️ PowerMonitor state lock poisoned in test, recovering");
+                poisoned.into_inner()
+            }
+        }
     }
 }
 
@@ -194,13 +215,25 @@ mod tests {
         let monitor = PowerMonitor::new(config);
 
         // Simulate battery state
-        *monitor.last_state.lock().unwrap() = PowerState::Battery;
+        {
+            let mut guard = match monitor.last_state.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner()
+            };
+            *guard = PowerState::Battery;
+        }
 
         assert_eq!(monitor.apply_thread_cap(16), 4);
         assert_eq!(monitor.apply_batch_cap(32), 8);
 
         // Simulate AC state
-        *monitor.last_state.lock().unwrap() = PowerState::AC;
+        {
+            let mut guard = match monitor.last_state.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner()
+            };
+            *guard = PowerState::AC;
+        }
 
         assert_eq!(monitor.apply_thread_cap(16), 16);
         assert_eq!(monitor.apply_batch_cap(32), 32);

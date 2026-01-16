@@ -10,7 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 // ============================
 
 /// Software version (mainnet v1.0.0)
-pub const VISION_VERSION: &str = "v1.0.0";
+pub const VISION_VERSION: &str = "v1.0.3";
 
 /// Network identifier (mainnet)
 pub const VISION_NETWORK: &str = "mainnet";

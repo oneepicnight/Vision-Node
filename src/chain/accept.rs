@@ -8,6 +8,34 @@ use crate::metrics::{PROM_VISION_ATOMIC_FAILURES, PROM_VISION_ATOMIC_TXS};
 use std::collections::BTreeMap;
 use tracing::info;
 
+/// Recursively calculate cumulative work for a block, including side_blocks parents
+fn calculate_cumulative_work(g: &Chain, block_hash: &str) -> u128 {
+    // Check if already calculated
+    if let Some(&work) = g.cumulative_work.get(block_hash) {
+        return work;
+    }
+    
+    // Check if block exists in side_blocks
+    if let Some(block) = g.side_blocks.get(block_hash) {
+        let parent_hash_canon = crate::canon_hash(&block.header.parent_hash);
+        let parent_work = calculate_cumulative_work(g, &parent_hash_canon);
+        let my_work = parent_work.saturating_add(block_work(block.header.difficulty));
+        return my_work;
+    }
+    
+    // 🔧 FIX: Check main chain blocks too!
+    // Without this, side_blocks with main chain parents get work=0
+    if let Some(block) = g.blocks.iter().find(|b| crate::canon_hash(&b.header.pow_hash) == block_hash) {
+        let parent_hash_canon = crate::canon_hash(&block.header.parent_hash);
+        let parent_work = calculate_cumulative_work(g, &parent_hash_canon);
+        let my_work = parent_work.saturating_add(block_work(block.header.difficulty));
+        return my_work;
+    }
+    
+    // Block not found anywhere - orphan or invalid
+    0
+}
+
 /// Apply and validate a block through the unified acceptance pipeline.
 ///
 /// This is the ONLY function that should add blocks to the chain.
@@ -177,6 +205,23 @@ pub fn apply_block(g: &mut Chain, blk: &Block, source_peer: Option<&str>) -> Res
             digest_hex,
             blk.header.difficulty
         );
+        
+        // STRIKE: Peer sent block with invalid POW
+        if let Some(peer) = source_peer {
+            let peer_addr = peer.to_string();
+            tokio::spawn(async move {
+                crate::PEER_MANAGER.add_peer_strike(&peer_addr, "bad_pow").await;
+            });
+        }
+        
+        // STRIKE: Peer sent block that doesn't meet difficulty target
+        if let Some(peer) = source_peer {
+            let peer_addr = peer.to_string();
+            tokio::spawn(async move {
+                crate::PEER_MANAGER.add_peer_strike(&peer_addr, "difficulty_not_met").await;
+            });
+        }
+        
         return Err(
             errors::NodeError::Consensus(errors::ConsensusError::InvalidPoW(format!(
                 "block {} digest {} does not meet target difficulty {}",
@@ -194,6 +239,31 @@ pub fn apply_block(g: &mut Chain, blk: &Block, source_peer: Option<&str>) -> Res
             digest_hex,
             block_pow_hash
         );
+        
+        // STRIKE: Peer sent block with mismatched POW hash
+        if let Some(peer) = source_peer {
+            let peer_addr = peer.to_string();
+            tokio::spawn(async move {
+                crate::PEER_MANAGER.add_peer_strike(&peer_addr, "bad_pow").await;
+            });
+        }
+        
+        let chain_id = crate::vision_constants::VISION_NETWORK_ID;
+        let pow_fp = &crate::p2p::connection::compute_pow_params_hash()[..8];
+        
+        // Log rejection with full context
+        tracing::error!(
+            height = blk.header.number,
+            miner = %blk.header.miner,
+            hash = %blk.header.pow_hash,
+            peer = source_peer.unwrap_or("local"),
+            reason = "POW_INVALID",
+            details = format!("computed={}, block_has={}", digest_hex, block_pow_hash),
+            chain_id = %chain_id,
+            pow_fp = %pow_fp,
+            "[REJECT] Block rejected from peer - POW validation failed"
+        );
+        
         return Err(
             errors::NodeError::Consensus(errors::ConsensusError::InvalidPoW(format!(
                 "block {} pow_hash mismatch: computed {}, block has {}",
@@ -208,6 +278,15 @@ pub fn apply_block(g: &mut Chain, blk: &Block, source_peer: Option<&str>) -> Res
         block_hash = %blk.header.pow_hash,
         "✅ POW ok → attempting insert"
     );
+    
+    // Fix C: Update validated height for this peer after successful POW validation
+    if let Some(peer) = source_peer {
+        let peer_addr = peer.to_string();
+        let validated_height = blk.header.number;
+        tokio::spawn(async move {
+            crate::PEER_MANAGER.update_peer_validated_height(&peer_addr, validated_height).await;
+        });
+    }
 
     // Insert into side_blocks (we'll decide whether to reorg)
     g.side_blocks
@@ -215,11 +294,8 @@ pub fn apply_block(g: &mut Chain, blk: &Block, source_peer: Option<&str>) -> Res
     PROM_VISION_SIDE_BLOCKS.set(g.side_blocks.len() as i64);
 
     // compute cumulative work for this block
-    let parent_cum = g
-        .cumulative_work
-        .get(&parent_hash_canon)
-        .cloned()
-        .unwrap_or(0);
+    // 🔧 FIX: Use recursive calculation to handle side_blocks chains correctly
+    let parent_cum = calculate_cumulative_work(g, &parent_hash_canon);
     let my_cum = parent_cum.saturating_add(block_work(blk.header.difficulty));
     g.cumulative_work
         .insert(blk_hash_canon.clone(), my_cum);
@@ -264,6 +340,23 @@ pub fn apply_block(g: &mut Chain, blk: &Block, source_peer: Option<&str>) -> Res
                 "[ORPHAN-POOL] max size reached, rejecting orphan"
             );
             return Err(format!("orphan pool full ({}), rejecting block", MAX_ORPHANS));
+        }
+        
+        // STRIKE: Track orphan spam per peer (potential fork inconsistency)
+        // If peer sends too many orphans, it's likely on wrong fork
+        if let Some(peer) = source_peer {
+            let peer_orphan_count = g.orphan_pool.values()
+                .flat_map(|v| v.iter())
+                .filter(|(_, _, p)| p == peer)
+                .count();
+            
+            const MAX_ORPHANS_PER_PEER: usize = 10;
+            if peer_orphan_count >= MAX_ORPHANS_PER_PEER {
+                let peer_addr = peer.to_string();
+                tokio::spawn(async move {
+                    crate::PEER_MANAGER.add_peer_strike(&peer_addr, "orphan_spam").await;
+                });
+            }
         }
         
         // Convert source_peer to String for storage
@@ -457,6 +550,15 @@ pub fn apply_block(g: &mut Chain, blk: &Block, source_peer: Option<&str>) -> Res
                     computed = %new_state_root,
                     "❌ rejected (state_root mismatch)"
                 );
+                
+                // STRIKE: Peer sent block with incorrect state root
+                if let Some(peer) = source_peer {
+                    let peer_addr = peer.to_string();
+                    tokio::spawn(async move {
+                        crate::PEER_MANAGER.add_peer_strike(&peer_addr, "state_root_mismatch").await;
+                    });
+                }
+                
                 return Err(format!(
                     "state_root mismatch: expected {}, got {}",
                     blk.header.state_root, new_state_root
@@ -484,6 +586,15 @@ pub fn apply_block(g: &mut Chain, blk: &Block, source_peer: Option<&str>) -> Res
                     computed = %tx_root,
                     "❌ rejected (tx_root mismatch)"
                 );
+                
+                // STRIKE: Peer sent block with incorrect tx root
+                if let Some(peer) = source_peer {
+                    let peer_addr = peer.to_string();
+                    tokio::spawn(async move {
+                        crate::PEER_MANAGER.add_peer_strike(&peer_addr, "tx_root_mismatch").await;
+                    });
+                }
+                
                 return Err("tx_root mismatch".into());
             }
             // Validate receipts_root deterministically from execution outcomes
@@ -583,13 +694,21 @@ pub fn apply_block(g: &mut Chain, blk: &Block, source_peer: Option<&str>) -> Res
             if g.limits.snapshot_every_blocks > 0
                 && (g.blocks.len() as u64).is_multiple_of(g.limits.snapshot_every_blocks)
             {
-                persist_snapshot(
-                    &g.db,
-                    blk.header.number,
-                    &g.balances,
-                    &g.nonces,
-                    &g.gamemaster,
-                );
+                tracing::warn!("[SNAPSHOT-TRIGGER] Starting snapshot at height {}", blk.header.number);
+                // Clone data for background task to avoid blocking CHAIN lock
+                let db_clone = g.db.clone();
+                let height = blk.header.number;
+                let balances_clone = g.balances.clone();
+                let nonces_clone = g.nonces.clone();
+                let gm_clone = g.gamemaster.clone();
+                
+                // Spawn background task - does NOT block miner/networking/UI
+                tokio::spawn(async move {
+                    tracing::warn!("[SNAPSHOT-START] Background task started for height {}", height);
+                    crate::persist_snapshot(&db_clone, height, &balances_clone, &nonces_clone, &gm_clone);
+                    tracing::warn!("[SNAPSHOT-COMPLETE] Background task finished for height {}", height);
+                });
+                tracing::warn!("[SNAPSHOT-SPAWNED] Background task spawned, CHAIN lock released");
             }
             // update EMA and possibly retarget difficulty (same logic as local mining)
             let observed_interval = if g.blocks.len() >= 2 {
@@ -637,6 +756,15 @@ pub fn apply_block(g: &mut Chain, blk: &Block, source_peer: Option<&str>) -> Res
                     parent_hash = %blk_hash_canon,
                     orphans_processed = orphans_processed,
                     "[ORPHAN-POOL] processed children of accepted block"
+                );
+            }
+            
+            // Check if any side_blocks can now extend the new canonical tip
+            let side_blocks_processed = process_side_blocks_for_tip(g);
+            if side_blocks_processed > 0 {
+                tracing::info!(
+                    side_blocks_processed = side_blocks_processed,
+                    "[SIDE-BLOCKS] processed blocks that can now extend tip"
                 );
             }
         } else {
@@ -1057,19 +1185,35 @@ pub fn apply_block(g: &mut Chain, blk: &Block, source_peer: Option<&str>) -> Res
     g.cumulative_work.clear();
     let mut prev_cum: u128 = 0;
     for b in &g.blocks {
-        prev_cum = prev_cum.saturating_add(block_work(b.header.difficulty));
+        let work = block_work(b.header.difficulty);
+        prev_cum = prev_cum.saturating_add(work);
+        // 🔍 DIAGNOSTIC: Log difficulty and work calculation
+        // Log first 100 blocks + last block to catch corruption early
+        if b.header.number <= 100 || b.header.number >= g.blocks.len() as u64 - 1 {
+            tracing::warn!(
+                "[WORK-CALC-REORG] h={} difficulty={} work={} cumulative={}",
+                b.header.number,
+                b.header.difficulty,
+                work,
+                prev_cum
+            );
+        }
         g.cumulative_work
             .insert(crate::canon_hash(&b.header.pow_hash), prev_cum);
     }
 
-    // snapshot after reorg
-    persist_snapshot(
-        &g.db,
-        g.blocks.last().unwrap().header.number,
-        &g.balances,
-        &g.nonces,
-        &g.gamemaster,
-    );
+    // snapshot after reorg (background task to avoid blocking)
+    let db_clone = g.db.clone();
+    let height = g.blocks.last().unwrap().header.number;
+    let balances_clone = g.balances.clone();
+    let nonces_clone = g.nonces.clone();
+    let gm_clone = g.gamemaster.clone();
+    
+    tokio::spawn(async move {
+        tracing::warn!("[SNAPSHOT-REORG] Background snapshot started for height {}", height);
+        crate::persist_snapshot(&db_clone, height, &balances_clone, &nonces_clone, &gm_clone);
+        tracing::warn!("[SNAPSHOT-REORG] Background snapshot complete for height {}", height);
+    });
 
     let dur_ms = reorg_start.elapsed().as_millis() as u64;
     PROM_VISION_REORG_DURATION_MS.set(dur_ms as i64);
@@ -1098,6 +1242,15 @@ pub fn apply_block(g: &mut Chain, blk: &Block, source_peer: Option<&str>) -> Res
             tip_hash = %new_tip_hash,
             orphans_processed = orphans_processed,
             "[ORPHAN-POOL] processed orphans after reorg"
+        );
+    }
+    
+    // Check if any side_blocks can now extend the new canonical tip
+    let side_blocks_processed = process_side_blocks_for_tip(g);
+    if side_blocks_processed > 0 {
+        tracing::info!(
+            side_blocks_processed = side_blocks_processed,
+            "[SIDE-BLOCKS] processed blocks that can now extend tip after reorg"
         );
     }
 
@@ -1183,6 +1336,84 @@ pub fn process_orphans(g: &mut Chain, parent_hash: &str) -> usize {
             processed_count = processed,
             remaining_orphans = remaining,
             "[ORPHAN-POOL] processing complete"
+        );
+    }
+    
+    processed
+}
+
+/// Re-evaluate side_blocks after orphan processing extends the canonical chain.
+/// 
+/// When orphan processing adds new canonical blocks, some blocks in side_blocks
+/// may now have their parent on the canonical chain. This function finds those
+/// blocks and re-inserts them to trigger proper chain extension evaluation.
+/// 
+/// This fixes the race condition where:
+/// 1. Block N arrives → goes to orphan_pool (parent missing)
+/// 2. Block N+1 arrives → goes to side_blocks (parent N not canonical yet)
+/// 3. Block N-1 arrives → becomes canonical
+/// 4. Orphan processing: Block N becomes canonical
+/// 5. Block N+1 still stuck in side_blocks ← THIS FUNCTION FIXES THIS
+pub fn process_side_blocks_for_tip(g: &mut Chain) -> usize {
+    let mut processed = 0;
+    let (tip_height, tip_hash, _tip_work) = g.canonical_head();
+    let tip_hash_canon = crate::canon_hash(&tip_hash);
+    
+    // Find all side_blocks whose parent is the current canonical tip
+    let mut blocks_to_reinsert = Vec::new();
+    for (hash, block) in g.side_blocks.iter() {
+        let parent_hash_canon = crate::canon_hash(&block.header.parent_hash);
+        if parent_hash_canon == tip_hash_canon {
+            tracing::info!(
+                block_hash = %block.header.pow_hash,
+                block_height = block.header.number,
+                parent_hash = %block.header.parent_hash,
+                tip_height = tip_height,
+                "[SIDE-BLOCKS] found block that can extend new tip"
+            );
+            blocks_to_reinsert.push((hash.clone(), block.clone()));
+        }
+    }
+    
+    // Re-insert each block to trigger canonical chain evaluation
+    for (hash, block) in blocks_to_reinsert {
+        // Remove from side_blocks
+        g.side_blocks.remove(&hash);
+        
+        tracing::info!(
+            block_hash = %block.header.pow_hash,
+            block_height = block.header.number,
+            "[SIDE-BLOCKS] re-inserting block to evaluate chain extension"
+        );
+        
+        // Re-insert the block - this will trigger proper canonical chain evaluation
+        match apply_block(g, &block, None) {
+            Ok(()) => {
+                processed += 1;
+                tracing::info!(
+                    block_hash = %block.header.pow_hash,
+                    block_height = block.header.number,
+                    "[SIDE-BLOCKS] ✅ block accepted and chained"
+                );
+            }
+            Err(e) => {
+                // If it fails, put it back in side_blocks
+                g.side_blocks.insert(hash.clone(), block.clone());
+                tracing::warn!(
+                    block_hash = %block.header.pow_hash,
+                    error = %e,
+                    "[SIDE-BLOCKS] ❌ block re-insertion failed, returned to side_blocks"
+                );
+            }
+        }
+    }
+    
+    if processed > 0 {
+        crate::PROM_VISION_SIDE_BLOCKS.set(g.side_blocks.len() as i64);
+        tracing::info!(
+            processed_count = processed,
+            remaining_side_blocks = g.side_blocks.len(),
+            "[SIDE-BLOCKS] processing complete"
         );
     }
     
