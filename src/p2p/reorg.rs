@@ -40,7 +40,7 @@ pub struct Fork {
     /// Hash of common ancestor with main chain
     pub common_ancestor: String,
     /// Total accumulated difficulty
-    pub total_difficulty: u64,
+    pub total_difficulty: u128,
 }
 
 /// Check if height is past bootstrap checkpoint (hard limit for reorgs)
@@ -200,11 +200,11 @@ pub fn handle_reorg(new_block: &Block) -> ReorgResult {
         ));
     }
 
-    let current_difficulty: u64 = g
+    let current_difficulty: u128 = g
         .blocks
         .iter()
         .skip(ancestor_height + 1)
-        .map(|b| b.header.difficulty)
+        .map(|b| crate::block_work(b.header.difficulty))
         .sum();
 
     tracing::debug!(
@@ -289,7 +289,8 @@ pub fn handle_reorg(new_block: &Block) -> ReorgResult {
 fn find_fork(main_chain: &[Block], new_block: &Block) -> Option<Fork> {
     let mut fork_blocks = vec![new_block.clone()];
     let mut current_hash = new_block.header.parent_hash.clone();
-    let mut total_difficulty = new_block.header.difficulty;
+    // 🔧 FIX: Use block_work() instead of raw difficulty to match main chain calculation
+    let mut total_difficulty = crate::block_work(new_block.header.difficulty);
 
     // Walk backwards through orphan pool and main chain
     let max_depth = 100; // Prevent infinite loops
@@ -309,7 +310,8 @@ fn find_fork(main_chain: &[Block], new_block: &Block) -> Option<Fork> {
         let pool = orphan_pool_arc.lock();
 
         if let Some(parent_block) = pool.get_orphan(&current_hash) {
-            total_difficulty += parent_block.header.difficulty;
+            // 🔧 FIX: Use block_work() to calculate proper exponential work
+            total_difficulty += crate::block_work(parent_block.header.difficulty);
             fork_blocks.push(parent_block.clone());
             current_hash = parent_block.header.parent_hash.clone();
             drop(pool); // Release lock before next iteration
@@ -437,11 +439,11 @@ pub fn would_trigger_reorg(block: &Block) -> bool {
     // Check if fork would have more work
     if let Some(fork) = find_fork(&g.blocks, block) {
         let ancestor_height = find_block_height(&g.blocks, &fork.common_ancestor);
-        let current_difficulty: u64 = g
+        let current_difficulty: u128 = g
             .blocks
             .iter()
             .skip(ancestor_height + 1)
-            .map(|b| b.header.difficulty)
+            .map(|b| crate::block_work(b.header.difficulty))
             .sum();
 
         fork.total_difficulty > current_difficulty

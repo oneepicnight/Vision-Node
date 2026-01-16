@@ -7429,11 +7429,12 @@ async fn get_blocks() -> Json<serde_json::Value> {
     // Calculate network hashrate from recent blocks
     let hashrate = if blocks.len() >= 2 {
         // Get actual blocks for difficulty
-        let mut total_difficulty: u64 = 0;
+        let mut total_difficulty: u128 = 0;  // Changed to u128 for block_work
         let mut count = 0;
         for h in start_height..=current_height {
             if let Some(block) = chain.blocks.get(h) {
-                total_difficulty += block.header.difficulty;
+                // 🔧 FIX: Use block_work() instead of raw difficulty
+                total_difficulty += block_work(block.header.difficulty);
                 count += 1;
             }
         }
@@ -7444,8 +7445,8 @@ async fn get_blocks() -> Json<serde_json::Value> {
 
         if time_diff > 0 && count > 0 {
             // Hashrate = (average_difficulty * number_of_blocks) / time_span
-            let avg_difficulty = total_difficulty / count;
-            (avg_difficulty * count) / time_diff
+            let avg_difficulty = total_difficulty / (count as u128);
+            ((avg_difficulty * (count as u128)) / (time_diff as u128)) as u64
         } else {
             0
         }
