@@ -41,6 +41,7 @@ pub struct SyncHealthSnapshot {
     // Consensus quorum fields (for exchange gate)
     pub compatible_peers: usize,
     pub incompatible_peers: usize,
+    pub unknown_peers: usize,
 }
 
 impl SyncHealthSnapshot {
@@ -88,6 +89,7 @@ impl SyncHealthSnapshot {
                 anchor_sampled: 0,
                 compatible_peers: 0,
                 incompatible_peers: 0,
+                unknown_peers: 0,
             };
         }
 
@@ -168,6 +170,7 @@ impl SyncHealthSnapshot {
             anchor_sampled,
             compatible_peers: 0,  // Not available in sync context
             incompatible_peers: 0,
+            unknown_peers: 0,
         };
 
         // 🔄 Update node role based on current health
@@ -314,6 +317,7 @@ impl SyncHealthSnapshot {
                 anchor_sampled: 0,
                 compatible_peers: 0,
                 incompatible_peers: 0,
+                unknown_peers: 0,
             };
         }
 
@@ -441,6 +445,7 @@ impl SyncHealthSnapshot {
             anchor_sampled,
             compatible_peers: quorum.compatible_peers,
             incompatible_peers: quorum.incompatible_peers,
+            unknown_peers: quorum.unknown_peers,
         };
 
         // Update node role based on current health
@@ -514,18 +519,20 @@ async fn auto_sync_step(config: &AutoSyncConfig) -> anyhow::Result<()> {
     let quorum = crate::PEER_MANAGER.consensus_quorum().await;
     
     tracing::warn!(
-        "[AUTO-SYNC-TICK] ⏰ Sync check: compatible={} incompatible={} need={}",
+        "[AUTO-SYNC-TICK] ⏰ Sync check: compatible={} incompatible={} unknown={} need={}",
         quorum.compatible_peers,
         quorum.incompatible_peers,
+        quorum.unknown_peers,
         crate::mining_readiness::MIN_PEERS_FOR_SYNC
     );
     
     // CRITICAL: Check COMPATIBLE peers (on same chain), not raw connections
     if quorum.compatible_peers < crate::mining_readiness::MIN_PEERS_FOR_SYNC as usize {
         tracing::debug!(
-            "[SYNC-GATE] ⛔ Waiting for consensus quorum: compatible={} incompatible={} need={}",
+            "[SYNC-GATE] ⛔ Waiting for consensus quorum: compatible={} incompatible={} unknown={} need={}",
             quorum.compatible_peers,
             quorum.incompatible_peers,
+            quorum.unknown_peers,
             crate::mining_readiness::MIN_PEERS_FOR_SYNC
         );
         return Ok(());

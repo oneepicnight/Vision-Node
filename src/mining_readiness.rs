@@ -13,9 +13,9 @@ use crate::vision_constants::MAX_MINING_LAG_BLOCKS;
 /// This prevents "seed prints all blocks" scenario and ensures mainnet stability.
 pub const MAINNET_MIN_PEERS_FOR_MINING: u32 = 3;
 
-/// Minimum peers required for SYNC to start (mainnet safety: 3 peers)
-/// Raised to 3 for production stability - ensures nodes sync from established network.
-pub const MIN_PEERS_FOR_SYNC: u32 = 3;
+/// Minimum peers required for SYNC to start (reduced to 1 for network recovery)
+/// Temporarily lowered to allow sync with single compatible peer during network issues.
+pub const MIN_PEERS_FOR_SYNC: u32 = 1;
 
 /// Max allowed desync for mining (in blocks).
 /// For 2-second blocks, 5 blocks = 10 seconds behind network estimate.
@@ -85,7 +85,14 @@ pub fn is_mining_eligible() -> bool {
         };
         
         let block_reason = if quorum.compatible_peers < effective_min_peers as usize {
-            format!("need_{}_compatible", effective_min_peers)
+            // Distinguish between different failure modes
+            if quorum.unknown_peers > 0 && quorum.incompatible_peers == 0 {
+                format!("need_{}_compatible_all_unknown", effective_min_peers)
+            } else if quorum.incompatible_peers > 0 {
+                format!("need_{}_compatible_have_{}_incompatible", effective_min_peers, quorum.incompatible_peers)
+            } else {
+                format!("need_{}_compatible", effective_min_peers)
+            }
         } else if let (Some(min_h), Some(max_h)) = (quorum.min_compatible_height, quorum.max_compatible_height) {
             let spread = max_h.saturating_sub(min_h);
             if spread > 10 {
@@ -98,9 +105,9 @@ pub fn is_mining_eligible() -> bool {
         };
         
         tracing::info!(
-            "[QUORUM] {} | connected={} compatible={} incompatible={} | min_needed={} | block_reason={}",
+            "[QUORUM] {} | connected={} compatible={} incompatible={} unknown={} | min_needed={} | block_reason={}",
             quorum_status, total_connected, quorum.compatible_peers, quorum.incompatible_peers, 
-            effective_min_peers, block_reason
+            quorum.unknown_peers, effective_min_peers, block_reason
         );
     }
 
